@@ -1,0 +1,35 @@
+{
+  "name": "studox-ai-platform",
+  "version": "1.0.0",
+  "description": "Premium Studox.ai student learning, roadmap, testing, career, resume, internship, hackathon, DSA and AI mentor platform.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed": "node src/seed.js"
+  },
+  "keywords": [
+    "studox",
+    "student-platform",
+    "dashboard",
+    "learning",
+    "express",
+    "mongodb"
+  ],
+  "author": "Studox.ai",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "nodemailer": "^9.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

@@ -1,0 +1,1082 @@
+{
+  "users": [
+    {
+      "id": "user_demo",
+      "name": "Aarav Sharma",
+      "email": "aarav@studox.ai",
+      "phone": "+91 98765 43210",
+      "password": "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m",
+      "role": "student",
+      "resetOtp": "242452",
+      "resetOtpExpires": "2026-07-05T15:57:59.726Z"
+    },
+    {
+      "id": "user_1783265277520_f601be",
+      "name": "Test User",
+      "email": "test405973065@studox.ai",
+      "phone": "+91 90000 00000",
+      "password": "$2a$10$oURkcjYWgii71Tu6JCNUs.VTu0rS1F7y8ZjuMBwyVuKiF2qtnpLiW",
+      "role": "student"
+    },
+    {
+      "id": "user_1783269136869_5cae1a",
+      "name": "Gaurav Agarwal",
+      "email": "agarwalanubhav545@gmail.com",
+      "phone": "9620980250",
+      "password": "$2a$10$7mt9GLE4mrSXhC5tVPB4OubqtAESipgpyv42aWbj4eTwaboAMrSki",
+      "role": "student"
+    },
+    {
+      "id": "user_1783269768085_ff7316",
+      "name": "Welcome Test",
+      "email": "welcome1269248175@studox.ai",
+      "phone": "+91 90000 00001",
+      "password": "$2a$10$Ug5WCtfj9GGZNXvoH/m.Mu54JNvvSgIMg.77zU35Pyw40It18Cbmy",
+      "role": "student"
+    },
+    {
+      "id": "user_1783269887261_fcad52",
+      "name": "Gaurav Agarwal",
+      "email": "agarwalmadhu742@gmailcom",
+      "phone": "9620980250",
+      "password": "$2a$10$Kkgcoyw/La9x8nVuHj1ksOzSG9Ms76.rJEQ1JdLOXeBsG8eT4NrL.",
+      "role": "student"
+    },
+    {
+      "id": "user_1783270060840_6b7da6",
+      "name": "Gaurav Agarwal",
+      "email": "agarwalmadhu742@gmail.com",
+      "phone": "9620980250",
+      "password": "$2a$10$vqWTy3g97h0mmtgeUWxE2uLpD1mwosUCdC6sF88aG43UwwD1rdIF2",
+      "role": "student"
+    },
+    {
+      "id": "user_1783270340847_ef236d",
+      "name": "Welcome Email Test",
+      "email": "studoxai+welcome716928085@gmail.com",
+      "phone": "+91 90000 00002",
+      "password": "$2a$10$49QRUMNfZDoXpPWdtvWs3.PQkbxg3kcyugs1b.gWc1XhaBht.6Xtq",
+      "role": "student"
+    },
+    {
+      "id": "user_1783270489235_9675ba",
+      "name": "Gaurav Agarwal",
+      "email": "studoxai+test1@gmail.com",
+      "phone": "9620980250",
+      "password": "$2a$10$Xg1XQyee4RN.s5Tq9wGiZOJfNPRgdL/Vk.ALnJIxSseHk3OJQr0oS",
+      "role": "student"
+    },
+    {
+      "id": "user_1783270713098_77f05d",
+      "name": "Valid Email",
+      "email": "studoxai+valid1365234420@gmail.com",
+      "phone": "+91 90000 00003",
+      "password": "$2a$10$R9pRQ4BkPVS.MZaz4yGjsOm.VfgkEcpHzbUR4oKPDruI3tjgsZ.86",
+      "role": "student"
+    }
+  ],
+  "profiles": [
+    {
+      "user": "user_demo",
+      "username": "aarav.dev",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "college": "Studox Institute of Technology",
+      "branch": "Computer Science",
+      "bio": "Student developer focused on full stack engineering, AI products and DSA interview readiness.",
+      "skills": [
+        "React",
+        "Node.js",
+        "MongoDB",
+        "DSA"
+      ],
+      "education": [
+        {
+          "title": "B.Tech",
+          "institution": "Studox Institute of Technology",
+          "year": "2026",
+          "score": "8.8 CGPA"
+        }
+      ],
+      "level": "Intermediate",
+      "xp": 12840,
+      "profileCompletion": 86,
+      "streak": 18
+    },
+    {
+      "user": "user_1783265277520_f601be",
+      "username": "test405973065",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783269136869_5cae1a",
+      "username": "agarwalanubhav545",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783269768085_ff7316",
+      "username": "welcome1269248175",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783269887261_fcad52",
+      "username": "agarwalmadhu742",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783270060840_6b7da6",
+      "username": "agarwalmadhu742",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783270340847_ef236d",
+      "username": "studoxai+welcome716928085",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783270489235_9675ba",
+      "username": "studoxai+test1",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783270713098_77f05d",
+      "username": "studoxai+valid1365234420",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    }
+  ],
+  "roadmaps": [
+    {
+      "id": "roadmap_full_stack",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Intermediate",
+      "overallProgress": 72,
+      "timeToGoalWeeks": 9,
+      "skillsLearned": 36,
+      "nextMilestone": "React master checkpoint",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "completed",
+          "progress": 100,
+          "description": "HTML, CSS, JavaScript, Git and browser fundamentals.",
+          "skills": [
+            "HTML",
+            "CSS",
+            "Git",
+            "JavaScript"
+          ]
+        },
+        {
+          "title": "Frontend Development",
+          "status": "in-progress",
+          "progress": 68,
+          "description": "React, routing, state, forms, APIs and UI systems.",
+          "skills": [
+            "React",
+            "Routing",
+            "State"
+          ]
+        },
+        {
+          "title": "Backend Development",
+          "status": "upcoming",
+          "progress": 24,
+          "description": "Node.js, Express, authentication and REST APIs.",
+          "skills": [
+            "Node.js",
+            "Express",
+            "JWT"
+          ]
+        },
+        {
+          "title": "Databases",
+          "status": "upcoming",
+          "progress": 8,
+          "description": "MongoDB schema design, indexes and aggregation.",
+          "skills": [
+            "MongoDB",
+            "Mongoose"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783265277520_70371e",
+      "user": "user_1783265277520_f601be",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783269136869_80d5bf",
+      "user": "user_1783269136869_5cae1a",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783269768085_548d6b",
+      "user": "user_1783269768085_ff7316",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783269887261_42bf61",
+      "user": "user_1783269887261_fcad52",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783270060840_31a79c",
+      "user": "user_1783270060840_6b7da6",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783270340847_7fd0e5",
+      "user": "user_1783270340847_ef236d",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783270489235_f01683",
+      "user": "user_1783270489235_9675ba",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783270713098_013104",
+      "user": "user_1783270713098_77f05d",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    }
+  ],
+  "courses": [
+    {
+      "id": "course_full_stack",
+      "title": "Full Stack Developer",
+      "slug": "full-stack-developer",
+      "description": "Build production-ready web apps using React, Node.js, Express and MongoDB.",
+      "level": "Intermediate",
+      "category": "Web Development",
+      "instructor": "Nisha Thomas",
+      "students": 12400,
+      "progress": 64,
+      "tags": [
+        "React",
+        "Node",
+        "MongoDB"
+      ]
+    },
+    {
+      "id": "course_dsa",
+      "title": "Data Structures Mastery",
+      "slug": "data-structures-mastery",
+      "description": "Master arrays, trees, graphs, dynamic programming and interview patterns.",
+      "level": "Core",
+      "category": "Programming",
+      "instructor": "Rohan Mehta",
+      "students": 9200,
+      "progress": 48,
+      "tags": [
+        "DSA",
+        "Algorithms",
+        "Interviews"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "module_1",
+      "course": "course_full_stack",
+      "title": "HTML, CSS and responsive systems",
+      "order": 1,
+      "lessons": 8,
+      "status": "completed",
+      "progress": 100
+    },
+    {
+      "id": "module_2",
+      "course": "course_full_stack",
+      "title": "JavaScript fundamentals",
+      "order": 2,
+      "lessons": 12,
+      "status": "completed",
+      "progress": 100
+    },
+    {
+      "id": "module_3",
+      "course": "course_full_stack",
+      "title": "React components and routing",
+      "order": 3,
+      "lessons": 14,
+      "status": "in-progress",
+      "progress": 62
+    },
+    {
+      "id": "module_4",
+      "course": "course_full_stack",
+      "title": "Node.js and Express APIs",
+      "order": 4,
+      "lessons": 11,
+      "status": "in-progress",
+      "progress": 38
+    }
+  ],
+  "tests": [
+    {
+      "id": "tests_1783263763635_73c899",
+      "title": "hackkk",
+      "name": "hackkk",
+      "status": "Live",
+      "owner": "Studox Admin",
+      "description": "Created from admin panel",
+      "createdAt": "2026-07-05T15:02:43.636Z"
+    },
+    {
+      "id": "test_react_weekly",
+      "title": "React Weekly Test",
+      "description": "Hooks, routing and state",
+      "durationMinutes": 45,
+      "scheduledAt": "2026-07-05T14:54:09.790Z",
+      "totalQuestions": 20,
+      "sections": [
+        "React",
+        "JavaScript"
+      ]
+    },
+    {
+      "id": "test_dsa_arrays",
+      "title": "DSA Arrays Sprint",
+      "description": "Array and sliding window patterns",
+      "durationMinutes": 60,
+      "scheduledAt": "2026-07-05T14:54:09.790Z",
+      "totalQuestions": 18,
+      "sections": [
+        "DSA"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "test": "test_react_weekly",
+      "prompt": "What does useEffect cleanup do?",
+      "options": [
+        "Runs before rerender",
+        "Runs before effect reruns and unmount",
+        "Only runs on mount"
+      ],
+      "answer": "Runs before effect reruns and unmount",
+      "section": "React",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "q2",
+      "test": "test_dsa_arrays",
+      "prompt": "Which pattern fits maximum sum subarray of fixed size?",
+      "options": [
+        "DFS",
+        "Sliding window",
+        "Binary search"
+      ],
+      "answer": "Sliding window",
+      "section": "DSA",
+      "difficulty": "Easy"
+    }
+  ],
+  "testResults": [
+    {
+      "id": "test-results_1783263460578_b94e86",
+      "user": "user_demo",
+      "test": "test_react_weekly",
+      "score": 100,
+      "percentile": 99,
+      "accuracy": 97,
+      "timeTakenMinutes": 7,
+      "answers": [
+        {
+          "question": "q1",
+          "selected": "Runs before effect reruns and unmount"
+        }
+      ],
+      "aiSummary": "AI analysis: strong fundamentals. Review slow or incorrect sections before the next weekly test.",
+      "createdAt": "2026-07-05T14:57:40.578Z"
+    },
+    {
+      "id": "result_1",
+      "user": "user_demo",
+      "test": "test_react_weekly",
+      "score": 91,
+      "percentile": 96,
+      "accuracy": 88,
+      "timeTakenMinutes": 38,
+      "sections": [
+        {
+          "name": "React",
+          "score": 92
+        },
+        {
+          "name": "JavaScript",
+          "score": 87
+        },
+        {
+          "name": "DSA",
+          "score": 81
+        }
+      ],
+      "answers": [],
+      "aiSummary": "Strong in hooks and component composition. Revise async state and nested route edge cases."
+    }
+  ],
+  "dsaProgress": [
+    {
+      "user": "user_demo",
+      "problemsSolved": 321,
+      "acceptanceRate": 80,
+      "currentStreak": 19,
+      "ranking": 1833,
+      "totalProblems": 760,
+      "topics": [
+        {
+          "name": "Arrays",
+          "solved": 88,
+          "total": 100
+        },
+        {
+          "name": "Strings",
+          "solved": 72,
+          "total": 100
+        },
+        {
+          "name": "Trees",
+          "solved": 54,
+          "total": 100
+        },
+        {
+          "name": "Sliding Window",
+          "solved": 1,
+          "total": 40
+        }
+      ],
+      "recentProblems": [
+        {
+          "title": "Longest Repeating Character Replacement",
+          "topic": "Sliding Window",
+          "level": "Medium",
+          "status": "Solved",
+          "score": 88
+        },
+        {
+          "title": "Two Sum",
+          "topic": "Array",
+          "level": "Easy",
+          "status": "Solved",
+          "score": 98
+        },
+        {
+          "title": "Longest Substring",
+          "topic": "String",
+          "level": "Medium",
+          "status": "Review",
+          "score": 72
+        }
+      ],
+      "badges": [
+        "Array Ace",
+        "Streak 15",
+        "Tree Climber"
+      ]
+    }
+  ],
+  "resumes": [
+    {
+      "user": "user_demo",
+      "template": "Modern",
+      "targetRole": "Full Stack Developer",
+      "atsScore": 86,
+      "sections": {
+        "summary": "Student developer building MERN projects with strong React, DSA and product thinking.",
+        "skills": [
+          "React",
+          "Node.js",
+          "Express",
+          "MongoDB",
+          "DSA"
+        ]
+      },
+      "analysis": [
+        "Add measurable impact to project bullets.",
+        "Mention authentication and MongoDB schema design."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "projects_1783263499898_6b6d20",
+      "user": "user_demo",
+      "title": "Live Functional Test Project",
+      "description": "Created from API verification",
+      "skills": [
+        "React",
+        "Express"
+      ],
+      "status": "Published",
+      "views": 0,
+      "likes": 0,
+      "featured": false,
+      "createdAt": "2026-07-05T14:58:19.898Z"
+    },
+    {
+      "id": "project_1",
+      "user": "user_demo",
+      "title": "AI Study Planner",
+      "description": "Adaptive planner with progress analytics.",
+      "skills": [
+        "React",
+        "Node",
+        "MongoDB"
+      ],
+      "status": "Featured",
+      "views": 1800,
+      "likes": 420,
+      "featured": true
+    },
+    {
+      "id": "project_2",
+      "user": "user_demo",
+      "title": "DSA Visualizer",
+      "description": "Animated algorithm explorer.",
+      "skills": [
+        "JavaScript",
+        "Canvas"
+      ],
+      "status": "Published",
+      "views": 920,
+      "likes": 210,
+      "featured": false
+    }
+  ],
+  "internships": [
+    {
+      "id": "intern_1",
+      "role": "Frontend Developer Intern",
+      "company": "BluePeak Labs",
+      "domain": "Web",
+      "location": "Remote",
+      "duration": "3 months",
+      "stipend": "$600/mo",
+      "remote": true,
+      "type": "Part-time",
+      "matchScore": 94,
+      "skills": [
+        "React",
+        "CSS"
+      ],
+      "applicants": [
+        "user_demo"
+      ]
+    },
+    {
+      "id": "intern_2",
+      "role": "MERN Stack Intern",
+      "company": "NovaWorks",
+      "domain": "Web",
+      "location": "Bengaluru",
+      "duration": "6 months",
+      "stipend": "$800/mo",
+      "remote": false,
+      "type": "Full-time",
+      "matchScore": 89,
+      "skills": [
+        "React",
+        "Node",
+        "MongoDB"
+      ]
+    }
+  ],
+  "hackathons": [
+    {
+      "id": "hack_1",
+      "title": "Build for Campus",
+      "domain": "AI + Education",
+      "duration": "48 hours",
+      "prize": "$8,000 prizes",
+      "startsAt": "2026-07-05T14:54:09.790Z",
+      "mode": "Online",
+      "skills": [
+        "AI",
+        "Product",
+        "Pitch"
+      ],
+      "registrations": [
+        "user_demo"
+      ]
+    },
+    {
+      "id": "hack_2",
+      "title": "Climate Code Sprint",
+      "domain": "Sustainability",
+      "duration": "72 hours",
+      "prize": "$12,000 prizes",
+      "startsAt": "2026-07-05T14:54:09.790Z",
+      "mode": "Hybrid",
+      "skills": [
+        "APIs",
+        "Data",
+        "Design"
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "id": "cert_1",
+      "user": "user_demo",
+      "title": "React Foundations",
+      "category": "Frontend",
+      "issuedAt": "2026-07-05T14:54:09.790Z",
+      "status": "Verified",
+      "credentialId": "STX-RF-1001"
+    },
+    {
+      "id": "cert_2",
+      "user": "user_demo",
+      "title": "DSA 100 Problems",
+      "category": "Programming",
+      "issuedAt": "2026-07-05T14:54:09.790Z",
+      "status": "Verified",
+      "credentialId": "STX-DSA-100"
+    }
+  ],
+  "chats": [
+    {
+      "id": "ai-mentor_1783264500127_a0b1ea",
+      "user": "user_demo",
+      "topic": "general",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi",
+          "createdAt": "2026-07-05T15:15:00.127Z"
+        },
+        {
+          "role": "assistant",
+          "content": "For \"hi\", start with the core definition, then do one guided example and one independent practice task. I saved this as a mentor conversation so you can review it later.",
+          "createdAt": "2026-07-05T15:15:00.127Z"
+        }
+      ],
+      "createdAt": "2026-07-05T15:15:00.127Z"
+    },
+    {
+      "id": "ai-mentor_1783263536258_ed1e62",
+      "user": "user_demo",
+      "topic": "general",
+      "messages": [
+        {
+          "role": "user",
+          "content": "career internship plan",
+          "createdAt": "2026-07-05T14:58:56.258Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Career plan: pick one target role, finish the matching roadmap modules, publish two projects, improve ATS score above 85, then apply to 5 matched internships.",
+          "createdAt": "2026-07-05T14:58:56.258Z"
+        }
+      ],
+      "createdAt": "2026-07-05T14:58:56.258Z"
+    },
+    {
+      "id": "chat_1",
+      "user": "user_demo",
+      "topic": "React",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Explain useEffect cleanup."
+        },
+        {
+          "role": "assistant",
+          "content": "Cleanup runs before the effect reruns and when a component unmounts."
+        }
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "id": "note_1",
+      "user": "user_demo",
+      "title": "React Weekly Test",
+      "body": "Your test is scheduled this week.",
+      "type": "test",
+      "read": false
+    },
+    {
+      "id": "note_2",
+      "user": "user_demo",
+      "title": "Resume match improved",
+      "body": "Your ATS score increased to 86.",
+      "type": "resume",
+      "read": false
+    }
+  ],
+  "settings": [
+    {
+      "user": "user_demo",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English",
+      "studyPreferences": {
+        "reminders": true,
+        "weeklyTests": true,
+        "dsaChallenges": true
+      },
+      "notifications": {
+        "email": true,
+        "push": true,
+        "mentor": true,
+        "career": true
+      },
+      "privacy": {
+        "profileVisible": true,
+        "recruiterVisible": true
+      },
+      "connectedAccounts": {
+        "google": true,
+        "github": false,
+        "linkedin": false
+      }
+    },
+    {
+      "user": "user_1783265277520_f601be",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783269136869_5cae1a",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783269768085_ff7316",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783269887261_fcad52",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783270060840_6b7da6",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783270340847_ef236d",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783270489235_9675ba",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783270713098_77f05d",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    }
+  ],
+  "admins": [
+    {
+      "id": "admin_demo",
+      "name": "Studox Admin",
+      "email": "admin@studox.ai",
+      "permissions": [
+        "users",
+        "courses",
+        "tests",
+        "content",
+        "reports"
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "id": "report_1",
+      "title": "Weekly engagement report",
+      "status": "Open",
+      "owner": "Studox Admin"
+    }
+  ],
+  "content": [
+    {
+      "id": "content_1",
+      "title": "Landing hero copy",
+      "status": "Live",
+      "owner": "Studox Admin"
+    }
+  ]
+}
