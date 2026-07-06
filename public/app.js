@@ -14,6 +14,25 @@ const defaultUser = {
 let currentUser = JSON.parse(localStorage.getItem("studox-user") || "null") || defaultUser;
 let adminResource = "users";
 
+function hasDemoSession() {
+  return localStorage.getItem("demoSession") === "true";
+}
+
+function createDemoSession(user = currentUser) {
+  // TODO: Replace demoSession with real backend authentication.
+  localStorage.setItem("demoSession", "true");
+  localStorage.setItem("studox-user", JSON.stringify(user));
+}
+
+function clearDemoSession() {
+  // TODO: Replace demoSession with real backend authentication.
+  localStorage.removeItem("demoSession");
+  localStorage.removeItem("studox-token");
+  localStorage.removeItem("studox-user");
+  localStorage.removeItem("studox-return-route");
+  currentUser = defaultUser;
+}
+
 const icons = {
   logo: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 3l8 4.5-8 4.5L4 7.5Z" stroke-width="2" stroke-linejoin="round"/><path d="m6.5 11 5.5 3.1 5.5-3.1v4.7L12 19 6.5 15.7V11Z" stroke-width="2" stroke-linejoin="round"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z" stroke-width="2"/></svg>',
@@ -260,88 +279,137 @@ function progress(label, value) {
   </div>`;
 }
 
-function landingPage() {
+function studoxLandingPage() {
   return `<main class="landing view">
-    <nav class="landing-nav">
+    <nav class="landing-nav" id="navbar">
       ${brand()}
-      <div class="nav-links">
-        <a href="#landing">Home</a>
+      <div class="nav-links" id="navLinks">
+        <a href="#landing" class="active">Home</a>
+        <a href="#how-it-works">How It Works</a>
         <a href="#features">Features</a>
-        <a href="#mentor">AI Mentor</a>
         <a href="#roadmap">Roadmap</a>
         <a href="#courses">Resources</a>
-        <a href="#pricing">Pricing</a>
+        <a href="#about">About Us</a>
       </div>
       <div class="nav-actions">
-        <label class="nav-search">${icon("search")}<input aria-label="Search" placeholder="Search courses" /></label>
-        <button class="btn ghost mobile-nav-button" data-toast="Menu is available inside the app dashboard.">${icon("menu")}</button>
-        <a class="btn ghost" href="#login">Login</a>
-        <a class="btn primary glow" href="#signup">Signup</a>
+        <a href="#login" class="nav-login-link">Log in</a>
+        <a href="#signup" class="btn primary nav-cta-btn">Get Started Free</a>
       </div>
+      <button class="mobile-nav-button" id="mobileNavBtn" aria-label="Toggle menu">${icon("menu")}</button>
     </nav>
-    <section class="hero">
-      <div>
-        <span class="eyebrow">${icon("bot")} AI-powered student success platform</span>
-        <h1>Learn Today. <span>Lead Tomorrow.</span></h1>
+
+    <section class="hero" id="hero">
+      <div class="hero-left">
+        <div class="eyebrow">AI CAREER MENTOR FOR COLLEGE STUDENTS</div>
+        <h1>Your AI Mentor.<br />Your Roadmap.<br /><span>Your Future.</span></h1>
         <p class="hero-copy">
-          Studox.ai brings learning paths, AI mentoring, weekly tests, DSA practice, resume scoring,
-          internships, hackathons and career guidance into one premium student dashboard.
+          Take a 5-minute assessment and get a personalized learning roadmap, daily goals,
+          practice, real projects and career guidance all in one place.
         </p>
         <div class="hero-actions">
-          <a class="btn primary glow" href="#signup">${icon("plus")} Get Started</a>
-          <button class="btn" data-toast="Demo mode: explore the live dashboard from the navigation.">${icon("chart")} Watch Demo</button>
+          <a class="btn primary" href="#signup">Take Career Assessment</a>
+          <a class="btn ghost" href="#how-it-works">${icon("test")} See How It Works</a>
         </div>
-        <div class="trusted-row">
-          <div class="avatar-stack"><span>AS</span><span>MK</span><span>RP</span><span>JN</span></div>
-          <strong>Trusted by 42,000+ ambitious students</strong>
-          <span>4.9 platform rating</span>
-        </div>
-      </div>
-      <div class="hero-visual" aria-label="AI mentor robot and progress cards">
-        <div class="robot-stage">
-          <div class="robot-grid"></div>
-          <div class="robot">
-            <div class="robot-head"><div class="robot-antenna"></div></div>
-            <div class="robot-arm left"></div>
-            <div class="robot-arm right"></div>
-            <div class="robot-body"></div>
+        <div class="hero-trust">
+          <div class="trust-checks"><span>Free to start</span><span>No credit card</span><span>Cancel anytime</span></div>
+          <div class="trusted-row">
+            <div class="avatar-stack"><span>A</span><span>R</span><span>S</span><span>P</span><span>M</span></div>
+            <div class="trust-text"><strong>4.8/5</strong> from 2,500+ students<br /><span class="trust-sub">Trusted by students from 500+ colleges</span></div>
           </div>
         </div>
-        ${floatingCard("one", "AI Mentor", "Doubts solved instantly", "bot")}
-        ${floatingCard("two", "Progress", "72% roadmap complete", "chart")}
-        ${floatingCard("three", "Weekly Tests", "91 score predicted", "test")}
-        ${floatingCard("four", "DSA Practice", "320 problems solved", "code")}
+      </div>
+
+      <div class="hero-right">
+        <div class="dashboard-preview">
+          <div class="dash-header"><div class="dash-brand"><div class="dash-brand-dot"></div><span>Studox.ai</span></div><span class="dash-welcome">Welcome back, Ankit</span></div>
+          <div class="dash-body">
+            <div class="dash-sidebar">
+              ${["Home", "Roadmap", "Courses", "Practice", "Tests", "AI Mentor", "Bookmarks", "Profile"].map((item, index) => `<div class="dash-sidebar-item ${index === 0 ? "active" : ""}">${item}</div>`).join("")}
+            </div>
+            <div class="dash-main">
+              <div class="dash-section">
+                <div class="dash-label">Your Progress</div>
+                <div class="dash-progress-row">
+                  <div class="progress-circle"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" fill="none" stroke="#e5eaf4" stroke-width="6"/><circle cx="40" cy="40" r="34" fill="none" stroke="#2563eb" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="57.7" stroke-linecap="round" transform="rotate(-90 40 40)"/></svg><span class="progress-text">73%</span></div>
+                  <div class="progress-msg">Keep going! You're doing great.</div>
+                </div>
+              </div>
+              <div class="dash-stats-row">
+                <div class="dash-stat"><span class="stat-label">Streak</span><span class="stat-value">12<small>days</small></span></div>
+                <div class="dash-stat"><span class="stat-label">Skills Mastered</span><span class="stat-value">16</span></div>
+                <div class="dash-stat"><span class="stat-label">Rank</span><span class="stat-value">Top 10%</span></div>
+              </div>
+              <div class="dash-section">
+                <div class="dash-label">Today's Plan</div>
+                <div class="plan-items">
+                  ${[["React Basics", "68", ""], ["DSA Practice", "52", "purple"], ["10k Test", "30", "amber"]].map(([name, pct, color]) => `<div class="plan-item"><span class="plan-name">${name}</span><div class="plan-bar"><div class="plan-fill ${color}" style="width:${pct}%"></div></div><span class="plan-pct">${pct}%</span></div>`).join("")}
+                </div>
+              </div>
+              <div class="dash-ai-mentor"><div class="dash-label">AI Mentor</div><div class="ai-mentor-msg">Ask me anything about your studies or career!</div><div class="ai-mentor-input"><span>Ask anything...</span>${icon("bot")}</div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
-    <section id="features" class="section">
+
+    <section class="section feature-section" id="features">
       <div class="feature-strip">
-        ${["AI Mentor", "Personalized Roadmap", "Smart Practice", "Real World Projects", "Career Guidance"]
-          .map((item, index) => `<article class="strip-item">
-            <span class="mini-icon">${icon(["bot", "map", "code", "briefcase", "star"][index])}</span>
-            <h3>${item}</h3>
-            <p>${["24/7 doubt solving and concept explanation.", "Milestones that adapt to your target role.", "Tests, DSA and revision matched to gaps.", "Build and publish portfolio-grade work.", "Resume, internship and interview support."][index]}</p>
-          </article>`)
-          .join("")}
+        ${[
+          ["Ask Anything", "24/7 AI mentor to clear your doubts.", "bot"],
+          ["Personalized Roadmap", "Get a tailored roadmap for your goals.", "map"],
+          ["Smart Practice", "DSA, quizzes, MCQs and more.", "code"],
+          ["Real World Projects", "Build. Learn. Showcase. Stand out.", "briefcase"],
+          ["Career Guidance", "Internships, resumes and job referrals.", "trophy"],
+        ].map(([title, text, iconName]) => `<div class="strip-item"><div class="mini-icon">${icon(iconName)}</div><h3>${title}</h3><p>${text}</p></div>`).join("")}
       </div>
     </section>
-    <section class="section">
-      <div class="section-title">
-        <div><h2>Popular Courses</h2><p>Continue learning with structured modules, projects, tests and mentor checkpoints.</p></div>
-        <a class="btn" href="#courses">View all</a>
+
+    <section class="section how-section" id="how-it-works">
+      <div class="section-title center"><div><h2>How Studox.ai Works</h2><p>Your journey from confused to career ready in 4 simple steps.</p></div></div>
+      <div class="steps-row">
+        ${[
+          ["1. Take Assessment", "Tell us about yourself and your goals.", "blue-bg"],
+          ["2. AI Creates Roadmap", "Our AI builds a personalized learning plan for you.", "blue-bg"],
+          ["3. Learn & Practice", "Learn daily, practice consistently, track progress.", "green-bg"],
+          ["4. Build & Grow", "Build projects, get guidance and land opportunities.", "amber-bg"],
+        ].map(([title, text, color], index) => `<div class="step-item"><div class="step-icon ${color}">${index + 1}</div><div class="step-arrow">-&gt;</div><h4>${title}</h4><p>${text}</p></div>`).join("")}
       </div>
-      <div class="card-grid">${courses.map(courseCard).join("")}</div>
     </section>
-    <section class="section two-column">
-      <div class="panel">
-        <div class="panel-head"><h2>Upcoming Tests</h2><span class="chip purple">AI analysis enabled</span></div>
-        <div class="list">${tests.map(testItem).join("")}</div>
+
+    <section class="section platform-section" id="roadmap">
+      <div class="platform-grid">
+        <div class="platform-left">
+          <div class="roadmap-preview-card">
+            <div class="rp-header"><div class="rp-brand"><div class="rp-brand-dot"></div><span>Studox.ai</span></div></div>
+            <div class="rp-content">
+              <div class="rp-title"><h4>Roadmap</h4><div class="rp-completion"><strong>Frontend Developer Roadmap</strong><span>12-16 weeks target</span><div class="rp-bar"><div class="rp-fill" style="width:55%"></div></div><span class="rp-pct">55%</span></div></div>
+              <div class="rp-modules">
+                ${["HTML, CSS & JavaScript", "Responsive Web Design", "React.js Basics", "Advanced React", "State Management"].map((item, index) => `<div class="rp-module ${index < 2 ? "done" : index === 2 ? "active" : ""}"><span class="rp-dot ${index < 2 ? "green" : index === 2 ? "blue" : "gray"}"></span><div><strong>${item}</strong><span>${index < 2 ? "Completed" : index === 2 ? "In Progress" : "Locked"}</span></div></div>`).join("")}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="platform-right">
+          <div class="platform-badge">ALL-IN-ONE LEARNING PLATFORM</div>
+          <h2>Everything you need to learn, build and grow.</h2>
+          <ul class="platform-list">
+            <li>Personalized roadmap based on your goals</li>
+            <li>Daily goals and smart reminders</li>
+            <li>Practice DSA, quizzes and tests</li>
+            <li>Build real world projects</li>
+            <li>AI mentor for doubts and guidance</li>
+            <li>Track your progress and stay motivated</li>
+          </ul>
+          <a class="btn primary" href="#features">Explore Features</a>
+        </div>
       </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Achievement Snapshot</h2><span class="chip green">Level 12</span></div>
-        <div class="circle-progress" style="--percent:82" data-label="82%"></div>
-        ${progress("Career readiness", 82)}
-        ${progress("Portfolio strength", 76)}
-        ${progress("Interview confidence", 69)}
+    </section>
+
+    <section class="cta-banner">
+      <div class="cta-inner">
+        <div class="cta-icon">${icon("trophy")}</div>
+        <div class="cta-text"><h2>Ready to take control of your learning?</h2><p>Join students who are already building their future with Studox.ai.</p></div>
+        <div class="cta-action"><a class="btn cta-btn" href="#signup">Get Started Free</a><span class="cta-note">No credit card required</span></div>
       </div>
     </section>
   </main>`;
@@ -918,7 +986,7 @@ function adminPage() {
 }
 
 const routeMap = {
-  landing: landingPage,
+  landing: studoxLandingPage,
   login: () => authPage("login"),
   signup: () => authPage("signup"),
   dashboard: dashboardPage,
@@ -1004,7 +1072,7 @@ function bindPage() {
 
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
     button.addEventListener("click", () => {
-      localStorage.removeItem("studox-token");
+      clearDemoSession();
       toast("Logged out of demo session.");
       setRoute("landing");
     });
@@ -1114,6 +1182,15 @@ function escapeHtml(text) {
 
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", () => {
+  if (hasDemoSession()) {
+    if (getRoute() !== "dashboard") setRoute("dashboard");
+    else window.setTimeout(render, 260);
+    return;
+  }
+  if (getRoute() !== "landing") {
+    setRoute("landing");
+    return;
+  }
   window.setTimeout(render, 260);
 });
 
@@ -1247,17 +1324,6 @@ function normalizeAdminResource(resource) {
 function emptyState(title, body) {
   return `<div class="empty-state"><div><h3>${title}</h3><p>${body}</p></div></div>`;
 }
-
-routeMap.landing = function functionalLandingPage() {
-  const liveCourses = functionalState.courses.length ? functionalState.courses : courses;
-  const liveTests = functionalState.tests.length
-    ? functionalState.tests.map((item) => [item.title, cleanDate(item.scheduledAt), `${item.durationMinutes || 45} min`, `${item.totalQuestions || 20} questions`])
-    : tests;
-  return landingPage()
-    .replace(`<div class="card-grid">${courses.map(courseCard).join("")}</div>`, `<div class="card-grid">${liveCourses.slice(0, 3).map(courseCardFromApi).join("")}</div>`)
-    .replace(`<div class="list">${tests.map(testItem).join("")}</div>`, `<div class="list">${liveTests.map(testItem).join("")}</div>`)
-    .replace("Demo mode: explore the live dashboard from the navigation.", "Dashboard open karke live actions try karo.");
-};
 
 function courseCardFromApi(course) {
   return courseCard({
@@ -1469,7 +1535,7 @@ bindPage = function functionalBindPage() {
   });
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
     button.addEventListener("click", () => {
-      localStorage.removeItem("studox-token");
+      clearDemoSession();
       toast("Logged out.");
       setRoute("landing");
     });
@@ -1668,90 +1734,6 @@ async function handleAdminDelete(event) {
   toast("Admin item deleted.");
   await render();
 }
-
-routeMap.landing = function beastLandingPage() {
-  const liveCourses = functionalState.courses.length ? functionalState.courses : courses;
-  const liveTests = functionalState.tests.length ? functionalState.tests : [];
-  return `<main class="studox-showcase view">
-    <nav class="showcase-nav">
-      ${brand()}
-      <div class="showcase-links">
-        <a class="active" href="#landing">Home</a>
-        <a href="#features">Features</a>
-        <a href="#mentor">AI Mentor</a>
-        <a href="#roadmap">Roadmap</a>
-        <a href="#courses">Resources</a>
-        <a href="#pricing">Pricing</a>
-      </div>
-      <div class="showcase-actions">
-        <button class="btn icon ghost" data-action="focus-showcase-search">${icon("search")}</button>
-        <a class="btn ghost" href="#login">Log in</a>
-        <a class="btn primary beast-glow" href="#signup">Sign up</a>
-      </div>
-    </nav>
-    <section class="beast-hero">
-      <div class="beast-copy">
-        <span class="ai-pill">AI POWERED LEARNING PLATFORM</span>
-        <h1>Learn Smarter. <span>Achieve Bigger.</span></h1>
-        <p>Studox.ai helps you learn, practice, test, and build real-world skills with the power of AI guidance.</p>
-        <div class="hero-actions">
-          <a class="btn primary beast-glow" href="#signup">Start Learning Now ${icon("plus")}</a>
-          <a class="btn" href="#features">Explore Features ${icon("search")}</a>
-        </div>
-        <div class="trusted-row compact">
-          <div class="avatar-stack"><span>AS</span><span>MK</span><span>RP</span><span>JN</span></div>
-          <span class="trust-badge">10K+</span>
-          <strong>Trusted by 10,000+ students worldwide</strong>
-        </div>
-      </div>
-      <div class="beast-stage" aria-label="Animated student learning with Studox.ai">
-        <div class="orb-field"></div>
-        <div class="float-badge cap">${icon("book")}</div>
-        <div class="float-badge bars">${icon("chart")}</div>
-        <div class="float-badge target">${icon("trophy")}</div>
-        ${animatedStudent()}
-      </div>
-      <aside class="learning-stack">
-        ${learningOverviewCard(functionalState.dashboard || { overallProgress: 75, testsCompleted: 24, skillsMastered: 16, studyStreak: 12 })}
-        <div class="mentor-blue-card">
-          <div>
-            <h3>AI Mentor</h3>
-            <p>Your 24/7 AI learning companion is here to help you.</p>
-            <a class="btn dark" href="#mentor">Chat Now ${icon("plus")}</a>
-          </div>
-          <div class="mini-bot"><span></span></div>
-        </div>
-      </aside>
-    </section>
-    <section id="features" class="showcase-feature-rail">
-      ${[
-        ["AI Mentor", "24/7 AI Assistance", "bot"],
-        ["Personalized Roadmap", "Tailored for your goals", "map"],
-        ["Smart Practice", "DSA, Quizzes & More", "code"],
-        ["Real World Projects", "Build. Learn. Showcase.", "briefcase"],
-        ["Career Guidance", "Internships & Jobs", "trophy"],
-      ].map(([title, text, iconName]) => `<article><span>${icon(iconName)}</span><div><h3>${title}</h3><p>${text}</p></div></article>`).join("")}
-    </section>
-    <section class="showcase-bottom-grid">
-      <div class="panel premium-list-panel">
-        <div class="panel-head"><h2>Popular Courses</h2><a href="#courses">View All</a></div>
-        <div class="mini-course-row">
-          ${liveCourses.slice(0, 5).map((course, index) => miniCourseCard(course, index)).join("")}
-        </div>
-      </div>
-      <div class="panel premium-list-panel">
-        <div class="panel-head"><h2>Upcoming Tests</h2><a href="#tests">View All</a></div>
-        <div class="list">${(liveTests.length ? liveTests : [{ title: "DSA Weekly Contest", scheduledAt: new Date(), durationMinutes: 120 }, { title: "Aptitude Test", scheduledAt: new Date(), durationMinutes: 60 }, { title: "Web Dev Quiz", scheduledAt: new Date(), durationMinutes: 45 }]).slice(0, 3).map((item) => `<div class="test-mini"><span>${icon("test")}</span><div><h4>${item.title}</h4><p>${cleanDate(item.scheduledAt)} - ${item.durationMinutes || 45} min</p></div></div>`).join("")}</div>
-      </div>
-      <div class="panel achievement-mini">
-        <div class="trophy-burst">${icon("trophy")}<i></i><i></i><i></i><i></i></div>
-        <h3>Keep it up, Ankit!</h3>
-        <p>You're in the top 10% students this month.</p>
-        <a class="btn primary" href="#certificates">View Achievements</a>
-      </div>
-    </section>
-  </main>`;
-};
 
 routeMap.dashboard = function beastDashboardPage() {
   const data = functionalState.dashboard || {};
@@ -2063,26 +2045,10 @@ function authResetPage() {
 
 render = async function configuredRender() {
   const route = routeMap[getRoute()] ? getRoute() : "landing";
-  if (protectedRoutes.has(route) && !localStorage.getItem("studox-token")) {
-    localStorage.setItem("studox-return-route", route);
-    window.location.hash = "login";
+  // TODO: Replace demo authentication with real backend authentication later.
+  if (protectedRoutes.has(route) && !hasDemoSession()) {
+    setRoute("landing");
     return;
-  }
-  if (protectedRoutes.has(route) && localStorage.getItem("studox-token")) {
-    const session = await api("/auth/me");
-    if (!session?.user) {
-      localStorage.removeItem("studox-token");
-      localStorage.setItem("studox-return-route", route);
-      window.location.hash = "login";
-      return;
-    }
-    currentUser = {
-      ...currentUser,
-      name: session.user.name || currentUser.name,
-      email: session.user.email || currentUser.email,
-      avatar: (session.user.name || currentUser.name).split(" ").map((word) => word[0]).join("").slice(0, 2).toUpperCase(),
-    };
-    localStorage.setItem("studox-user", JSON.stringify(currentUser));
   }
   app.innerHTML = loadingView(route);
   await loadFunctionalData(route);
@@ -2096,20 +2062,15 @@ handleLogin = async function configuredHandleLogin(event) {
   const form = event.currentTarget;
   const feedback = form.querySelector("[data-auth-feedback]");
   const data = Object.fromEntries(new FormData(form));
-  if (!data.email || !data.password) return showAuthFeedback(feedback, "Email/phone and password are required.", true);
-  if (data.password.length < 8) return showAuthFeedback(feedback, "Password must be at least 8 characters.", true);
-
-  setFormBusy(form, true);
-  const result = await api("/auth/login", { method: "POST", body: JSON.stringify(data) });
-  setFormBusy(form, false);
-  if (!result?.token) return showAuthFeedback(feedback, "Login failed. Check your credentials.", true);
-
-  saveAuthSession(result);
-  showAuthFeedback(feedback, "Login successful. Opening dashboard...", false);
-  toast(result.message || "Logged in successfully.");
-  const next = localStorage.getItem("studox-return-route") || "dashboard";
-  localStorage.removeItem("studox-return-route");
-  setRoute(next);
+  // TODO: Replace demo authentication with real backend authentication later.
+  currentUser = {
+    ...currentUser,
+    email: data.email || currentUser.email,
+  };
+  createDemoSession(currentUser);
+  showAuthFeedback(feedback, "Demo login enabled. Opening dashboard...", false);
+  toast("Opening dashboard.");
+  setRoute("dashboard");
 };
 
 handleSignup = async function configuredHandleSignup(event) {
@@ -2117,29 +2078,22 @@ handleSignup = async function configuredHandleSignup(event) {
   const form = event.currentTarget;
   const feedback = form.querySelector("[data-auth-feedback]");
   const data = Object.fromEntries(new FormData(form));
-  if (!data.name || !data.email || !data.phone || !data.password) return showAuthFeedback(feedback, "Please fill all required fields.", true);
-  if (data.password.length < 8) return showAuthFeedback(feedback, "Password must be at least 8 characters.", true);
-  if (data.password !== data.confirmPassword) return showAuthFeedback(feedback, "Passwords do not match.", true);
-  if (!data.terms) return showAuthFeedback(feedback, "Please accept the privacy settings.", true);
-
-  setFormBusy(form, true);
-  const result = await api("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      password: data.password,
-      goal: data.goal,
-      field: data.field,
-    }),
-  });
-  setFormBusy(form, false);
-  if (!result?.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
-
-  saveAuthSession(result, data.goal);
-  showAuthFeedback(feedback, result.welcomeEmailSent ? "Account created. Welcome email sent. Opening dashboard..." : "Account created. Opening dashboard...", false);
-  toast(result.emailWarning || result.message || "Account created.");
+  // TODO: Replace demo authentication with real backend authentication later.
+  currentUser = {
+    ...currentUser,
+    name: data.name || currentUser.name,
+    email: data.email || currentUser.email,
+    goal: data.goal || currentUser.goal,
+    avatar: (data.name || currentUser.name)
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase(),
+  };
+  createDemoSession(currentUser);
+  showAuthFeedback(feedback, "Demo signup enabled. Opening dashboard...", false);
+  toast("Opening dashboard.");
   setRoute("dashboard");
 };
 
@@ -2179,6 +2133,12 @@ function setFormBusy(form, busy) {
 const authAwareBindPage = bindPage;
 bindPage = function configuredBindPage() {
   authAwareBindPage();
+  document.querySelectorAll("a[href='#login'], a[href='#signup']").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setRoute(link.getAttribute("href").slice(1));
+    });
+  });
   document.querySelectorAll("[data-form='otp-request']").forEach((form) => form.addEventListener("submit", handleOtpRequest));
   document.querySelectorAll("[data-form='password-reset']").forEach((form) => form.addEventListener("submit", handlePasswordReset));
 };
@@ -2307,3 +2267,7 @@ function cinematicStudent(kind) {
     <div class="cinematic-laptop"><span>Studox.ai</span></div>
   </div>`;
 }
+
+window.addEventListener("hashchange", () => {
+  render();
+});
