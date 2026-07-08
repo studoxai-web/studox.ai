@@ -3,7 +3,7 @@ const toastHost = document.getElementById("toastHost");
 
 const apiBase = "/api";
 const defaultUser = {
-  name: "Aarav Sharma",
+  name: "Jayesh kumar Sahu",
   email: "aarav@studox.ai",
   avatar: "AS",
   goal: "Full Stack Developer",

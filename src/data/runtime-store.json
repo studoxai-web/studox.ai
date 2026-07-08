@@ -686,10 +686,10 @@
   "dsaProgress": [
     {
       "user": "user_demo",
-      "problemsSolved": 321,
-      "acceptanceRate": 80,
-      "currentStreak": 19,
-      "ranking": 1833,
+      "problemsSolved": 323,
+      "acceptanceRate": 83,
+      "currentStreak": 21,
+      "ranking": 1819,
       "totalProblems": 760,
       "topics": [
         {
@@ -709,11 +709,25 @@
         },
         {
           "name": "Sliding Window",
-          "solved": 1,
+          "solved": 3,
           "total": 40
         }
       ],
       "recentProblems": [
+        {
+          "title": "Longest Repeating Character Replacement",
+          "topic": "Sliding Window",
+          "level": "Medium",
+          "status": "Solved",
+          "score": 88
+        },
+        {
+          "title": "Longest Repeating Character Replacement",
+          "topic": "Sliding Window",
+          "level": "Medium",
+          "status": "Solved",
+          "score": 88
+        },
         {
           "title": "Longest Repeating Character Replacement",
           "topic": "Sliding Window",
@@ -739,7 +753,8 @@
       "badges": [
         "Array Ace",
         "Streak 15",
-        "Tree Climber"
+        "Tree Climber",
+        "Streak 20"
       ]
     }
   ],
@@ -903,6 +918,42 @@
     }
   ],
   "chats": [
+    {
+      "id": "ai-mentor_1783352613914_e4ca23",
+      "user": "user_demo",
+      "topic": "general",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Career Guidance",
+          "createdAt": "2026-07-06T15:43:33.914Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Career plan: pick one target role, finish the matching roadmap modules, publish two projects, improve ATS score above 85, then apply to 5 matched internships.",
+          "createdAt": "2026-07-06T15:43:33.914Z"
+        }
+      ],
+      "createdAt": "2026-07-06T15:43:33.914Z"
+    },
+    {
+      "id": "ai-mentor_1783348823550_933985",
+      "user": "user_demo",
+      "topic": "general",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello",
+          "createdAt": "2026-07-06T14:40:23.550Z"
+        },
+        {
+          "role": "assistant",
+          "content": "For \"hello\", start with the core definition, then do one guided example and one independent practice task. I saved this as a mentor conversation so you can review it later.",
+          "createdAt": "2026-07-06T14:40:23.550Z"
+        }
+      ],
+      "createdAt": "2026-07-06T14:40:23.550Z"
+    },
     {
       "id": "ai-mentor_1783264500127_a0b1ea",
       "user": "user_demo",
