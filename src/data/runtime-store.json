@@ -73,6 +73,22 @@
       "phone": "+91 90000 00003",
       "password": "$2a$10$R9pRQ4BkPVS.MZaz4yGjsOm.VfgkEcpHzbUR4oKPDruI3tjgsZ.86",
       "role": "student"
+    },
+    {
+      "id": "user_1783334546776_c9baba",
+      "name": "Signup Fix",
+      "email": "studoxai+signupfix376691@gmail.com",
+      "phone": "9999999999",
+      "password": "$2a$10$.FCvtrP2VLqRW9SaQY9lY.WkX5/wYwGJMIHmnddvjXtbhjkMzPYya",
+      "role": "student"
+    },
+    {
+      "id": "user_1783334719402_30b35b",
+      "name": "shivam agarwal",
+      "email": "shivam312700@gmail.com",
+      "phone": "9620980250",
+      "password": "$2a$10$tPoACVrU6kzn8lRNVjaYLucakh54MHvhCU2tl.Uz.ydMP3rdV/KsS",
+      "role": "student"
     }
   ],
   "profiles": [
@@ -204,6 +220,34 @@
     {
       "user": "user_1783270713098_77f05d",
       "username": "studoxai+valid1365234420",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783334546776_c9baba",
+      "username": "studoxai+signupfix376691",
+      "goal": "Full Stack Developer",
+      "field": "Computer Science",
+      "skills": [
+        "HTML",
+        "CSS"
+      ],
+      "level": "Beginner",
+      "xp": 250,
+      "profileCompletion": 42,
+      "streak": 1
+    },
+    {
+      "user": "user_1783334719402_30b35b",
+      "username": "shivam312700",
       "goal": "Full Stack Developer",
       "field": "Computer Science",
       "skills": [
@@ -503,6 +547,64 @@
           "skills": []
         }
       ]
+    },
+    {
+      "id": "roadmap_1783334546776_b65f17",
+      "user": "user_1783334546776_c9baba",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
+    },
+    {
+      "id": "roadmap_1783334719402_f529ed",
+      "user": "user_1783334719402_30b35b",
+      "title": "Full Stack Developer Roadmap",
+      "currentLevel": "Beginner",
+      "overallProgress": 8,
+      "timeToGoalWeeks": 16,
+      "skillsLearned": 2,
+      "nextMilestone": "Complete foundations",
+      "modules": [
+        {
+          "title": "Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Start HTML, CSS, JavaScript and Git.",
+          "skills": [
+            "HTML",
+            "CSS"
+          ]
+        },
+        {
+          "title": "Core Skills",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Learn the core stack for your goal.",
+          "skills": []
+        }
+      ]
     }
   ],
   "courses": [
@@ -686,10 +788,10 @@
   "dsaProgress": [
     {
       "user": "user_demo",
-      "problemsSolved": 323,
-      "acceptanceRate": 83,
-      "currentStreak": 21,
-      "ranking": 1819,
+      "problemsSolved": 321,
+      "acceptanceRate": 80,
+      "currentStreak": 19,
+      "ranking": 1833,
       "totalProblems": 760,
       "topics": [
         {
@@ -709,25 +811,11 @@
         },
         {
           "name": "Sliding Window",
-          "solved": 3,
+          "solved": 1,
           "total": 40
         }
       ],
       "recentProblems": [
-        {
-          "title": "Longest Repeating Character Replacement",
-          "topic": "Sliding Window",
-          "level": "Medium",
-          "status": "Solved",
-          "score": 88
-        },
-        {
-          "title": "Longest Repeating Character Replacement",
-          "topic": "Sliding Window",
-          "level": "Medium",
-          "status": "Solved",
-          "score": 88
-        },
         {
           "title": "Longest Repeating Character Replacement",
           "topic": "Sliding Window",
@@ -753,8 +841,7 @@
       "badges": [
         "Array Ace",
         "Streak 15",
-        "Tree Climber",
-        "Streak 20"
+        "Tree Climber"
       ]
     }
   ],
@@ -843,7 +930,8 @@
         "CSS"
       ],
       "applicants": [
-        "user_demo"
+        "user_demo",
+        "user_1783269136869_5cae1a"
       ]
     },
     {
@@ -919,40 +1007,22 @@
   ],
   "chats": [
     {
-      "id": "ai-mentor_1783352613914_e4ca23",
-      "user": "user_demo",
-      "topic": "general",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Career Guidance",
-          "createdAt": "2026-07-06T15:43:33.914Z"
-        },
-        {
-          "role": "assistant",
-          "content": "Career plan: pick one target role, finish the matching roadmap modules, publish two projects, improve ATS score above 85, then apply to 5 matched internships.",
-          "createdAt": "2026-07-06T15:43:33.914Z"
-        }
-      ],
-      "createdAt": "2026-07-06T15:43:33.914Z"
-    },
-    {
-      "id": "ai-mentor_1783348823550_933985",
-      "user": "user_demo",
+      "id": "ai-mentor_1783358562041_dd0630",
+      "user": "user_1783334719402_30b35b",
       "topic": "general",
       "messages": [
         {
           "role": "user",
           "content": "hello",
-          "createdAt": "2026-07-06T14:40:23.550Z"
+          "createdAt": "2026-07-06T17:22:42.033Z"
         },
         {
           "role": "assistant",
           "content": "For \"hello\", start with the core definition, then do one guided example and one independent practice task. I saved this as a mentor conversation so you can review it later.",
-          "createdAt": "2026-07-06T14:40:23.550Z"
+          "createdAt": "2026-07-06T17:22:42.034Z"
         }
       ],
-      "createdAt": "2026-07-06T14:40:23.550Z"
+      "createdAt": "2026-07-06T17:22:42.045Z"
     },
     {
       "id": "ai-mentor_1783264500127_a0b1ea",
@@ -1059,9 +1129,10 @@
     },
     {
       "user": "user_1783269136869_5cae1a",
-      "theme": "system",
+      "theme": "dark",
       "accentColor": "#2563eb",
-      "language": "English"
+      "language": "English",
+      "updatedAt": "2026-07-06T17:45:29.453Z"
     },
     {
       "user": "user_1783269768085_ff7316",
@@ -1098,6 +1169,19 @@
       "theme": "system",
       "accentColor": "#2563eb",
       "language": "English"
+    },
+    {
+      "user": "user_1783334546776_c9baba",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1783334719402_30b35b",
+      "theme": "dark",
+      "accentColor": "#2563eb",
+      "language": "English",
+      "updatedAt": "2026-07-06T17:21:59.747Z"
     }
   ],
   "admins": [

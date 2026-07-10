@@ -1,7 +1,38 @@
 const app = document.getElementById("app");
 const toastHost = document.getElementById("toastHost");
 
-const apiBase = "/api";
+const apiBase = window.location.port === "4100" ? "http://localhost:4500/api" : "/api";
+let publicConfigPromise = null;
+let googleScriptPromise = null;
+const themeKey = "studox-theme";
+
+function getStoredTheme() {
+  return localStorage.getItem(themeKey) || "light";
+}
+
+function resolveTheme(theme = getStoredTheme()) {
+  if (theme === "system") return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme = getStoredTheme()) {
+  const resolved = resolveTheme(theme);
+  localStorage.setItem(themeKey, theme);
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.dataset.themePreference = theme;
+  document.body.dataset.theme = resolved;
+  document.body.dataset.themePreference = theme;
+}
+
+function isDarkTheme() {
+  return resolveTheme(getStoredTheme()) === "dark";
+}
+
+applyTheme(getStoredTheme());
+
+window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+  if (getStoredTheme() === "system") applyTheme("system");
+});
 const defaultUser = {
   name: "Jayesh kumar Sahu",
   email: "aarav@studox.ai",
@@ -14,18 +45,21 @@ const defaultUser = {
 let currentUser = JSON.parse(localStorage.getItem("studox-user") || "null") || defaultUser;
 let adminResource = "users";
 
+if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
+  localStorage.removeItem("demoSession");
+  localStorage.removeItem("studox-user");
+  currentUser = defaultUser;
+}
+
 function hasDemoSession() {
-  return localStorage.getItem("demoSession") === "true";
+  return Boolean(localStorage.getItem("studox-token"));
 }
 
 function createDemoSession(user = currentUser) {
-  // TODO: Replace demoSession with real backend authentication.
-  localStorage.setItem("demoSession", "true");
   localStorage.setItem("studox-user", JSON.stringify(user));
 }
 
 function clearDemoSession() {
-  // TODO: Replace demoSession with real backend authentication.
   localStorage.removeItem("demoSession");
   localStorage.removeItem("studox-token");
   localStorage.removeItem("studox-user");
@@ -50,6 +84,8 @@ const icons = {
   menu: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke-width="2"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 19V5M4 19h16" stroke-width="2"/><path d="M8 16v-5M12 16V8M16 16v-7" stroke-width="2"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z" stroke-width="2"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke-width="2"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke-width="2"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none"><path d="M21 14.6A8 8 0 0 1 9.4 3 7 7 0 1 0 21 14.6Z" stroke-width="2" stroke-linejoin="round"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke-width="2"/></svg>',
   "arrow-right": '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke-width="2"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2" stroke-width="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke-width="2"/></svg>',
@@ -421,6 +457,38 @@ function studoxLandingPage() {
       </div>
     </section>
 
+    <section class="section landing-insights" id="resources">
+      <div class="section-title center"><div><h2>Built for daily student progress</h2><p>Courses, tests, achievements and AI guidance stay connected in one premium workspace.</p></div></div>
+      <div class="landing-insight-grid">
+        <article class="landing-resource-card wide">
+          <div class="panel-head"><h3>Popular Learning Tracks</h3><a href="#courses">View all</a></div>
+          <div class="landing-course-row">
+            ${[
+              ["Full Stack Developer", "React, Node, MongoDB", 75, "code"],
+              ["DSA Mastery", "Arrays, Trees, DP", 62, "test"],
+              ["AI Career Builder", "Resume, projects, interviews", 68, "bot"],
+            ].map(([title, text, value, iconName]) => `<a href="#courses" class="landing-course-mini"><span>${icon(iconName)}</span><div><strong>${title}</strong><small>${text}</small>${progress("", value)}</div><b>${value}%</b></a>`).join("")}
+          </div>
+        </article>
+        <article class="landing-resource-card">
+          <div class="panel-head"><h3>Upcoming Tests</h3><a href="#tests">Start</a></div>
+          <div class="landing-test-list">
+            ${[
+              ["DSA Weekly Contest", "Today - 45 min"],
+              ["Aptitude Sprint", "Tomorrow - 30 min"],
+              ["Web Dev Quiz", "Friday - 25 min"],
+            ].map(([title, text]) => `<a href="#tests"><span>${icon("test")}</span><div><strong>${title}</strong><small>${text}</small></div></a>`).join("")}
+          </div>
+        </article>
+        <article class="landing-resource-card achievement-card">
+          <span>${icon("trophy")}</span>
+          <h3>Keep it up</h3>
+          <p>Students use Studox.ai to plan roadmaps, improve scores and build portfolio proof.</p>
+          <a class="btn primary" href="#signup">Create your plan</a>
+        </article>
+      </div>
+    </section>
+
     <section class="cta-banner">
       <div class="cta-inner">
         <div class="cta-icon">${icon("trophy")}</div>
@@ -428,6 +496,21 @@ function studoxLandingPage() {
         <div class="cta-action"><a class="btn cta-btn" href="#signup">Get Started Free</a><span class="cta-note">No credit card required</span></div>
       </div>
     </section>
+
+    <footer class="landing-footer">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          ${brand()}
+          <p class="footer-tagline">Studox.ai helps students learn smarter, practice consistently, build real projects and prepare for careers with AI guidance.</p>
+          <div class="footer-socials"><a href="#landing">X</a><a href="#landing">in</a><a href="#landing">GH</a></div>
+        </div>
+        <div class="footer-col"><h4>Platform</h4><a href="#features">Features</a><a href="#roadmap">Roadmap</a><a href="#courses">Courses</a><a href="#tests">Tests</a></div>
+        <div class="footer-col"><h4>Career</h4><a href="#resume">Resume Builder</a><a href="#internships">Internships</a><a href="#hackathons">Hackathons</a><a href="#certificates">Certificates</a></div>
+        <div class="footer-col"><h4>Company</h4><a href="#about">About</a><a href="#mentor">AI Mentor</a><a href="#login">Login</a><a href="#signup">Signup</a></div>
+        <div class="footer-col"><h4>Stay updated</h4><p>Get learning tips, roadmap updates and career opportunities.</p><div class="footer-newsletter"><input placeholder="Email address" /><button class="btn primary footer-sub-btn" data-toast="Newsletter signup placeholder ready.">Join</button></div></div>
+      </div>
+      <div class="footer-bottom">Copyright 2026 Studox.ai. Learn. Practice. Build. Grow.</div>
+    </footer>
   </main>`;
 }
 
@@ -530,8 +613,8 @@ function signupForm() {
 }
 
 function appLayout(content, route) {
-  const dark = route === "profile" || route === "settings";
-  return `<div class="${dark ? "dark-page" : ""} view">
+  const dark = isDarkTheme() || route === "profile" || route === "settings";
+  return `<div class="${dark ? "dark-page" : ""} view app-view" data-current-theme="${isDarkTheme() ? "dark" : "light"}">
     <div class="mobile-backdrop" data-mobile-close></div>
     <div class="dashboard-layout ${dark ? "dark-shell" : ""}">
       <aside class="sidebar ${dark ? "dark-card" : ""}" id="sidebar">
@@ -562,6 +645,7 @@ function topbar(dark) {
   return `<header class="topbar ${dark ? "dark-card" : ""}">
     <button class="btn icon mobile-menu" data-mobile-menu aria-label="Open menu">${icon("menu")}</button>
     <label class="global-search">${icon("search")}<input class="search-input" placeholder="Search courses, tests, internships, projects" /></label>
+    <button class="btn icon theme-toggle ${dark ? "dark" : ""}" data-theme-toggle aria-label="Toggle dark mode">${icon(isDarkTheme() ? "sun" : "moon")}</button>
     <button class="btn icon notification ${dark ? "dark" : ""}" data-toast="You have 5 new mentor and test notifications.">${icon("bell")}<span class="badge">5</span></button>
     <div class="user-menu">
       <button class="user-pill" data-user-toggle>
@@ -1106,7 +1190,7 @@ function bindPage() {
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
     button.addEventListener("click", () => {
       clearDemoSession();
-      toast("Logged out of demo session.");
+      toast("Logged out.");
       setRoute("landing");
     });
   });
@@ -1215,12 +1299,13 @@ function escapeHtml(text) {
 
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", () => {
+  const route = getRoute();
   if (hasDemoSession()) {
-    if (getRoute() !== "dashboard") setRoute("dashboard");
+    if (["landing", "login", "signup", "reset"].includes(route)) setRoute("dashboard");
     else window.setTimeout(render, 260);
     return;
   }
-  if (getRoute() !== "landing") {
+  if (protectedRoutes.has(route)) {
     setRoute("landing");
     return;
   }
@@ -1513,7 +1598,8 @@ routeMap.profile = function functionalProfilePage() {
 
 routeMap.settings = function functionalSettingsPage() {
   const settings = functionalState.settings || {};
-  return appLayout(`<div class="page-head"><div><h1>Settings</h1><p>Save All Changes se preferences backend mein save hoti hain.</p></div></div><form class="roadmap-layout" data-form="settings-save"><div class="panel dark-card"><h2>Appearance</h2><div class="settings-list" style="margin-top:14px"><div class="setting-row"><div><strong>Theme</strong><p class="muted">Choose light, dark or system mode.</p></div><select name="theme"><option ${settings.theme === "light" ? "selected" : ""}>light</option><option ${settings.theme === "dark" ? "selected" : ""}>dark</option><option ${settings.theme === "system" ? "selected" : ""}>system</option></select></div><div class="setting-row"><div><strong>Accent color</strong><p class="muted">Primary dashboard accent.</p></div><input name="accentColor" value="${settings.accentColor || "#2563eb"}" /></div><div class="setting-row"><div><strong>Language</strong><p class="muted">Interface language.</p></div><select name="language"><option ${settings.language === "English" ? "selected" : ""}>English</option><option ${settings.language === "Hindi" ? "selected" : ""}>Hindi</option><option ${settings.language === "Spanish" ? "selected" : ""}>Spanish</option></select></div></div><h2 style="margin-top:22px">Study Preferences</h2><div class="settings-list" style="margin-top:14px">${["Daily learning reminders", "Weekly test nudges", "DSA challenge alerts", "Internship recommendations"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="pref_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div></div><aside class="panel dark-card"><h2>Notifications</h2><div class="settings-list" style="margin-top:14px">${["Email updates", "Push notifications", "Mentor summaries", "Career alerts"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="note_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div><button class="btn primary" style="margin-top:18px" type="submit">Save All Changes</button></aside></form>`, "settings");
+  const selectedTheme = settings.theme || getStoredTheme();
+  return appLayout(`<div class="page-head"><div><h1>Settings</h1><p>Save All Changes se preferences backend mein save hoti hain.</p></div></div><form class="roadmap-layout" data-form="settings-save"><div class="panel dark-card"><h2>Appearance</h2><div class="settings-list" style="margin-top:14px"><div class="setting-row"><div><strong>Theme</strong><p class="muted">Choose light, dark or system mode.</p></div><select name="theme"><option ${selectedTheme === "light" ? "selected" : ""}>light</option><option ${selectedTheme === "dark" ? "selected" : ""}>dark</option><option ${selectedTheme === "system" ? "selected" : ""}>system</option></select></div><div class="setting-row"><div><strong>Accent color</strong><p class="muted">Primary dashboard accent.</p></div><input name="accentColor" value="${settings.accentColor || "#2563eb"}" /></div><div class="setting-row"><div><strong>Language</strong><p class="muted">Interface language.</p></div><select name="language"><option ${settings.language === "English" ? "selected" : ""}>English</option><option ${settings.language === "Hindi" ? "selected" : ""}>Hindi</option><option ${settings.language === "Spanish" ? "selected" : ""}>Spanish</option></select></div></div><h2 style="margin-top:22px">Study Preferences</h2><div class="settings-list" style="margin-top:14px">${["Daily learning reminders", "Weekly test nudges", "DSA challenge alerts", "Internship recommendations"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="pref_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div></div><aside class="panel dark-card"><h2>Notifications</h2><div class="settings-list" style="margin-top:14px">${["Email updates", "Push notifications", "Mentor summaries", "Career alerts"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="note_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div><button class="btn primary" style="margin-top:18px" type="submit">Save All Changes</button></aside></form>`, "settings");
 };
 
 routeMap.admin = function functionalAdminPage() {
@@ -1741,6 +1827,7 @@ async function handleSettingsSave(event) {
     },
   };
   await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
+  applyTheme(data.theme || "light");
   toast("Settings saved.");
   await render();
 }
@@ -1888,6 +1975,10 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const liveTests = data.upcomingTests || [];
   const activity = data.recentActivity || [];
   const progressValue = Math.max(0, Math.min(100, Number(data.overallProgress || 0)));
+  const firstName = currentUser.name.split(" ")[0] || "Student";
+  const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2) + 8));
+  const readinessScore = Math.min(100, Math.round(38 + progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
+  const weeklyMomentum = Math.min(100, Math.round(34 + (data.testsCompleted || 0) * 5 + (data.dsa?.problemsSolved || 0) / 8));
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
@@ -1895,19 +1986,20 @@ routeMap.dashboard = function properStudentDashboardPage() {
     ["XP Points", data.xpPoints || 0, "", "trophy", "Live"],
   ];
 
-  return appLayout(`<section class="proper-dashboard">
-    <div class="dash-welcome-card">
+  return appLayout(`<section class="proper-dashboard premium-dashboard">
+    <div class="dashboard-aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="dash-welcome-card command-hero">
       <div>
-        <span class="ai-pill">STUDENT DASHBOARD</span>
-        <h1>Welcome back, ${currentUser.name.split(" ")[0]}</h1>
-        <p>Your progress is now action based. Continue lessons, submit tests, solve DSA, add projects and apply for opportunities to move these numbers.</p>
+        <span class="ai-pill">AI STUDENT COMMAND CENTER</span>
+        <h1>Welcome back, ${firstName}</h1>
+        <p>Your live learning cockpit is ready. Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.</p>
         <div class="hero-actions">
           <a class="btn primary beast-glow" href="#courses">Continue Learning</a>
           <a class="btn" href="#tests">Start Test</a>
           <a class="btn" href="#dsa">Solve DSA</a>
         </div>
       </div>
-      <div class="dash-orbit-card" aria-label="Animated progress orb">
+      <div class="dash-orbit-card" style="--percent:${progressValue}" aria-label="Animated progress orb">
         <div class="dash-orbit">
           <span></span><span></span><span></span>
           <strong>${progressValue}%</strong>
@@ -1916,7 +2008,32 @@ routeMap.dashboard = function properStudentDashboardPage() {
       </div>
     </div>
 
+    <div class="dashboard-command-deck">
+      <a class="command-card primary" href="#roadmap">
+        <span>${icon("map")}</span>
+        <div><strong>Next Milestone</strong><small>Open roadmap path</small></div>
+        <b>${progressValue}%</b>
+      </a>
+      <a class="command-card" href="#tests">
+        <span>${icon("test")}</span>
+        <div><strong>Weekly Test</strong><small>${liveTests[0]?.title || "React Weekly"} ready</small></div>
+        <b>${data.testsCompleted || 0}</b>
+      </a>
+      <a class="command-card" href="#mentor">
+        <span>${icon("bot")}</span>
+        <div><strong>AI Mentor</strong><small>Doubts, resume and career help</small></div>
+        <b>${focusScore}</b>
+      </a>
+    </div>
+
     ${statCards(stats)}
+
+    <div class="momentum-strip">
+      <div><span>Focus Score</span><strong>${focusScore}%</strong><i style="--value:${focusScore}%"></i></div>
+      <div><span>Career Readiness</span><strong>${readinessScore}%</strong><i style="--value:${readinessScore}%"></i></div>
+      <div><span>Weekly Momentum</span><strong>${weeklyMomentum}%</strong><i style="--value:${weeklyMomentum}%"></i></div>
+      <div><span>Study Streak</span><strong>${data.studyStreak || 0} days</strong><i style="--value:${Math.min(100, (data.studyStreak || 0) * 7)}%"></i></div>
+    </div>
 
     <div class="proper-dashboard-grid">
       <article class="panel performance-card">
@@ -1930,6 +2047,19 @@ routeMap.dashboard = function properStudentDashboardPage() {
           Math.min(100, (data.hackathonRegistrations || 0) * 36),
           Math.min(100, (data.studyStreak || 0) * 5),
         ], ["Progress", "Tests", "DSA", "Projects", "Apps", "Hacks", "Streak"])}
+      </article>
+
+      <article class="panel mission-control-card">
+        <div class="panel-head"><h2>Mission Control</h2><span class="chip green">Animated</span></div>
+        <div class="dashboard-pulse-map" aria-label="Learning signal map">
+          <span class="pulse-core">${icon("logo")}</span>
+          <i class="signal-ring ring-a"></i>
+          <i class="signal-ring ring-b"></i>
+          <a class="signal-node node-a" href="#courses">${icon("book")}<small>Courses</small></a>
+          <a class="signal-node node-b" href="#dsa">${icon("code")}<small>DSA</small></a>
+          <a class="signal-node node-c" href="#projects">${icon("briefcase")}<small>Projects</small></a>
+          <a class="signal-node node-d" href="#mentor">${icon("bot")}<small>Mentor</small></a>
+        </div>
       </article>
 
       <article class="panel focus-card">
@@ -2007,13 +2137,7 @@ loginForm = function configuredLoginForm() {
     <button class="btn primary glow auth-submit" type="submit">Login ${icon("arrow-right")}</button>
     <div class="form-feedback" data-auth-feedback></div>
   </form>
-  <div class="secure-note">${icon("lock")} Test account: aarav@studox.ai / password123</div>
-  <div class="divider">or continue with</div>
-  <div class="social-row">
-    <button class="btn" data-toast="Google OAuth config can be connected from backend later.">Google</button>
-    <button class="btn" data-toast="GitHub OAuth config can be connected from backend later.">GitHub</button>
-    <button class="btn" data-toast="LinkedIn OAuth config can be connected from backend later.">LinkedIn</button>
-  </div>
+  <div class="secure-note">${icon("lock")} Secure JWT login connected to Studox.ai backend.</div>
   <p class="muted" style="text-align:center;margin-top:18px">New here? <a href="#signup" style="color:var(--blue);font-weight:800">Create an account</a></p>`;
 };
 
@@ -2084,7 +2208,6 @@ function authResetPage() {
 
 render = async function configuredRender() {
   const route = routeMap[getRoute()] ? getRoute() : "landing";
-  // TODO: Replace demo authentication with real backend authentication later.
   if (protectedRoutes.has(route) && !hasDemoSession()) {
     setRoute("landing");
     return;
@@ -2101,14 +2224,12 @@ handleLogin = async function configuredHandleLogin(event) {
   const form = event.currentTarget;
   const feedback = form.querySelector("[data-auth-feedback]");
   const data = Object.fromEntries(new FormData(form));
-  // TODO: Replace demo authentication with real backend authentication later.
-  currentUser = {
-    ...currentUser,
-    email: data.email || currentUser.email,
-  };
-  createDemoSession(currentUser);
-  showAuthFeedback(feedback, "Demo login enabled. Opening dashboard...", false);
-  toast("Opening dashboard.");
+  if (!data.email || !data.password) return showAuthFeedback(feedback, "Email and password are required.", true);
+  setFormBusy(form, true);
+  const result = await authRequest("/auth/login", data);
+  setFormBusy(form, false);
+  if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
+  saveAuthSession(result);
   setRoute("dashboard");
 };
 
@@ -2117,26 +2238,42 @@ handleSignup = async function configuredHandleSignup(event) {
   const form = event.currentTarget;
   const feedback = form.querySelector("[data-auth-feedback]");
   const data = Object.fromEntries(new FormData(form));
-  // TODO: Replace demo authentication with real backend authentication later.
-  currentUser = {
-    ...currentUser,
-    name: data.name || currentUser.name,
-    email: data.email || currentUser.email,
-    goal: data.goal || currentUser.goal,
-    avatar: (data.name || currentUser.name)
-      .split(" ")
-      .map((word) => word[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase(),
-  };
-  createDemoSession(currentUser);
-  showAuthFeedback(feedback, "Demo signup enabled. Opening dashboard...", false);
-  toast("Opening dashboard.");
+  if (!data.name || !data.email || !data.password) return showAuthFeedback(feedback, "Name, email and password are required.", true);
+  if (data.password.length < 8) return showAuthFeedback(feedback, "Password must be at least 8 characters.", true);
+  if (data.password !== data.confirmPassword) return showAuthFeedback(feedback, "Password and confirm password do not match.", true);
+  if (!data.terms) return showAuthFeedback(feedback, "Please accept the privacy settings to continue.", true);
+  setFormBusy(form, true);
+  const result = await authRequest("/auth/signup", {
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    password: data.password,
+    goal: data.goal,
+    field: data.field,
+  });
+  setFormBusy(form, false);
+  if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
+  saveAuthSession(result, data.goal);
   setRoute("dashboard");
 };
 
+async function authRequest(path, payload) {
+  try {
+    const res = await fetch(`${apiBase}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    return res.ok ? { ok: true, ...data } : { ok: false, ...data };
+  } catch (_error) {
+    return { ok: false, message: "Server connection failed. Please check backend is running." };
+  }
+}
+
 function saveAuthSession(result, goal) {
+  localStorage.removeItem("demoSession");
   localStorage.setItem("studox-token", result.token);
   const user = result.user || {};
   currentUser = {
@@ -2172,6 +2309,17 @@ function setFormBusy(form, busy) {
 const authAwareBindPage = bindPage;
 bindPage = function configuredBindPage() {
   authAwareBindPage();
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const nextTheme = isDarkTheme() ? "light" : "dark";
+      applyTheme(nextTheme);
+      const settingsSelect = document.querySelector("[name='theme']");
+      if (settingsSelect) settingsSelect.value = nextTheme;
+      toast(`${nextTheme === "dark" ? "Dark" : "Light"} mode enabled.`);
+      await api("/settings", { method: "PUT", body: JSON.stringify({ theme: nextTheme }) });
+      await render();
+    });
+  });
   document.querySelectorAll("a[href='#login'], a[href='#signup']").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
