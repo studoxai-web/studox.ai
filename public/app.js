@@ -34,7 +34,7 @@ window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change",
   if (getStoredTheme() === "system") applyTheme("system");
 });
 const defaultUser = {
-  name: "Aarav Sharma",
+  name: "Jayesh kumar Sahu",
   email: "aarav@studox.ai",
   avatar: "AS",
   goal: "Full Stack Developer",
@@ -92,6 +92,11 @@ const icons = {
   eye: '<svg viewBox="0 0 24 24" fill="none"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke-width="2"/></svg>',
   resume: '<svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l4 4v14H7V3Z" stroke-width="2"/><path d="M14 3v5h5M9 13h6M9 17h6" stroke-width="2"/></svg>',
   admin: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z" stroke-width="2"/><path d="M9 12l2 2 4-5" stroke-width="2"/></svg>',
+  github: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.18-3.37-1.18-.45-1.15-1.1-1.46-1.1-1.46-.9-.61.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.03A9.5 9.5 0 0 1 12 7.04c.85 0 1.7.11 2.5.33 1.9-1.3 2.74-1.03 2.74-1.03.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>',
+  html5: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m4 2 1.45 16.3L12 22l6.55-3.7L20 2H4Zm12.85 5.32H9.16l.18 2.05h7.33l-.55 6.14L12 17.78l-4.1-2.27-.28-3.12h2.01l.14 1.58 2.23 1.2 2.24-1.2.23-2.59H7.44l-.54-6.07h10.13l-.18 2.01Z"/></svg>',
+  js: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3Zm10.2 13.95c.37.75 1.12 1.35 2.35 1.35 1.41 0 2.45-.74 2.45-2.1 0-1.26-.72-1.82-2-2.37l-.37-.16c-.65-.28-.93-.46-.93-.9 0-.36.27-.63.72-.63.43 0 .7.18.96.63l1.33-.85c-.5-.89-1.2-1.23-2.29-1.23-1.44 0-2.36.92-2.36 2.13 0 1.31.77 1.93 1.93 2.43l.37.16c.69.3 1.1.48 1.1.97 0 .41-.39.71-1 .71-.72 0-1.13-.37-1.45-.9l-1.37.79Zm-5.05.15c.39.82 1.08 1.2 2.08 1.2 1.24 0 2.1-.66 2.1-2.1v-5.42h-1.68v5.4c0 .58-.24.74-.61.74-.39 0-.55-.26-.73-.58l-1.36.76Z"/></svg>',
+  node: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3.5 6.9v9.8L12 21.6l8.5-4.9V6.9L12 2Zm-1.65 13.9H8.8v-4.2c0-.72-.37-1.08-1-1.08-.68 0-1.08.42-1.08 1.18v4.1H5.16V9.35h1.5v.75c.34-.56.92-.9 1.72-.9 1.23 0 1.97.82 1.97 2.18v4.52Zm3.93.12c-1.9 0-3.12-1.42-3.12-3.4 0-1.98 1.22-3.4 3.12-3.4 1.91 0 3.13 1.42 3.13 3.4 0 1.98-1.22 3.4-3.13 3.4Zm0-1.36c.93 0 1.5-.78 1.5-2.04 0-1.27-.57-2.04-1.5-2.04-.92 0-1.49.77-1.49 2.04 0 1.26.57 2.04 1.49 2.04Z"/></svg>',
+  react: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><ellipse cx="12" cy="12" rx="9" ry="3.6" stroke="currentColor" stroke-width="1.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6" stroke="currentColor" stroke-width="1.6" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" stroke="currentColor" stroke-width="1.6" transform="rotate(120 12 12)"/></svg>',
 };
 
 const sideLinks = [
@@ -343,7 +348,7 @@ function studoxLandingPage() {
           practice, real projects and career guidance all in one place.
         </p>
         <div class="hero-actions">
-          <a class="btn primary" href="#signup">Take Career Assessment</a>
+          <button class="btn primary" type="button" data-action="start-assessment">✨ Build My AI Roadmap</button>
           <a class="btn ghost" href="#how-it-works">${icon("test")} See How It Works</a>
         </div>
         <div class="hero-trust">
@@ -357,31 +362,42 @@ function studoxLandingPage() {
 
       <div class="hero-right">
         <div class="dashboard-preview">
-          <div class="dash-header"><div class="dash-brand"><div class="dash-brand-dot"></div><span>Studox.ai</span></div><span class="dash-welcome">Welcome back, Ankit</span></div>
+          <div class="dash-header">
+            <div class="dash-brand">
+              <div class="dash-brand-dot"></div>
+              <span>Studox.ai</span>
+            </div>
+            <span class="dash-welcome">Welcome back, Ankit</span>
+          </div>
           <div class="dash-body">
             <div class="dash-sidebar">
               ${["Home", "Roadmap", "Courses", "Practice", "Tests", "AI Mentor", "Bookmarks", "Profile"].map((item, index) => `<div class="dash-sidebar-item ${index === 0 ? "active" : ""}">${item}</div>`).join("")}
             </div>
             <div class="dash-main">
-              <div class="dash-section">
-                <div class="dash-label">Your Progress</div>
-                <div class="dash-progress-row">
-                  <div class="progress-circle"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" fill="none" stroke="#e5eaf4" stroke-width="6"/><circle cx="40" cy="40" r="34" fill="none" stroke="#2563eb" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="57.7" stroke-linecap="round" transform="rotate(-90 40 40)"/></svg><span class="progress-text">73%</span></div>
-                  <div class="progress-msg">Keep going! You're doing great.</div>
+              <div class="preview-title"><h3>See How It Works</h3><p>From assessment to your personalized roadmap in 3 simple steps</p></div>
+              <div class="preview-steps">
+                ${[
+                  ["1", "Take Assessment", "Answer 8 quick questions about your goals, skills and interests.", "test", "blue"],
+                  ["2", "AI Analyzes", "Our AI analyzes your answers and identifies the best career path for you.", "bot", "purple"],
+                  ["3", "Get Your Roadmap", "Receive a personalized learning roadmap with courses, projects and daily goals.", "trophy", "green"],
+                ].map(([num, title, text, iconName, tone], index) => `<div class="preview-step ${tone}"><span class="step-num">${num}</span><div class="step-big-icon">${icon(iconName)}</div><strong>${title}</strong><p>${text}</p></div>${index < 2 ? `<span class="step-arrow">-&gt;</span>` : ""}`).join("")}
+              </div>
+              <div class="roadmap-preview-line">
+                <div class="roadmap-heading"><strong>Roadmap Preview</strong><span>Example: Full Stack Developer</span></div>
+                <div class="roadmap-track">
+                  ${[
+                    ["github", "Week 1", "Git & GitHub", "Completed", "done"],
+                    ["html5", "Week 2", "HTML & CSS", "Completed", "done"],
+                    ["js", "Week 3", "JavaScript Basics", "In Progress", "active"],
+                    ["node", "Week 4", "Node.js", "Upcoming", ""],
+                    ["react", "Week 5", "React Basics", "Upcoming", ""],
+                    ["12+", "Week 6", "More Topics", "Ahead", ""],
+                  ].map(([mark, week, title, status, state]) => `<div class="roadmap-node ${state}"><span>${icons[mark] ? icon(mark) : mark}</span><strong>${week}</strong><p>${title}</p><small>${status}</small></div>`).join("")}
                 </div>
               </div>
-              <div class="dash-stats-row">
-                <div class="dash-stat"><span class="stat-label">Streak</span><span class="stat-value">12<small>days</small></span></div>
-                <div class="dash-stat"><span class="stat-label">Skills Mastered</span><span class="stat-value">16</span></div>
-                <div class="dash-stat"><span class="stat-label">Rank</span><span class="stat-value">Top 10%</span></div>
+              <div class="preview-benefits">
+                ${[["Personalized", "Roadmap built just for you"], ["AI-Powered", "Smart recommendations"], ["Track Progress", "Real-time tracking"], ["Career Ready", "Projects, skills & prep"]].map(([title, text]) => `<div><strong>${title}</strong><span>${text}</span></div>`).join("")}
               </div>
-              <div class="dash-section">
-                <div class="dash-label">Today's Plan</div>
-                <div class="plan-items">
-                  ${[["React Basics", "68", ""], ["DSA Practice", "52", "purple"], ["10k Test", "30", "amber"]].map(([name, pct, color]) => `<div class="plan-item"><span class="plan-name">${name}</span><div class="plan-bar"><div class="plan-fill ${color}" style="width:${pct}%"></div></div><span class="plan-pct">${pct}%</span></div>`).join("")}
-                </div>
-              </div>
-              <div class="dash-ai-mentor"><div class="dash-label">AI Mentor</div><div class="ai-mentor-msg">Ask me anything about your studies or career!</div><div class="ai-mentor-input"><span>Ask anything...</span>${icon("bot")}</div></div>
             </div>
           </div>
         </div>
@@ -500,6 +516,23 @@ function studoxLandingPage() {
 
 function floatingCard(pos, title, sub, iconName) {
   return `<article class="float-card ${pos}"><span class="mini-icon">${icon(iconName)}</span><div><strong>${title}</strong><span>${sub}</span></div></article>`;
+}
+
+function assessmentQuestionScreen() {
+  return `<main class="landing view">
+    <nav class="landing-nav">
+      ${brand()}
+    </nav>
+    <section class="section" style="min-height:calc(100vh - 72px);display:grid;place-items:center">
+      <article class="panel form-grid" style="width:min(100%, 620px)">
+        <div class="eyebrow">Career Assessment</div>
+        <h2>What are you currently studying?</h2>
+        <div class="form-grid">
+          ${["BCA", "B.Tech", "Diploma", "Other"].map((option) => `<label class="check-item"><span>${option}</span><input type="radio" name="current_study" value="${option}" /></label>`).join("")}
+        </div>
+      </article>
+    </section>
+  </main>`;
 }
 
 function courseCard(course) {
@@ -1612,6 +1645,12 @@ bindPage = function functionalBindPage() {
   document.querySelectorAll("[data-form='login']").forEach((form) => form.addEventListener("submit", handleLogin));
   document.querySelectorAll("[data-form='signup']").forEach((form) => form.addEventListener("submit", handleSignup));
   document.querySelectorAll("[data-form='chat']").forEach((form) => form.addEventListener("submit", handleChat));
+  document.querySelectorAll("[data-action='start-assessment']").forEach((button) => {
+    button.addEventListener("click", () => {
+      app.innerHTML = assessmentQuestionScreen();
+      bindPage();
+    });
+  });
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
