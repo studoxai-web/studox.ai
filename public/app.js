@@ -973,13 +973,23 @@ function certificatesPage() {
 }
 
 function mentorPage() {
+  const chats = functionalState.chats || [];
+  const chatMessages = chats
+    .slice()
+    .reverse()
+    .flatMap((chat) => chat.messages || [])
+    .slice(-8);
+  const latestMeta = chats[0]?.metadata || {};
+  const sourceLabel = latestMeta.provider
+    ? `${latestMeta.provider}${latestMeta.fallback ? " fallback" : ""}`
+    : "Ready";
   return appLayout(`<div class="page-head">
       <div><h1>AI Mentor Dashboard</h1><p>Ask doubts, get career guidance, review code, improve resumes and plan interviews.</p></div>
-      <span class="chip purple">AI placeholder ready</span>
+      <span class="chip purple">AI ${sourceLabel}</span>
     </div>
     ${statCards([
-      ["Total Conversations", 148, "", "bot", "Active"],
-      ["Doubts Solved", 392, "", "test", "Fast"],
+      ["Total Conversations", chats.length || 0, "", "bot", "Saved"],
+      ["Doubts Solved", chats.length ? chats.length * 2 : 0, "", "test", "Live"],
       ["Topics Explored", 54, "", "book", "Broad"],
       ["Time Saved", 86, "h", "chart", "Estimated"],
       ["AI Mentor Score", 94, "", "star", "Excellent"],
@@ -988,9 +998,9 @@ function mentorPage() {
       <div class="panel">
         <div class="panel-head"><h2>Chat with Studox.ai Mentor</h2><div class="filters">${["Explain Concept", "Career Guidance", "Code Help", "Resume Review", "Interview Prep"].map((prompt, i) => `<button data-prompt="${prompt}" class="${i === 0 ? "active" : ""}">${prompt}</button>`).join("")}</div></div>
         <div class="chat-window" id="chatWindow">
-          <div class="message ai">Hi ${currentUser.name.split(" ")[0]}, I reviewed your roadmap. Ask me anything about React, DSA, careers, resume or internships.</div>
-          <div class="message user">Explain useEffect cleanup with a simple example.</div>
-          <div class="message ai">Cleanup runs before the effect reruns and when the component unmounts. Use it to remove listeners, cancel timers and stop subscriptions.<br /><button class="btn" style="margin-top:10px">Show Code</button></div>
+          ${chatMessages.length
+            ? chatMessages.map((item) => `<div class="message ${item.role === "assistant" ? "ai" : "user"}">${formatMentorMessage(item.content)}</div>`).join("")
+            : `<div class="message ai">Hi ${currentUser.name.split(" ")[0]}, I am connected to your Studox.ai mentor engine. Ask me about React, DSA, resumes, internships, projects, roadmap planning or interview prep.</div>`}
         </div>
         <form class="chat-input" data-form="chat"><input class="search-input" name="message" placeholder="Ask Studox.ai mentor..." /><button class="btn primary">Send</button></form>
       </div>
@@ -1257,25 +1267,33 @@ async function handleSignup(event) {
 
 async function handleChat(event) {
   event.preventDefault();
-  const input = event.currentTarget.message;
+  const form = event.currentTarget;
+  const input = form.message;
+  const button = form.querySelector("button");
   const text = input.value.trim();
   if (!text) return;
   const windowNode = document.getElementById("chatWindow");
   windowNode.insertAdjacentHTML("beforeend", `<div class="message user">${escapeHtml(text)}</div><div class="message ai" id="typingBubble"><span class="typing"><span></span><span></span><span></span></span></div>`);
   input.value = "";
+  if (button) button.disabled = true;
   windowNode.scrollTop = windowNode.scrollHeight;
   const result = await api("/ai-mentor/chat", {
     method: "POST",
     body: JSON.stringify({ message: text }),
   });
-  window.setTimeout(() => {
-    document.getElementById("typingBubble")?.remove();
-    windowNode.insertAdjacentHTML(
-      "beforeend",
-      `<div class="message ai">${result?.reply || "Here is a clear Studox.ai mentor plan: revise the concept, solve two targeted examples, then add one reflection note to your roadmap."}<br /><button class="btn" style="margin-top:10px">Show Code</button></div>`,
-    );
+  document.getElementById("typingBubble")?.remove();
+  if (button) button.disabled = false;
+  if (!result?.reply) {
+    windowNode.insertAdjacentHTML("beforeend", `<div class="message ai error">AI mentor could not respond. Please check backend/API key and try again.</div>`);
     windowNode.scrollTop = windowNode.scrollHeight;
-  }, 850);
+    return;
+  }
+  const source = result.fallback ? "Local mentor" : `${result.provider || "AI"}${result.model ? ` / ${result.model}` : ""}`;
+  windowNode.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message ai">${formatMentorMessage(result.reply)}<div class="mentor-source">${source}</div></div>`,
+  );
+  windowNode.scrollTop = windowNode.scrollHeight;
 }
 
 function animateCounters() {
@@ -1295,6 +1313,12 @@ function animateCounters() {
 
 function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+}
+
+function formatMentorMessage(text = "") {
+  return escapeHtml(String(text))
+    .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+    .replace(/\n/g, "<br />");
 }
 
 window.addEventListener("hashchange", render);
@@ -1328,6 +1352,7 @@ const functionalState = {
   internships: [],
   hackathons: [],
   certificates: [],
+  chats: [],
   profile: null,
   settings: null,
   adminSummary: null,
@@ -1408,6 +1433,9 @@ async function loadFunctionalData(route) {
     },
     certificates: async () => {
       functionalState.certificates = await api("/certificates") || [];
+    },
+    mentor: async () => {
+      functionalState.chats = await api("/ai-mentor/chat") || [];
     },
     profile: async () => {
       functionalState.profile = await api("/profile");
@@ -1490,13 +1518,15 @@ routeMap.roadmap = function functionalRoadmapPage() {
     desc: item.description || "Roadmap module",
     skills: item.skills || [],
   }));
+  const completedModules = liveModules.filter((item) => item.status === "completed").length;
+  const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
   return appLayout(`<div class="page-head"><div><h1>My Learning Roadmap</h1><p>${roadmap.title || "Personalized roadmap"} - Continue course progress to unlock roadmap movement.</p></div><div class="toggle-group"><button class="active">Timeline View</button><button>Tree View</button></div></div>
     ${statCards([
-      ["Current Level", roadmap.currentLevel === "Intermediate" ? 12 : 1, "", "star", roadmap.currentLevel || "Beginner"],
+      ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
       ["Time to Goal", roadmap.timeToGoalWeeks || 0, "w", "map", "Estimated"],
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
-      ["Next Milestone", roadmap.overallProgress || 0, "%", "trophy", roadmap.nextMilestone || "Start"],
+      ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
     <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div></div></article>`).join("") || emptyState("No roadmap yet", "Signup ke goal se roadmap create hota hai.")}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
 };
@@ -1976,9 +2006,9 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const activity = data.recentActivity || [];
   const progressValue = Math.max(0, Math.min(100, Number(data.overallProgress || 0)));
   const firstName = currentUser.name.split(" ")[0] || "Student";
-  const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2) + 8));
-  const readinessScore = Math.min(100, Math.round(38 + progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
-  const weeklyMomentum = Math.min(100, Math.round(34 + (data.testsCompleted || 0) * 5 + (data.dsa?.problemsSolved || 0) / 8));
+  const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2)));
+  const readinessScore = Math.min(100, Math.round(progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
+  const weeklyMomentum = Math.min(100, Math.round((data.testsCompleted || 0) * 5 + (data.dsa?.problemsSolved || 0) / 8));
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
@@ -2156,8 +2186,8 @@ signupForm = function configuredSignupForm() {
       <div class="field"><label>Phone</label><input name="phone" autocomplete="tel" placeholder="+91 98765 43210" required /></div>
     </div>
     <div class="two-column">
-      <div class="field"><label>Goal</label><select name="goal"><option>Full Stack Developer</option><option>Data Scientist</option><option>Product Engineer</option><option>Cybersecurity Analyst</option></select></div>
-      <div class="field"><label>Field</label><select name="field"><option>Computer Science</option><option>Information Technology</option><option>Electronics</option><option>Business Analytics</option></select></div>
+      <div class="field"><label>Goal</label><input name="goal" list="goalOptions" placeholder="Example: Full Stack Developer" required /><datalist id="goalOptions"><option value="Full Stack Developer"></option><option value="Frontend Developer"></option><option value="Backend Developer"></option><option value="Data Scientist"></option><option value="AI Engineer"></option><option value="Product Engineer"></option><option value="Cybersecurity Analyst"></option></datalist></div>
+      <div class="field"><label>Field</label><input name="field" list="fieldOptions" placeholder="Example: Computer Science" required /><datalist id="fieldOptions"><option value="Computer Science"></option><option value="Information Technology"></option><option value="Electronics"></option><option value="Business Analytics"></option><option value="Design"></option><option value="Commerce"></option></datalist></div>
     </div>
     <div class="two-column">
       <div class="field password-field"><label>Password</label><input name="password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
