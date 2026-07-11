@@ -96,18 +96,110 @@ async function seed() {
   });
 
   await Roadmap.create({
-    user: user._id,
+    userId: user._id,
     title: "Full Stack Developer Roadmap",
-    currentLevel: "Intermediate",
-    overallProgress: 72,
-    timeToGoalWeeks: 9,
-    skillsLearned: 36,
-    nextMilestone: "React master checkpoint",
-    modules: [
-      { title: "Foundations", status: "completed", progress: 100, description: "HTML, CSS, JavaScript, Git and browser fundamentals.", skills: ["HTML", "CSS", "Git"] },
-      { title: "Frontend Development", status: "in-progress", progress: 68, description: "React, routing, state, APIs and UI systems.", skills: ["React", "Routing", "State"] },
-      { title: "Backend Development", status: "upcoming", progress: 24, description: "Node.js, Express, authentication and REST APIs.", skills: ["Node.js", "Express", "JWT"] },
-      { title: "Databases", status: "upcoming", progress: 8, description: "MongoDB modeling, indexes and aggregation.", skills: ["MongoDB", "Mongoose"] },
+    careerGoal: "Full Stack Developer",
+    summary: "A practical roadmap for building production-ready MERN applications with projects, testing and deployment basics.",
+    estimatedDurationWeeks: 12,
+    difficulty: "intermediate",
+    status: "active",
+    generatedBy: "seed",
+    version: 1,
+    generatedAt: new Date(),
+    weeks: [
+      {
+        weekId: "week_1",
+        weekNumber: 1,
+        title: "Frontend Foundations",
+        description: "Refresh HTML, CSS, JavaScript, Git and browser fundamentals before moving into React.",
+        estimatedHours: 10,
+        tasks: [
+          {
+            taskId: "task_1",
+            title: "Build a responsive landing page",
+            description: "Create a clean responsive page using semantic HTML, modern CSS and reusable layout sections.",
+            type: "project",
+            estimatedTimeMinutes: 180,
+          },
+          {
+            taskId: "task_2",
+            title: "Practice JavaScript fundamentals",
+            description: "Revise arrays, objects, functions, async code and DOM events with small exercises.",
+            type: "practice",
+            estimatedTimeMinutes: 150,
+          },
+        ],
+        resources: [
+          {
+            resourceId: "resource_1",
+            title: "MDN JavaScript Guide",
+            url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
+            type: "documentation",
+          },
+        ],
+      },
+      {
+        weekId: "week_2",
+        weekNumber: 2,
+        title: "React Application Basics",
+        description: "Learn components, props, state, effects, routing and API-driven UI patterns.",
+        estimatedHours: 12,
+        tasks: [
+          {
+            taskId: "task_3",
+            title: "Build a React dashboard screen",
+            description: "Create reusable cards, lists and loading states powered by mock API data.",
+            type: "project",
+            estimatedTimeMinutes: 240,
+          },
+          {
+            taskId: "task_4",
+            title: "Study hooks and routing",
+            description: "Practice useState, useEffect and route-based rendering with small feature examples.",
+            type: "learning",
+            estimatedTimeMinutes: 180,
+          },
+        ],
+        resources: [
+          {
+            resourceId: "resource_2",
+            title: "React Learn Docs",
+            url: "https://react.dev/learn",
+            type: "documentation",
+          },
+        ],
+      },
+      {
+        weekId: "week_3",
+        weekNumber: 3,
+        title: "Node, Express and MongoDB",
+        description: "Create backend APIs with Express, model data with MongoDB and connect frontend flows to real endpoints.",
+        estimatedHours: 14,
+        tasks: [
+          {
+            taskId: "task_5",
+            title: "Create CRUD APIs",
+            description: "Build list, create, update and delete endpoints for one learning resource.",
+            type: "backend",
+            estimatedTimeMinutes: 240,
+          },
+          {
+            taskId: "task_6",
+            title: "Model MongoDB data",
+            description: "Design Mongoose schemas, references and validation rules for user-owned data.",
+            type: "database",
+            estimatedTimeMinutes: 180,
+          },
+        ],
+        resources: [
+          {
+            resourceId: "resource_3",
+            title: "Mongoose Documentation",
+            url: "https://mongoosejs.com/docs/guide.html",
+            type: "documentation",
+          },
+        ],
+      },
     ],
   });
 

@@ -562,6 +562,43 @@ app.get("/api/roadmaps", authOptional, async (_req, res) => {
   res.json(await listResource("roadmaps"));
 });
 
+app.post("/api/roadmaps/select", authRequired, async (req, res) => {
+  try {
+    if (!mongoReady() || !mongoose.isValidObjectId(req.user.id)) {
+      return res.status(400).json({ message: "Valid logged-in user is required." });
+    }
+
+    const selectedRoadmap = req.body.roadmap;
+    if (!selectedRoadmap || typeof selectedRoadmap !== "object") {
+      return res.status(400).json({ message: "Roadmap is required." });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    if (user.activeRoadmapId) {
+      await Roadmap.findByIdAndUpdate(user.activeRoadmapId, { status: "archived" });
+    }
+
+    const roadmap = await Roadmap.create({
+      ...selectedRoadmap,
+      userId: req.user.id,
+      status: "active",
+    });
+
+    user.activeRoadmapId = roadmap._id;
+    await user.save();
+
+    res.status(201).json({
+      message: "Roadmap selected successfully.",
+      activeRoadmapId: roadmap._id,
+      roadmap,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Roadmap selection failed.", error: error.message });
+  }
+});
+
 app.get("/api/roadmaps/:id/progress", authOptional, async (req, res) => {
   const roadmaps = await listResource("roadmaps");
   const roadmap = roadmaps.find((item) => String(item._id || item.id) === req.params.id) || roadmaps[0];

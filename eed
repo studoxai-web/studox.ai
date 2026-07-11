@@ -1,0 +1,23 @@
+*   [33mc74e52e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge branch 'main' of https://github.com/studoxai-web/studox.ai
+[31m|[m[32m\[m  
+[31m|[m *   [33m6ae8ccf[m Merge pull request #3 from studoxai-web/jayesh-landing-improvements
+[31m|[m [33m|[m[34m\[m  
+[31m|[m [33m|[m * [33m5f09737[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mjayesh-landing-improvements[m[33m, [m[1;31morigin/jayesh-landing-improvements[m[33m)[m DATABASE CONNECTED
+* [33m|[m [34m|[m [33m2d0e285[m save local changes
+[33m|[m[33m/[m [34m/[m  
+* [34m|[m [33m0dacce2[m Merge pull request #2 from studoxai-web/jayesh-landing-improvements
+[35m|[m[34m\[m[34m|[m 
+[35m|[m *   [33m7fe3e62[m Merge remote-tracking branch 'origin/main' into jayesh-landing-improvements
+[35m|[m [1;31m|[m[35m\[m  
+[35m|[m [1;31m|[m[35m/[m  
+[35m|[m[35m/[m[1;31m|[m   
+* [1;31m|[m [33m1ce5c4c[m updated studio.ai website
+* [1;31m|[m   [33m1bb7c2b[m Merge pull request #1 from studoxai-web/jayesh-landing-improvements
+[1;33m|[m[1;34m\[m [1;31m\[m  
+[1;33m|[m [1;34m|[m * [33m0e2f535[m minor improvement #2
+[1;33m|[m [1;34m|[m * [33mfdc7da7[m Minor improvement
+[1;33m|[m [1;34m|[m[1;34m/[m  
+[1;33m|[m * [33m4730542[m Implement demo authentication flow and improve SPA routing
+[1;33m|[m[1;33m/[m  
+* [33m3770a00[m[33m ([m[1;32mmain[m[33m)[m Initial Studox.ai project
+* [33m0c09e50[m first commit
