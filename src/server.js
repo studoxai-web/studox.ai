@@ -40,6 +40,7 @@ const port = process.env.PORT || 4000;
 const jwtSecret = process.env.JWT_SECRET || "studox_local_secret";
 const storePath = path.join(__dirname, "data", "runtime-store.json");
 const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
+const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
 const memory = loadMemoryStore();
 ensureDemoAccount();
 
@@ -157,6 +158,26 @@ function currentUserId(req) {
 
 function byUser(list, userId) {
   return (list || []).filter((item) => String(item.user || item.userId || "user_demo") === String(userId));
+}
+
+function isPremiumPlan(plan) {
+  return ["pro", "elite"].includes(String(plan || "").toLowerCase());
+}
+
+async function getUserPlan(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const user = await User.findById(userId).select("plan").lean();
+    return user?.plan || "free";
+  }
+  const user = memory.users.find((item) => String(item.id || item._id) === String(userId));
+  return user?.plan || "free";
+}
+
+async function countMentorChats(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    return AIMentorChat.countDocuments({ user: userId });
+  }
+  return byUser(memory.chats || [], userId).length;
 }
 
 function normalizeGoal(goal = "") {
@@ -473,7 +494,7 @@ async function callOpenAiMentor(messages) {
       model,
       messages,
       temperature: 0.35,
-      max_tokens: 750,
+      max_tokens: 5000,
     }),
   });
   const data = await response.json();
@@ -486,21 +507,44 @@ async function callOpenAiMentor(messages) {
 async function callGeminiMentor(messages) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY missing");
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
   const prompt = messages.map((item) => `${item.role.toUpperCase()}:\n${item.content}`).join("\n\n");
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.35, maxOutputTokens: 750 },
-    }),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.error?.message || "Gemini request failed");
-  const reply = (data?.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("").trim();
+  const generate = async (text, maxOutputTokens = 6000) => {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text }] }],
+        generationConfig: { temperature: 0.45, maxOutputTokens },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || "Gemini request failed");
+    const candidate = data?.candidates?.[0] || {};
+    const textReply = (candidate?.content?.parts || []).map((part) => part.text || "").join("").trim();
+    return { textReply, finishReason: candidate.finishReason || "" };
+  };
+
+  const first = await generate(prompt);
+  let reply = first.textReply;
+  let finishReason = first.finishReason;
+
+  if (reply && finishReason === "MAX_TOKENS") {
+    const continuationPrompt = [
+      prompt,
+      "\n\nASSISTANT RESPONSE SO FAR:\n",
+      reply,
+      "\n\nContinue exactly from where the previous answer stopped. Do not restart, do not repeat earlier sections, and finish the remaining explanation clearly.",
+    ].join("");
+    const second = await generate(continuationPrompt, 4000);
+    if (second.textReply) {
+      reply = `${reply}\n\n${second.textReply}`;
+      finishReason = second.finishReason;
+    }
+  }
+
   if (!reply) throw new Error("Gemini returned an empty response");
-  return { reply, provider: "gemini", model, fallback: false };
+  return { reply, provider: "gemini", model, fallback: false, finishReason };
 }
 
 async function generateMentorReply(message, userId) {
@@ -681,7 +725,7 @@ app.post("/api/auth/signup", async (req, res) => {
     } else {
       const exists = memory.users.find((item) => item.email === email);
       if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student" };
+      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student", plan: "free" };
       memory.users.push(user);
       memory.profiles.push({
         user: user.id,
@@ -754,6 +798,50 @@ app.get("/api/auth/me", authRequired, async (req, res) => {
   const user = memory.users.find((item) => String(item.id || item._id) === String(req.user.id));
   if (!user) return res.status(404).json({ message: "User not found." });
   res.json({ user: publicUser(user) });
+});
+
+app.get("/api/billing/plan", authRequired, async (req, res) => {
+  const plan = await getUserPlan(req.user.id);
+  const used = await countMentorChats(req.user.id);
+  res.json({
+    plan,
+    mentor: {
+      used,
+      limit: mentorFreeChatLimit,
+      locked: !isPremiumPlan(plan) && used >= mentorFreeChatLimit,
+      unlimited: isPremiumPlan(plan),
+    },
+  });
+});
+
+app.post("/api/billing/upgrade", authRequired, async (req, res) => {
+  const plan = String(req.body.plan || "").toLowerCase();
+  if (!["pro", "elite"].includes(plan)) {
+    return res.status(400).json({ message: "Please choose a valid premium plan." });
+  }
+
+  let user;
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    user = await User.findByIdAndUpdate(req.user.id, { plan }, { new: true }).lean();
+  } else {
+    user = memory.users.find((item) => String(item.id || item._id) === String(req.user.id));
+    if (user) {
+      user.plan = plan;
+      persistMemory();
+    }
+  }
+
+  if (!user) return res.status(404).json({ message: "User not found." });
+
+  res.json({
+    message: `${plan === "elite" ? "Elite" : "Pro"} plan activated. AI Mentor is unlocked.`,
+    plan,
+    user: publicUser(user),
+    subscription: {
+      status: "active",
+      startedAt: new Date().toISOString(),
+    },
+  });
 });
 
 app.post("/api/auth/forgot-password", async (req, res) => {
@@ -1230,6 +1318,18 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
   const message = String(req.body.message || "").trim();
   if (!message) return res.status(400).json({ message: "Message is required." });
   if (message.length > 2000) return res.status(400).json({ message: "Message is too long. Keep it under 2000 characters." });
+  const plan = await getUserPlan(req.user.id);
+  const used = await countMentorChats(req.user.id);
+  if (!isPremiumPlan(plan) && used >= mentorFreeChatLimit) {
+    return res.status(402).json({
+      code: "MENTOR_LIMIT_REACHED",
+      message: `Free AI Mentor limit reached. You used ${mentorFreeChatLimit}/${mentorFreeChatLimit} chats. Upgrade to Pro for unlimited mentor access.`,
+      used,
+      limit: mentorFreeChatLimit,
+      plan,
+      upgradeUrl: "#pricing",
+    });
+  }
   const mentor = await generateMentorReply(message, req.user.id);
   const chat = await createResource("ai-mentor", {
     user: req.user.id,
@@ -1244,7 +1344,19 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
       fallback: mentor.fallback,
     },
   });
-  res.status(201).json({ reply: mentor.reply, chat, provider: mentor.provider, model: mentor.model, fallback: mentor.fallback });
+  res.status(201).json({
+    reply: mentor.reply,
+    chat,
+    provider: mentor.provider,
+    model: mentor.model,
+    fallback: mentor.fallback,
+    usage: {
+      used: used + 1,
+      limit: mentorFreeChatLimit,
+      remaining: isPremiumPlan(plan) ? null : Math.max(0, mentorFreeChatLimit - used - 1),
+      plan,
+    },
+  });
 });
 
 app.get("/api/notifications", authOptional, async (_req, res) => {
