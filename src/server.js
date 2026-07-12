@@ -637,6 +637,24 @@ function roadmapOutputErrors(roadmap, index) {
   return errors;
 }
 
+function roadmapOptionErrors(roadmap, index) {
+  const prefix = `roadmaps.${index}`;
+  const errors = [];
+  ["title", "careerGoal", "summary", "difficulty"].forEach((field) => {
+    if (!roadmap[field] || typeof roadmap[field] !== "string") errors.push(`${prefix}.${field} is required.`);
+  });
+  if (typeof roadmap.estimatedDurationWeeks !== "number" || !Number.isFinite(roadmap.estimatedDurationWeeks)) {
+    errors.push(`${prefix}.estimatedDurationWeeks must be a number.`);
+  }
+  if (!Array.isArray(roadmap.weeks) || !roadmap.weeks.length) errors.push(`${prefix}.weeks must be a non-empty array.`);
+  (roadmap.weeks || []).forEach((week, weekIndex) => {
+    const weekPrefix = `${prefix}.weeks.${weekIndex}`;
+    if (typeof week.weekNumber !== "number" || !Number.isFinite(week.weekNumber)) errors.push(`${weekPrefix}.weekNumber must be a number.`);
+    if (!week.title || typeof week.title !== "string") errors.push(`${weekPrefix}.title is required.`);
+  });
+  return errors;
+}
+
 function extractJsonArray(text) {
   const clean = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   try {
@@ -649,7 +667,19 @@ function extractJsonArray(text) {
   }
 }
 
-function roadmapPrompt(input) {
+function extractJsonObject(text) {
+  const clean = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    return JSON.parse(clean);
+  } catch (_error) {
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) throw _error;
+    return JSON.parse(clean.slice(start, end + 1));
+  }
+}
+
+function roadmapOptionsPrompt(input) {
   return `You are an expert career roadmap generator for Studox.ai.
 
 Use the following INPUT_CONTRACT data to generate personalized roadmap strategies:
@@ -662,9 +692,58 @@ Do not include explanations.
 Do not include comments.
 Do not include text before or after the JSON.
 
-The response must be a JSON array containing exactly 3 roadmap objects.
+The response must be a JSON array containing exactly 3 lightweight roadmap option objects.
 
-Each roadmap object must match this ROADMAP_CONTRACT structure exactly:
+Each option must include only this structure:
+
+[
+ {
+  "title": "string",
+  "careerGoal": "string",
+  "summary": "string",
+  "estimatedDurationWeeks": "number",
+  "difficulty": "string",
+  "weeks": [
+    {
+      "weekNumber": "number",
+      "title": "string"
+    }
+  ]
+ }
+]
+
+Generate exactly three different roadmap strategies:
+1. A fast-track roadmap.
+2. A balanced roadmap.
+3. A project-heavy roadmap.
+
+Rules:
+- Use the same careerGoal from INPUT_CONTRACT.
+- estimatedDurationWeeks must be realistic based on targetTimelineWeeks.
+- weeks must contain high-level week titles only.
+- Do not include tasks.
+- Do not include resources.
+- Do not include generatedAt, generatedBy, version, status, userId, descriptions, IDs, or extra fields.`;
+}
+
+function completeRoadmapPrompt(input, selectedRoadmap) {
+  return `You are an expert career roadmap generator for Studox.ai.
+
+Use the INPUT_CONTRACT and selected lightweight roadmap option to generate one complete roadmap.
+
+INPUT_CONTRACT:
+${JSON.stringify(input, null, 2)}
+
+SELECTED_ROADMAP_OPTION:
+${JSON.stringify(selectedRoadmap, null, 2)}
+
+Return only valid JSON.
+Do not return markdown.
+Do not include explanations.
+Do not include comments.
+Do not include text before or after the JSON.
+
+Return exactly one JSON object matching this ROADMAP_CONTRACT:
 
 {
   "userId": "string",
@@ -705,38 +784,42 @@ Each roadmap object must match this ROADMAP_CONTRACT structure exactly:
   ]
 }
 
-Generate exactly three different roadmap strategies:
-1. A fast-track roadmap.
-2. A balanced roadmap.
-3. A project-heavy roadmap.
-
 Rules:
 - Use the same userId from INPUT_CONTRACT.
-- Use the same careerGoal from INPUT_CONTRACT.
+- Use the selected title, careerGoal, summary, estimatedDurationWeeks and difficulty.
 - Set generatedBy to "ai".
 - Set version to 1.
 - Set status to "draft".
 - generatedAt must be a valid ISO date string.
-- estimatedDurationWeeks must be realistic based on targetTimelineWeeks.
-- weeks must contain realistic weekly plans.
-- tasks must be practical, specific, and actionable.
-- resources must be real learning resources with valid URLs.
+- Expand the selected high-level weeks into complete weeks.
+- Keep each week concise: 2 tasks and 1 resource per week.
+- Tasks must be practical, specific, and actionable.
+- Resources must be real learning resources with valid URLs.
 - Prefer free or official documentation resources when possible.
 - Do not invent fake domains.
-- Do not include roadmap output fields outside ROADMAP_CONTRACT.
-- Do not include INPUT_CONTRACT fields unless they are also part of ROADMAP_CONTRACT.`;
+- Do not include fields outside ROADMAP_CONTRACT.`;
 }
 
-async function generateRoadmapOptions(input) {
-  const messages = [
-    { role: "system", content: "Return only valid JSON for Studox.ai roadmap generation." },
-    { role: "user", content: roadmapPrompt(input) },
-  ];
+async function callConfiguredAi(messages) {
   const provider = String(process.env.AI_PROVIDER || "").toLowerCase();
   if (provider === "gemini") return await callGeminiMentor(messages);
   if (provider === "openai" || process.env.OPENAI_API_KEY) return await callOpenAiMentor(messages);
   if (process.env.GEMINI_API_KEY) return await callGeminiMentor(messages);
   throw new Error("AI provider is not configured.");
+}
+
+async function generateRoadmapOptions(input) {
+  return await callConfiguredAi([
+    { role: "system", content: "Return only valid lightweight roadmap options JSON for Studox.ai." },
+    { role: "user", content: roadmapOptionsPrompt(input) },
+  ]);
+}
+
+async function generateCompleteRoadmap(input, selectedRoadmap) {
+  return await callConfiguredAi([
+    { role: "system", content: "Return only valid complete roadmap JSON for Studox.ai." },
+    { role: "user", content: completeRoadmapPrompt(input, selectedRoadmap) },
+  ]);
 }
 
 function memoryId(prefix) {
@@ -1245,9 +1328,9 @@ app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
       return res.status(502).json({ message: "AI must return exactly three roadmaps." });
     }
 
-    const outputErrors = roadmaps.flatMap((roadmap, index) => roadmapOutputErrors(roadmap, index));
+    const outputErrors = roadmaps.flatMap((roadmap, index) => roadmapOptionErrors(roadmap, index));
     if (outputErrors.length) {
-      return res.status(502).json({ message: "AI returned invalid roadmap data.", errors: outputErrors });
+      return res.status(502).json({ message: "AI returned invalid roadmap option data.", errors: outputErrors });
     }
 
     res.json({ roadmaps });
@@ -1266,19 +1349,43 @@ app.post("/api/roadmaps/select", authRequired, async (req, res) => {
     if (!selectedRoadmap || typeof selectedRoadmap !== "object" || Array.isArray(selectedRoadmap)) {
       return res.status(400).json({ message: "Roadmap is required." });
     }
+    const optionErrors = roadmapOptionErrors(selectedRoadmap, 0);
+    if (optionErrors.length) {
+      return res.status(400).json({ message: "Invalid roadmap option.", errors: optionErrors });
+    }
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found." });
+
+    const input = {
+      ...(req.body.assessment || {}),
+      userId: req.user.id,
+      careerGoal: selectedRoadmap.careerGoal,
+      targetTimelineWeeks: selectedRoadmap.estimatedDurationWeeks,
+    };
+    const aiResult = await generateCompleteRoadmap(input, selectedRoadmap);
+    let completedRoadmap;
+    try {
+      completedRoadmap = extractJsonObject(aiResult.reply);
+    } catch (_error) {
+      return res.status(502).json({ message: "AI returned invalid complete roadmap JSON." });
+    }
+
+    completedRoadmap = {
+      ...completedRoadmap,
+      userId: req.user.id,
+      status: "active",
+    };
+    const fullErrors = roadmapOutputErrors(completedRoadmap, 0);
+    if (fullErrors.length) {
+      return res.status(502).json({ message: "AI returned invalid complete roadmap data.", errors: fullErrors });
+    }
 
     if (user.activeRoadmapId) {
       await Roadmap.findByIdAndUpdate(user.activeRoadmapId, { status: "archived" }, { runValidators: true });
     }
 
-    const roadmap = await Roadmap.create({
-      ...selectedRoadmap,
-      userId: req.user.id,
-      status: "active",
-    });
+    const roadmap = await Roadmap.create(completedRoadmap);
 
     user.activeRoadmapId = roadmap._id;
     await user.save();

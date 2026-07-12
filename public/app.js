@@ -2087,7 +2087,7 @@ async function handleChooseRoadmap(event) {
 
   const result = await api("/roadmaps/select", {
     method: "POST",
-    body: JSON.stringify({ roadmap: selectedRoadmap }),
+    body: JSON.stringify({ roadmap: selectedRoadmap, assessment: assessmentInputPayload(assessmentFormData()) }),
   });
 
   pendingRoadmapSelection = false;
