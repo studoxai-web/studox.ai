@@ -571,6 +571,174 @@ async function generateMentorReply(message, userId) {
   };
 }
 
+function roadmapInputErrors(input) {
+  const errors = [];
+  const requiredStrings = ["userId", "careerGoal", "currentLevel", "learningStyle", "preferredLanguage"];
+  requiredStrings.forEach((field) => {
+    if (!input[field] || typeof input[field] !== "string") errors.push(`${field} is required.`);
+  });
+  ["targetTimelineWeeks", "weeklyAvailabilityHours"].forEach((field) => {
+    if (typeof input[field] !== "number" || !Number.isFinite(input[field]) || input[field] <= 0) errors.push(`${field} must be a positive number.`);
+  });
+  if (!input.background || typeof input.background !== "object") errors.push("background is required.");
+  else ["educationLevel", "fieldOfStudy", "workExperience"].forEach((field) => {
+    if (!input.background[field] || typeof input.background[field] !== "string") errors.push(`background.${field} is required.`);
+  });
+  if (!input.skills || typeof input.skills !== "object") errors.push("skills is required.");
+  else ["known", "weak", "target"].forEach((field) => {
+    if (!Array.isArray(input.skills[field])) errors.push(`skills.${field} must be an array.`);
+  });
+  if (!input.constraints || typeof input.constraints !== "object") errors.push("constraints is required.");
+  else ["budget", "deviceAccess", "internetAccess"].forEach((field) => {
+    if (!input.constraints[field] || typeof input.constraints[field] !== "string") errors.push(`constraints.${field} is required.`);
+  });
+  if (!input.preferences || typeof input.preferences !== "object") errors.push("preferences is required.");
+  else ["includeProjects", "includePracticeTasks", "includeFreeResources", "includeInterviewPrep"].forEach((field) => {
+    if (typeof input.preferences[field] !== "boolean") errors.push(`preferences.${field} must be a boolean.`);
+  });
+  return errors;
+}
+
+function roadmapOutputErrors(roadmap, index) {
+  const prefix = `roadmaps.${index}`;
+  const errors = [];
+  const requiredStrings = ["userId", "title", "careerGoal", "summary", "difficulty", "status", "generatedBy", "generatedAt"];
+  requiredStrings.forEach((field) => {
+    if (!roadmap[field] || typeof roadmap[field] !== "string") errors.push(`${prefix}.${field} is required.`);
+  });
+  ["estimatedDurationWeeks", "version"].forEach((field) => {
+    if (typeof roadmap[field] !== "number" || !Number.isFinite(roadmap[field])) errors.push(`${prefix}.${field} must be a number.`);
+  });
+  if (!Array.isArray(roadmap.weeks) || !roadmap.weeks.length) errors.push(`${prefix}.weeks must be a non-empty array.`);
+  (roadmap.weeks || []).forEach((week, weekIndex) => {
+    const weekPrefix = `${prefix}.weeks.${weekIndex}`;
+    ["weekId", "title", "description"].forEach((field) => {
+      if (!week[field] || typeof week[field] !== "string") errors.push(`${weekPrefix}.${field} is required.`);
+    });
+    ["weekNumber", "estimatedHours"].forEach((field) => {
+      if (typeof week[field] !== "number" || !Number.isFinite(week[field])) errors.push(`${weekPrefix}.${field} must be a number.`);
+    });
+    if (!Array.isArray(week.tasks) || !week.tasks.length) errors.push(`${weekPrefix}.tasks must be a non-empty array.`);
+    (week.tasks || []).forEach((task, taskIndex) => {
+      const taskPrefix = `${weekPrefix}.tasks.${taskIndex}`;
+      ["taskId", "title", "description", "type"].forEach((field) => {
+        if (!task[field] || typeof task[field] !== "string") errors.push(`${taskPrefix}.${field} is required.`);
+      });
+      if (typeof task.estimatedTimeMinutes !== "number" || !Number.isFinite(task.estimatedTimeMinutes)) errors.push(`${taskPrefix}.estimatedTimeMinutes must be a number.`);
+    });
+    if (!Array.isArray(week.resources) || !week.resources.length) errors.push(`${weekPrefix}.resources must be a non-empty array.`);
+    (week.resources || []).forEach((resource, resourceIndex) => {
+      const resourcePrefix = `${weekPrefix}.resources.${resourceIndex}`;
+      ["resourceId", "title", "url", "type"].forEach((field) => {
+        if (!resource[field] || typeof resource[field] !== "string") errors.push(`${resourcePrefix}.${field} is required.`);
+      });
+    });
+  });
+  return errors;
+}
+
+function extractJsonArray(text) {
+  const clean = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    return JSON.parse(clean);
+  } catch (_error) {
+    const start = clean.indexOf("[");
+    const end = clean.lastIndexOf("]");
+    if (start === -1 || end === -1 || end <= start) throw _error;
+    return JSON.parse(clean.slice(start, end + 1));
+  }
+}
+
+function roadmapPrompt(input) {
+  return `You are an expert career roadmap generator for Studox.ai.
+
+Use the following INPUT_CONTRACT data to generate personalized roadmap strategies:
+
+${JSON.stringify(input, null, 2)}
+
+Return only valid JSON.
+Do not return markdown.
+Do not include explanations.
+Do not include comments.
+Do not include text before or after the JSON.
+
+The response must be a JSON array containing exactly 3 roadmap objects.
+
+Each roadmap object must match this ROADMAP_CONTRACT structure exactly:
+
+{
+  "userId": "string",
+  "title": "string",
+  "careerGoal": "string",
+  "summary": "string",
+  "estimatedDurationWeeks": "number",
+  "difficulty": "string",
+  "status": "string",
+  "generatedBy": "string",
+  "version": "number",
+  "generatedAt": "ISO date string",
+  "weeks": [
+    {
+      "weekId": "string",
+      "weekNumber": "number",
+      "title": "string",
+      "description": "string",
+      "estimatedHours": "number",
+      "tasks": [
+        {
+          "taskId": "string",
+          "title": "string",
+          "description": "string",
+          "type": "string",
+          "estimatedTimeMinutes": "number"
+        }
+      ],
+      "resources": [
+        {
+          "resourceId": "string",
+          "title": "string",
+          "url": "string",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}
+
+Generate exactly three different roadmap strategies:
+1. A fast-track roadmap.
+2. A balanced roadmap.
+3. A project-heavy roadmap.
+
+Rules:
+- Use the same userId from INPUT_CONTRACT.
+- Use the same careerGoal from INPUT_CONTRACT.
+- Set generatedBy to "ai".
+- Set version to 1.
+- Set status to "draft".
+- generatedAt must be a valid ISO date string.
+- estimatedDurationWeeks must be realistic based on targetTimelineWeeks.
+- weeks must contain realistic weekly plans.
+- tasks must be practical, specific, and actionable.
+- resources must be real learning resources with valid URLs.
+- Prefer free or official documentation resources when possible.
+- Do not invent fake domains.
+- Do not include roadmap output fields outside ROADMAP_CONTRACT.
+- Do not include INPUT_CONTRACT fields unless they are also part of ROADMAP_CONTRACT.`;
+}
+
+async function generateRoadmapOptions(input) {
+  const messages = [
+    { role: "system", content: "Return only valid JSON for Studox.ai roadmap generation." },
+    { role: "user", content: roadmapPrompt(input) },
+  ];
+  const provider = String(process.env.AI_PROVIDER || "").toLowerCase();
+  if (provider === "gemini") return await callGeminiMentor(messages);
+  if (provider === "openai" || process.env.OPENAI_API_KEY) return await callOpenAiMentor(messages);
+  if (process.env.GEMINI_API_KEY) return await callGeminiMentor(messages);
+  throw new Error("AI provider is not configured.");
+}
+
 function memoryId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 }
@@ -1060,20 +1228,69 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
 });
 
 app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
-  const goal = req.body.goal || req.body.targetRole || "Career";
-  const field = req.body.field || "";
-  const roadmapPayload = buildPersonalRoadmap(goal, field, req.user.id);
-  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const created = await Roadmap.create({ ...roadmapPayload, id: undefined });
-    await StudentProfile.findOneAndUpdate({ user: req.user.id }, { goal, field, level: "Beginner" }, { upsert: true });
-    return res.status(201).json(created);
+  try {
+    const input = { ...req.body, userId: req.user.id };
+    const errors = roadmapInputErrors(input);
+    if (errors.length) return res.status(400).json({ message: "Invalid roadmap input.", errors });
+
+    const aiResult = await generateRoadmapOptions(input);
+    let roadmaps;
+    try {
+      roadmaps = extractJsonArray(aiResult.reply);
+    } catch (_error) {
+      return res.status(502).json({ message: "AI returned invalid JSON." });
+    }
+
+    if (!Array.isArray(roadmaps) || roadmaps.length !== 3) {
+      return res.status(502).json({ message: "AI must return exactly three roadmaps." });
+    }
+
+    const outputErrors = roadmaps.flatMap((roadmap, index) => roadmapOutputErrors(roadmap, index));
+    if (outputErrors.length) {
+      return res.status(502).json({ message: "AI returned invalid roadmap data.", errors: outputErrors });
+    }
+
+    res.json({ roadmaps });
+  } catch (error) {
+    res.status(500).json({ message: "Roadmap generation failed.", error: error.message });
   }
-  memory.roadmaps = (memory.roadmaps || []).filter((item) => String(item.user || item.userId) !== String(req.user.id));
-  memory.roadmaps.unshift(roadmapPayload);
-  const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
-  if (profile) Object.assign(profile, { goal, field, level: "Beginner", skills: [], xp: 0, streak: 0 });
-  persistMemory();
-  res.status(201).json(roadmapPayload);
+});
+
+app.post("/api/roadmaps/select", authRequired, async (req, res) => {
+  try {
+    if (!mongoReady() || !mongoose.isValidObjectId(req.user.id)) {
+      return res.status(400).json({ message: "Valid logged-in user is required." });
+    }
+
+    const selectedRoadmap = req.body.roadmap;
+    if (!selectedRoadmap || typeof selectedRoadmap !== "object" || Array.isArray(selectedRoadmap)) {
+      return res.status(400).json({ message: "Roadmap is required." });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    if (user.activeRoadmapId) {
+      await Roadmap.findByIdAndUpdate(user.activeRoadmapId, { status: "archived" }, { runValidators: true });
+    }
+
+    const roadmap = await Roadmap.create({
+      ...selectedRoadmap,
+      userId: req.user.id,
+      status: "active",
+    });
+
+    user.activeRoadmapId = roadmap._id;
+    await user.save();
+
+    res.status(201).json({
+      message: "Roadmap selected successfully.",
+      activeRoadmapId: roadmap._id,
+      roadmap,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Roadmap selection failed.", error: error.message });
+  }
 });
 
 app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {

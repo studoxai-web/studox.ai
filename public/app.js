@@ -46,6 +46,10 @@ const defaultUser = {
 
 let currentUser = JSON.parse(localStorage.getItem("studox-user") || "null") || defaultUser;
 let adminResource = "users";
+let pendingRoadmapGeneration = false;
+let pendingRoadmapSelection = false;
+let assessmentStep = 0;
+const assessmentAnswers = {};
 
 if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
   localStorage.removeItem("demoSession");
@@ -522,20 +526,109 @@ function floatingCard(pos, title, sub, iconName) {
 }
 
 function assessmentQuestionScreen() {
+  const roadmaps = functionalState.generatedRoadmaps || [];
+  const previewIndex = Math.min(functionalState.previewRoadmapIndex || 0, Math.max(0, roadmaps.length - 1));
+  const previewRoadmap = roadmaps[previewIndex];
+  const question = assessmentQuestions[assessmentStep];
+  const answer = assessmentAnswers[question.id] || {};
+  const progressValue = Math.round(((assessmentStep + 1) / assessmentQuestions.length) * 100);
   return `<main class="landing view">
     <nav class="landing-nav">
       ${brand()}
     </nav>
     <section class="section" style="min-height:calc(100vh - 72px);display:grid;place-items:center">
-      <article class="panel form-grid" style="width:min(100%, 620px)">
+      <form class="panel form-grid" style="width:min(100%, 620px)" data-form="roadmap-assessment">
         <div class="eyebrow">Career Assessment</div>
-        <h2>What are you currently studying?</h2>
+        <div class="panel-head"><h2>${question.title}</h2><span class="chip purple">Q${assessmentStep + 1}/${assessmentQuestions.length}</span></div>
+        ${progress(question.section, progressValue)}
+        <p class="muted">${question.prompt}</p>
         <div class="form-grid">
-          ${["BCA", "B.Tech", "Diploma", "Other"].map((option) => `<label class="check-item"><span>${option}</span><input type="radio" name="current_study" value="${option}" /></label>`).join("")}
+          ${question.type === "textarea"
+            ? `<textarea name="${question.id}" data-assessment-field="${question.id}" placeholder="Share anything useful for your roadmap..." required>${answer.value || ""}</textarea>`
+            : question.options.concat("Other").map((option) => `<label class="check-item"><span>${option}</span><input type="radio" name="${question.id}" value="${option}" ${answer.value === option ? "checked" : ""} required /></label>`).join("")}
+          ${question.type !== "textarea" ? `<input name="${question.id}_other" data-assessment-other="${question.id}" placeholder="Please specify" value="${answer.other || ""}" style="${answer.value === "Other" ? "" : "display:none"}" />` : ""}
         </div>
-      </article>
+        <div class="form-row">
+          <button class="btn" type="button" data-action="assessment-prev" ${assessmentStep === 0 ? "disabled" : ""}>Previous</button>
+          ${assessmentStep < assessmentQuestions.length - 1
+            ? `<button class="btn primary" type="button" data-action="assessment-next">Next</button>`
+            : `<button class="btn primary" type="submit">${pendingRoadmapGeneration ? "Generating..." : "Generate Roadmap"}</button>`}
+        </div>
+      </form>
+      ${pendingRoadmapGeneration ? `<div class="panel" style="width:min(100%, 620px);margin-top:16px">${emptyState("Generating roadmaps", "AI roadmap options are being prepared.")}</div>` : ""}
+      ${!pendingRoadmapGeneration && !roadmaps.length ? `<div class="panel" style="width:min(100%, 620px);margin-top:16px">${emptyState("No roadmap options yet", "Submit the assessment to generate three roadmap options.")}</div>` : ""}
+      ${!pendingRoadmapGeneration && roadmaps.length ? `<div class="dash-grid" style="width:min(100%, 1100px);margin-top:16px">${roadmaps.slice(0, 3).map((roadmap, index) => `<article class="card ${previewIndex === index ? "active" : ""}" data-action="preview-roadmap" data-roadmap-index="${index}"><span class="chip purple">${roadmap.difficulty || "beginner"}</span><h3>${roadmap.title || "Roadmap option"}</h3><p>${roadmap.summary || "Personalized roadmap option."}</p><div class="skills-row"><span class="chip">${roadmap.careerGoal || "Career Goal"}</span><span class="chip">${roadmap.estimatedDurationWeeks || 0} weeks</span></div></article>`).join("")}</div>${roadmapPreview(previewRoadmap)}` : ""}
     </section>
   </main>`;
+}
+
+function roadmapPreview(roadmap) {
+  if (!roadmap) return "";
+  return `<article class="panel" style="width:min(100%, 1100px);margin-top:16px">
+    <div class="panel-head"><div><h2>${roadmap.title || "Roadmap Preview"}</h2><p>${roadmap.summary || ""}</p></div><span class="chip purple">${roadmap.difficulty || "beginner"}</span></div>
+    <div class="skills-row" style="margin:12px 0 18px"><span class="chip">${roadmap.careerGoal || "Career Goal"}</span><span class="chip">${roadmap.estimatedDurationWeeks || 0} weeks</span></div>
+    <div class="timeline">${(roadmap.weeks || []).map((week) => `<article class="timeline-item active"><span class="node"></span><div class="module-card"><header><div><h3>Week ${week.weekNumber || ""}: ${week.title || "Untitled week"}</h3><p>${week.description || ""}</p></div><span class="chip">${week.estimatedHours || 0}h</span></header><h4>Tasks</h4><div class="list">${(week.tasks || []).map((task) => `<div class="list-item"><div><h4>${task.title || "Task"}</h4><p>${task.description || ""}</p></div><span class="chip">${task.estimatedTimeMinutes || 0} min</span></div>`).join("") || emptyState("No tasks", "No tasks returned.")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${(week.resources || []).map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title || "Resource"}</a>`).join("") || `<span class="chip">No resources</span>`}</div></div></article>`).join("")}</div>
+    <button class="btn primary" type="button" data-action="choose-roadmap" ${pendingRoadmapSelection ? "disabled" : ""}>${pendingRoadmapSelection ? "Saving..." : "Choose Roadmap"}</button>
+  </article>`;
+}
+
+const assessmentQuestions = [
+  { id: "q1", section: "Career Identity", title: "Career Identity", prompt: "Which career path are you most interested in pursuing?", options: ["Software Development", "AI / Data", "Cybersecurity", "Design & Creative"] },
+  { id: "q2", section: "Career Identity", title: "Career Identity", prompt: "What is your primary reason for learning this field?", options: ["Get a Job / Internship", "Build My Own Startup / Business", "Freelancing / Earn Money", "Learn for Personal Growth"] },
+  { id: "q3", section: "Career Identity", title: "Career Identity", prompt: "When do you want to achieve this goal?", options: ["Within 6 Months", "Within 1 Year", "More than 1 Year", "No Fixed Timeline"] },
+  { id: "q4", section: "Career Identity", title: "Career Identity", prompt: "How confident are you about this career choice?", options: ["Very Confident", "Somewhat Confident", "Just Exploring", "Completely Unsure"] },
+  { id: "q5", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How many hours can you realistically study each week?", options: ["Less than 5 Hours", "5-10 Hours", "10-20 Hours", "More than 20 Hours"] },
+  { id: "q6", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What device will you mainly use?", options: ["Laptop/Desktop", "Tablet", "Mobile Phone", "Shared Computer"] },
+  { id: "q7", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What is your learning budget?", options: ["Free Resources Only", "Up to Rs. 2,000", "Up to Rs. 10,000", "No Budget Limit"] },
+  { id: "q8", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How comfortable are you with English technical content?", options: ["Very Comfortable", "Comfortable", "Need Simple Explanations", "Prefer Regional Language"] },
+  { id: "q9", section: "Experience", title: "Experience", prompt: "Have you built any projects before?", options: ["Yes, Many", "Yes, A Few", "Only Small Practice Projects", "Never"] },
+  { id: "q10", section: "Experience", title: "Experience", prompt: "Have you completed any online courses?", options: ["Several", "A Few", "Started but Didn't Finish", "Never"] },
+  { id: "q11", section: "Experience", title: "Experience", prompt: "Which statement best describes your practical experience?", options: ["I build complete projects independently.", "I need guidance but can complete projects.", "I understand concepts but rarely build projects.", "I'm just starting."] },
+  { id: "q12", section: "Learning Style", title: "Learning Style", prompt: "How do you learn fastest?", options: ["Building Projects", "Watching Videos", "Reading Documentation", "Classroom Teaching"] },
+  { id: "q13", section: "Learning Style", title: "Learning Style", prompt: "Which resource do you trust most?", options: ["Official Documentation", "YouTube", "AI Assistants", "Online Courses"] },
+  { id: "q14", section: "Motivation", title: "Motivation", prompt: "What usually stops your learning progress?", options: ["Lack of Time", "Lack of Motivation", "Confusion", "Distractions"] },
+  { id: "q15", section: "Motivation", title: "Motivation", prompt: "What motivates you the most?", options: ["Career Growth", "Money", "Building Products", "Learning New Things"] },
+  { id: "q16", section: "Portfolio & Additional Context", title: "Portfolio & Additional Context", prompt: "Is there anything else you'd like the AI to know before creating your personalized roadmap?", type: "textarea" },
+];
+
+function currentAssessmentValue(question = assessmentQuestions[assessmentStep]) {
+  const answer = assessmentAnswers[question.id] || {};
+  return answer.value === "Other" ? answer.other : answer.value;
+}
+
+function syncAssessmentAnswer(form, question = assessmentQuestions[assessmentStep]) {
+  if (question.type === "textarea") {
+    const textarea = form.querySelector(`[name="${question.id}"]`);
+    assessmentAnswers[question.id] = { value: textarea?.value.trim() || "" };
+    return;
+  }
+  const checked = form.querySelector(`input[name="${question.id}"]:checked`);
+  const other = form.querySelector(`[name="${question.id}_other"]`);
+  assessmentAnswers[question.id] = {
+    value: checked?.value || "",
+    other: other?.value.trim() || "",
+  };
+}
+
+function validateAssessmentStep(form, question = assessmentQuestions[assessmentStep]) {
+  syncAssessmentAnswer(form, question);
+  const answer = assessmentAnswers[question.id] || {};
+  if (!answer.value) {
+    toast("Please answer this question.");
+    return false;
+  }
+  if (answer.value === "Other" && !answer.other) {
+    toast("Please specify your answer.");
+    return false;
+  }
+  return true;
+}
+
+function assessmentFormData() {
+  return assessmentQuestions.reduce((payload, question) => {
+    payload[question.id] = currentAssessmentValue(question);
+    return payload;
+  }, {});
 }
 
 function courseCard(course) {
@@ -1474,6 +1567,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
 const functionalState = {
   dashboard: null,
+  generatedRoadmaps: [],
+  previewRoadmapIndex: 0,
   roadmaps: [],
   courses: [],
   courseDetail: null,
@@ -1897,7 +1992,146 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-form='profile-save']").forEach((form) => form.addEventListener("submit", handleProfileSave));
   document.querySelectorAll("[data-form='settings-save']").forEach((form) => form.addEventListener("submit", handleSettingsSave));
   document.querySelectorAll("[data-form='admin-add']").forEach((form) => form.addEventListener("submit", handleAdminAdd));
+  document.querySelectorAll("[data-form='roadmap-assessment']").forEach((form) => form.addEventListener("submit", handleRoadmapAssessmentSubmit));
+  document.querySelectorAll("[data-action='assessment-next']").forEach((button) => button.addEventListener("click", handleAssessmentNext));
+  document.querySelectorAll("[data-action='assessment-prev']").forEach((button) => button.addEventListener("click", handleAssessmentPrev));
+  document.querySelectorAll("[data-form='roadmap-assessment'] input[type='radio']").forEach((input) => input.addEventListener("change", handleAssessmentOptionChange));
+  document.querySelectorAll("[data-assessment-field], [data-assessment-other]").forEach((input) => input.addEventListener("input", () => syncAssessmentAnswer(document.querySelector("[data-form='roadmap-assessment']"))));
+  document.querySelectorAll("[data-action='preview-roadmap']").forEach((card) => card.addEventListener("click", handleRoadmapPreview));
+  document.querySelectorAll("[data-action='choose-roadmap']").forEach((button) => button.addEventListener("click", handleChooseRoadmap));
   document.querySelectorAll("[data-action='admin-delete']").forEach((button) => button.addEventListener("click", handleAdminDelete));
+}
+
+function assessmentInputPayload(data) {
+  const profile = functionalState.profile || {};
+  const goal = data.q1 || profile.goal || currentUser.goal || "Full Stack Developer";
+  const field = data.q2 || profile.field || profile.branch || "Computer Science";
+  return {
+    careerGoal: goal,
+    currentLevel: String(data.q4 || profile.level || currentUser.level || "beginner").toLowerCase(),
+    targetTimelineWeeks: Number(data.q5) || 12,
+    weeklyAvailabilityHours: Number(data.q6) || 10,
+    learningStyle: data.q12 || "project-based",
+    preferredLanguage: data.q13 || "English",
+    background: {
+      educationLevel: data.q3,
+      fieldOfStudy: field,
+      workExperience: data.q9 || "none",
+      motivation: data.q14 || "",
+      additionalContext: data.q16 || "",
+    },
+    skills: {
+      known: data.q10 ? [data.q10] : profile.skills || [],
+      weak: data.q11 ? [data.q11] : [],
+      target: [goal, field, data.q15].filter(Boolean),
+    },
+    constraints: {
+      budget: data.q8 || "free",
+      deviceAccess: data.q7 || "laptop",
+      internetAccess: "stable",
+    },
+    preferences: {
+      includeProjects: true,
+      includePracticeTasks: true,
+      includeFreeResources: true,
+      includeInterviewPrep: true,
+    },
+  };
+}
+
+function handleAssessmentOptionChange(event) {
+  const form = event.currentTarget.closest("[data-form='roadmap-assessment']");
+  const other = form?.querySelector(`[data-assessment-other="${event.currentTarget.name}"]`);
+  if (other) other.style.display = event.currentTarget.value === "Other" ? "" : "none";
+  syncAssessmentAnswer(form);
+  if (event.currentTarget.value !== "Other" && assessmentStep < 13) {
+    assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
+    app.innerHTML = assessmentQuestionScreen();
+    bindPage();
+  }
+}
+
+function handleAssessmentNext(event) {
+  const form = event.currentTarget.closest("[data-form='roadmap-assessment']");
+  if (!validateAssessmentStep(form)) return;
+  assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
+  app.innerHTML = assessmentQuestionScreen();
+  bindPage();
+}
+
+function handleAssessmentPrev(event) {
+  const form = event.currentTarget.closest("[data-form='roadmap-assessment']");
+  syncAssessmentAnswer(form);
+  assessmentStep = Math.max(0, assessmentStep - 1);
+  app.innerHTML = assessmentQuestionScreen();
+  bindPage();
+}
+
+function handleRoadmapPreview(event) {
+  functionalState.previewRoadmapIndex = Number(event.currentTarget.dataset.roadmapIndex || 0);
+  app.innerHTML = assessmentQuestionScreen();
+  bindPage();
+}
+
+async function handleChooseRoadmap(event) {
+  if (pendingRoadmapSelection) return;
+  const selectedRoadmap = (functionalState.generatedRoadmaps || [])[functionalState.previewRoadmapIndex || 0];
+  if (!selectedRoadmap) {
+    toast("Please preview a roadmap before choosing.");
+    return;
+  }
+
+  pendingRoadmapSelection = true;
+  event.currentTarget.disabled = true;
+  event.currentTarget.textContent = "Saving...";
+
+  const result = await api("/roadmaps/select", {
+    method: "POST",
+    body: JSON.stringify({ roadmap: selectedRoadmap }),
+  });
+
+  pendingRoadmapSelection = false;
+  if (!result?.roadmap) {
+    app.innerHTML = assessmentQuestionScreen();
+    bindPage();
+    return;
+  }
+
+  functionalState.roadmaps = [
+    result.roadmap,
+    ...(functionalState.roadmaps || []).filter((roadmap) => dataId(roadmap) !== dataId(result.roadmap)),
+  ];
+  functionalState.generatedRoadmaps = [];
+  functionalState.previewRoadmapIndex = 0;
+  functionalState.dashboard = null;
+
+  toast(result.message || "Roadmap selected successfully.");
+  setRoute("dashboard");
+}
+
+async function handleRoadmapAssessmentSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!validateAssessmentStep(form)) return;
+  const data = assessmentFormData();
+  pendingRoadmapGeneration = true;
+  form.querySelectorAll("button, input, textarea").forEach((node) => {
+    node.disabled = true;
+  });
+  const result = await api("/roadmaps/generate", {
+    method: "POST",
+    body: JSON.stringify(assessmentInputPayload(data)),
+  });
+  pendingRoadmapGeneration = false;
+  form.querySelectorAll("button, input, textarea").forEach((node) => {
+    node.disabled = false;
+  });
+  if (!result?.roadmaps) return;
+  functionalState.generatedRoadmaps = result.roadmaps;
+  functionalState.previewRoadmapIndex = 0;
+  toast("Roadmap options received.");
+  app.innerHTML = assessmentQuestionScreen();
+  bindPage();
 }
 
 async function handleFunctionalTestSubmit(event) {
