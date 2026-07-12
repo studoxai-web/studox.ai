@@ -1007,6 +1007,190 @@
   ],
   "chats": [
     {
+      "id": "ai-mentor_1783687746022_27ed5d",
+      "user": "user_1783269136869_5cae1a",
+      "topic": "concept",
+      "messages": [
+        {
+          "role": "user",
+          "content": "kya kr rahe",
+          "createdAt": "2026-07-10T12:49:06.022Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Studox.ai Mentor plan for your Full Stack Developer:\n\n1. Start with the simplest definition.\n2. Connect it to one real project example.\n3. Do one guided example, then one independent practice task.\n4. End with a 3-line summary in your own words.\nNext action: ask the exact concept you want explained.",
+          "createdAt": "2026-07-10T12:49:06.022Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:49:06.022Z"
+    },
+    {
+      "id": "ai-mentor_1783687731402_7eb346",
+      "user": "user_1783269136869_5cae1a",
+      "topic": "casual",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi",
+          "createdAt": "2026-07-10T12:48:51.402Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Gaurav! Main yahin hoon. Tum mujhse normal baat bhi kar sakte ho, aur study/career help bhi le sakte ho.\n\nAaj kya karna hai?\n1. Koi concept simple language mein samjhau\n2. DSA problem solve karwaun\n3. Resume ya internship plan banaun\n4. Bas study mood set karne mein help karun",
+          "createdAt": "2026-07-10T12:48:51.402Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:48:51.402Z"
+    },
+    {
+      "id": "ai-mentor_1783687637036_e55085",
+      "user": "user_demo",
+      "topic": "casual",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello",
+          "createdAt": "2026-07-10T12:47:17.036Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Aarav! Main yahin hoon. Tum mujhse normal baat bhi kar sakte ho, aur study/career help bhi le sakte ho.\n\nAaj kya karna hai?\n1. Koi concept simple language mein samjhau\n2. DSA problem solve karwaun\n3. Resume ya internship plan banaun\n4. Bas study mood set karne mein help karun",
+          "createdAt": "2026-07-10T12:47:17.036Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:47:17.036Z"
+    },
+    {
+      "id": "ai-mentor_1783687633233_827db2",
+      "user": "user_demo",
+      "topic": "casual",
+      "messages": [
+        {
+          "role": "user",
+          "content": "kaise ho",
+          "createdAt": "2026-07-10T12:47:13.233Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Hey Aarav! Main yahin hoon. Tum mujhse normal baat bhi kar sakte ho, aur study/career help bhi le sakte ho.\n\nAaj kya karna hai?\n1. Koi concept simple language mein samjhau\n2. DSA problem solve karwaun\n3. Resume ya internship plan banaun\n4. Bas study mood set karne mein help karun",
+          "createdAt": "2026-07-10T12:47:13.233Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:47:13.233Z"
+    },
+    {
+      "id": "ai-mentor_1783687616792_e6150b",
+      "user": "user_demo",
+      "topic": "dsa",
+      "messages": [
+        {
+          "role": "user",
+          "content": "sliding window dsa kaise sikhu",
+          "createdAt": "2026-07-10T12:46:56.792Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Studox.ai Mentor plan for your Full Stack Developer:\n\n1. Identify the pattern first: two pointers, sliding window, stack, BFS/DFS or DP.\n2. Write brute force in plain English.\n3. Optimize one bottleneck only.\n4. Dry-run with 2 examples before coding.\nNext action: send the problem statement and your stuck point.",
+          "createdAt": "2026-07-10T12:46:56.792Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:46:56.792Z"
+    },
+    {
+      "id": "ai-mentor_1783687302562_889a1f",
+      "user": "user_1783269136869_5cae1a",
+      "topic": "concept",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello",
+          "createdAt": "2026-07-10T12:41:42.562Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Studox.ai Mentor plan for your Full Stack Developer:\n\n1. Start with the simplest definition.\n2. Connect it to one real project example.\n3. Do one guided example, then one independent practice task.\n4. End with a 3-line summary in your own words.\nNext action: ask the exact concept you want explained.",
+          "createdAt": "2026-07-10T12:41:42.562Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:41:42.562Z"
+    },
+    {
+      "id": "ai-mentor_1783687161319_4a877f",
+      "user": "user_1783269136869_5cae1a",
+      "topic": "concept",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hello",
+          "createdAt": "2026-07-10T12:39:21.319Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Studox.ai Mentor plan for your Full Stack Developer:\n\n1. Start with the simplest definition.\n2. Connect it to one real project example.\n3. Do one guided example, then one independent practice task.\n4. End with a 3-line summary in your own words.\nNext action: ask the exact concept you want explained.",
+          "createdAt": "2026-07-10T12:39:21.319Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:39:21.319Z"
+    },
+    {
+      "id": "ai-mentor_1783686910772_1fafe1",
+      "user": "user_demo",
+      "topic": "dsa",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Give me a DSA roadmap for sliding window and interview prep",
+          "createdAt": "2026-07-10T12:35:10.772Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Studox.ai Mentor plan for your Full Stack Developer:\n\n1. Identify the pattern first: two pointers, sliding window, stack, BFS/DFS or DP.\n2. Write brute force in plain English.\n3. Optimize one bottleneck only.\n4. Dry-run with 2 examples before coding.\nNext action: send the problem statement and your stuck point.",
+          "createdAt": "2026-07-10T12:35:10.772Z"
+        }
+      ],
+      "metadata": {
+        "provider": "local",
+        "model": "studox-local-mentor",
+        "fallback": true
+      },
+      "createdAt": "2026-07-10T12:35:10.787Z"
+    },
+    {
       "id": "ai-mentor_1783358562041_dd0630",
       "user": "user_1783334719402_30b35b",
       "topic": "general",

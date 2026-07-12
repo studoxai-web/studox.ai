@@ -15,7 +15,7 @@ const User = model(
       phone: { type: String, trim: true },
       password: { type: String, required: true },
       role: { type: String, enum: ["student", "admin"], default: "student" },
-      activeRoadmapId: { type: Schema.Types.ObjectId, ref: "Roadmap" },
+      plan: { type: String, enum: ["free", "pro", "elite"], default: "free" },
       resetOtp: String,
       resetOtpExpires: Date,
       lastLoginAt: Date,

@@ -5,6 +5,7 @@ const apiBase = window.location.port === "4100" ? "http://localhost:4500/api" : 
 let publicConfigPromise = null;
 let googleScriptPromise = null;
 const themeKey = "studox-theme";
+const mentorFreeChatLimit = 10;
 
 function getStoredTheme() {
   return localStorage.getItem(themeKey) || "light";
@@ -39,6 +40,7 @@ const defaultUser = {
   avatar: "AS",
   goal: "Full Stack Developer",
   level: "Intermediate",
+  plan: "free",
   xp: 12840,
 };
 
@@ -63,6 +65,7 @@ function clearDemoSession() {
   localStorage.removeItem("demoSession");
   localStorage.removeItem("studox-token");
   localStorage.removeItem("studox-user");
+  localStorage.removeItem("studox-plan");
   localStorage.removeItem("studox-return-route");
   currentUser = defaultUser;
 }
@@ -630,7 +633,7 @@ function appLayout(content, route) {
         <div class="side-footer">
           <strong>Pro learning plan</strong>
           <p>AI roadmap, mentor support, weekly reports and career readiness tracking.</p>
-          <button class="btn primary" data-toast="Premium upgrade flow placeholder is ready.">Upgrade</button>
+          <a class="btn primary" href="#pricing" data-action="open-upgrade">Upgrade</a>
         </div>
       </aside>
       <main class="main">
@@ -973,26 +976,49 @@ function certificatesPage() {
 }
 
 function mentorPage() {
+  const chats = functionalState.chats || [];
+  const plan = getCurrentPlan();
+  const premium = isPremiumPlan(plan);
+  const used = chats.length || 0;
+  const chatsLeft = premium ? "Unlimited" : Math.max(0, mentorFreeChatLimit - used);
+  const mentorLocked = !premium && used >= mentorFreeChatLimit;
+  const chatMessages = chats
+    .slice()
+    .reverse()
+    .flatMap((chat) => chat.messages || [])
+    .slice(-8);
+  const latestMeta = chats[0]?.metadata || {};
+  const sourceLabel = latestMeta.provider
+    ? `${latestMeta.provider}${latestMeta.fallback ? " fallback" : ""}`
+    : "Ready";
   return appLayout(`<div class="page-head">
       <div><h1>AI Mentor Dashboard</h1><p>Ask doubts, get career guidance, review code, improve resumes and plan interviews.</p></div>
-      <span class="chip purple">AI placeholder ready</span>
+      <span class="chip purple">AI ${sourceLabel}</span>
     </div>
     ${statCards([
-      ["Total Conversations", 148, "", "bot", "Active"],
-      ["Doubts Solved", 392, "", "test", "Fast"],
+      ["Total Conversations", chats.length || 0, "", "bot", "Saved"],
+      ["Doubts Solved", chats.length ? chats.length * 2 : 0, "", "test", "Live"],
       ["Topics Explored", 54, "", "book", "Broad"],
       ["Time Saved", 86, "h", "chart", "Estimated"],
-      ["AI Mentor Score", 94, "", "star", "Excellent"],
+      ["Chats Left", premium ? 999 : chatsLeft, premium ? "" : "", "star", premium ? "Unlimited" : `${chatsLeft}/${mentorFreeChatLimit}`],
     ])}
     <div class="mentor-layout">
       <div class="panel">
         <div class="panel-head"><h2>Chat with Studox.ai Mentor</h2><div class="filters">${["Explain Concept", "Career Guidance", "Code Help", "Resume Review", "Interview Prep"].map((prompt, i) => `<button data-prompt="${prompt}" class="${i === 0 ? "active" : ""}">${prompt}</button>`).join("")}</div></div>
-        <div class="chat-window" id="chatWindow">
-          <div class="message ai">Hi ${currentUser.name.split(" ")[0]}, I reviewed your roadmap. Ask me anything about React, DSA, careers, resume or internships.</div>
-          <div class="message user">Explain useEffect cleanup with a simple example.</div>
-          <div class="message ai">Cleanup runs before the effect reruns and when the component unmounts. Use it to remove listeners, cancel timers and stop subscriptions.<br /><button class="btn" style="margin-top:10px">Show Code</button></div>
+        <div class="mentor-limit-strip ${mentorLocked ? "locked" : ""}">
+          <span>${icon(mentorLocked ? "lock" : "bot")}</span>
+          <div><strong>${mentorLocked ? "Free mentor limit reached" : premium ? "Premium mentor access active" : `${chatsLeft} free mentor chats left`}</strong><p>${mentorLocked ? "Upgrade to Pro or Elite to continue unlimited AI Mentor conversations." : premium ? "Your plan includes unlimited AI Mentor access." : "Free plan includes 10 AI Mentor conversations."}</p></div>
+          ${mentorLocked ? `<a class="btn primary" href="#pricing" data-action="open-upgrade">Upgrade Plan</a>` : ""}
         </div>
-        <form class="chat-input" data-form="chat"><input class="search-input" name="message" placeholder="Ask Studox.ai mentor..." /><button class="btn primary">Send</button></form>
+        <div class="chat-window" id="chatWindow">
+          ${chatMessages.length
+            ? chatMessages.map((item) => `<div class="message ${item.role === "assistant" ? "ai" : "user"}">${formatMentorMessage(item.content)}</div>`).join("")
+            : `<div class="message ai">Hi ${currentUser.name.split(" ")[0]}, I am connected to your Studox.ai mentor engine. Ask me about React, DSA, resumes, internships, projects, roadmap planning or interview prep.</div>`}
+        </div>
+        <form class="chat-input ${mentorLocked ? "locked" : ""}" data-form="chat">
+          <input class="search-input" name="message" placeholder="${mentorLocked ? "Upgrade to continue chatting..." : "Ask Studox.ai mentor..."}" ${mentorLocked ? "disabled" : ""} />
+          <button class="btn primary" ${mentorLocked ? "disabled" : ""}>Send</button>
+        </form>
       </div>
       <aside class="panel">
         <h2>Suggested for you</h2>
@@ -1004,6 +1030,70 @@ function mentorPage() {
         <div class="skills-row">${["React Guide", "DSA Sheet", "Resume Kit", "Interview Bank"].map((resource) => `<span class="chip">${resource}</span>`).join("")}</div>
       </aside>
     </div>`, "mentor");
+}
+
+function getCurrentPlan() {
+  return String(currentUser.plan || localStorage.getItem("studox-plan") || "free").toLowerCase();
+}
+
+function isPremiumPlan(plan) {
+  return ["pro", "elite"].includes(String(plan || "").toLowerCase());
+}
+
+function pricingPage() {
+  const plan = getCurrentPlan();
+  const isPro = plan === "pro";
+  const isElite = plan === "elite";
+  const benefitCards = [
+    ["Smarter AI Guidance", "Get personalized answers, explanations and study plans tailored just for you.", "bot"],
+    ["Job & Internship Support", "Access curated opportunities, resume reviews and internship suggestions.", "briefcase"],
+    ["Advanced Test Analytics", "Detailed performance insights to help you improve faster and smarter.", "chart"],
+    ["Premium Content", "Premium courses, learning paths and resources for serious students.", "book"],
+  ];
+  return `<main class="pricing-page view">
+    <nav class="pricing-nav">
+      ${brand()}
+      <div class="pricing-links"><a href="#dashboard">Dashboard</a><a href="#courses">Courses</a><a href="#mentor">AI Mentor</a><a class="active" href="#pricing">Pricing</a></div>
+      <div class="pricing-user"><span class="avatar">${currentUser.avatar}</span><strong>${currentUser.name.split(" ")[0]}</strong></div>
+    </nav>
+    <section class="pricing-hero">
+      <div class="pricing-visual">
+        <div class="pricing-cap"></div>
+        <div class="pricing-chart"><span></span><span></span><span></span></div>
+      </div>
+      <div>
+        <h1>Upgrade Your <span>Learning Journey</span></h1>
+        <p>Unlock premium features, smarter AI guidance and powerful career tools designed for your success.</p>
+        <div class="billing-toggle"><span>Monthly</span><button class="active" type="button"><i></i></button><span>Yearly</span><strong>Save 17%</strong></div>
+      </div>
+    </section>
+    <section class="pricing-grid">
+      <article class="plan-card ${plan === "free" ? "current" : ""}">
+        <div class="plan-icon soft">${icon("trophy")}</div>
+        <h2>Free</h2>
+        <div class="plan-price">Rs. 0<span>/month</span></div>
+        <ul><li>Basic roadmap access</li><li>10 AI mentor prompts</li><li>Free skill assessment</li><li>Community access</li></ul>
+        <button class="btn ${plan === "free" ? "" : "ghost"}" disabled>${plan === "free" ? "Current Plan" : "Included"}</button>
+      </article>
+      <article class="plan-card featured ${isPro ? "current" : ""}">
+        <div class="popular-badge">${icon("star")} Most Popular</div>
+        <div class="plan-icon pro">${icon("star")}</div>
+        <h2>Pro</h2>
+        <div class="plan-price">Rs. 299<span>/month</span></div>
+        <ul><li>Unlimited AI mentor access</li><li>All premium courses</li><li>Weekly tests and analytics</li><li>Resume review</li><li>Internship suggestions</li></ul>
+        <button class="btn primary glow" data-action="upgrade-plan" data-plan="pro">${isPro ? "Current Plan" : "Upgrade Now"}</button>
+      </article>
+      <article class="plan-card ${isElite ? "current" : ""}">
+        <div class="plan-icon elite">${icon("trophy")}</div>
+        <h2>Elite</h2>
+        <div class="plan-price">Rs. 599<span>/month</span></div>
+        <ul><li>Everything in Pro</li><li>1:1 career guidance</li><li>Advanced DSA practice</li><li>Hackathon updates</li><li>Priority support</li><li>Exclusive learning paths</li></ul>
+        <button class="btn ${isElite ? "" : "primary"}" data-action="upgrade-plan" data-plan="elite">${isElite ? "Current Plan" : "Go Elite"}</button>
+      </article>
+    </section>
+    <section class="why-upgrade"><h2>Why Upgrade?</h2><div>${benefitCards.map(([title, body, iconName]) => `<article>${icon(iconName)}<div><h3>${title}</h3><p>${body}</p></div></article>`).join("")}</div></section>
+    <section class="trust-row"><div>${icon("lock")}<span><strong>Cancel anytime</strong><small>No hidden fees. Cancel anytime with one click.</small></span></div><div>${icon("lock")}<span><strong>Secure payments</strong><small>Your payments are encrypted and 100% secure.</small></span></div><div>${icon("user")}<span><strong>Trusted by students</strong><small>Join students building their future with Studox.ai.</small></span></div></section>
+  </main>`;
 }
 
 function profilePage() {
@@ -1117,6 +1207,7 @@ const routeMap = {
   hackathons: hackathonsPage,
   certificates: certificatesPage,
   mentor: mentorPage,
+  pricing: pricingPage,
   profile: profilePage,
   settings: settingsPage,
   admin: adminPage,
@@ -1257,25 +1348,83 @@ async function handleSignup(event) {
 
 async function handleChat(event) {
   event.preventDefault();
-  const input = event.currentTarget.message;
+  const form = event.currentTarget;
+  const input = form.message;
+  const button = form.querySelector("button");
   const text = input.value.trim();
   if (!text) return;
+  if (!isPremiumPlan(getCurrentPlan()) && (functionalState.chats || []).length >= mentorFreeChatLimit) {
+    showMentorLimitModal({ used: mentorFreeChatLimit, limit: mentorFreeChatLimit });
+    return;
+  }
   const windowNode = document.getElementById("chatWindow");
   windowNode.insertAdjacentHTML("beforeend", `<div class="message user">${escapeHtml(text)}</div><div class="message ai" id="typingBubble"><span class="typing"><span></span><span></span><span></span></span></div>`);
   input.value = "";
+  if (button) button.disabled = true;
   windowNode.scrollTop = windowNode.scrollHeight;
-  const result = await api("/ai-mentor/chat", {
-    method: "POST",
-    body: JSON.stringify({ message: text }),
-  });
-  window.setTimeout(() => {
-    document.getElementById("typingBubble")?.remove();
-    windowNode.insertAdjacentHTML(
-      "beforeend",
-      `<div class="message ai">${result?.reply || "Here is a clear Studox.ai mentor plan: revise the concept, solve two targeted examples, then add one reflection note to your roadmap."}<br /><button class="btn" style="margin-top:10px">Show Code</button></div>`,
-    );
+  const result = await mentorChatRequest(text);
+  document.getElementById("typingBubble")?.remove();
+  if (button) button.disabled = false;
+  if (!result?.ok) {
+    if (result?.code === "MENTOR_LIMIT_REACHED") {
+      windowNode.insertAdjacentHTML("beforeend", `<div class="message ai error">Free AI Mentor limit reached. Upgrade to continue unlimited mentor chats.</div>`);
+      showMentorLimitModal(result);
+    } else {
+      windowNode.insertAdjacentHTML("beforeend", `<div class="message ai error">${escapeHtml(result?.message || "AI mentor could not respond. Please check backend/API key and try again.")}</div>`);
+    }
     windowNode.scrollTop = windowNode.scrollHeight;
-  }, 850);
+    return;
+  }
+  windowNode.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message ai">${formatMentorMessage(result.reply)}</div>`,
+  );
+  windowNode.scrollTop = windowNode.scrollHeight;
+  if (!isPremiumPlan(result.usage?.plan) && result.usage?.remaining === 0) {
+    showMentorLimitModal({ used: result.usage.used, limit: result.usage.limit });
+  }
+}
+
+async function mentorChatRequest(message) {
+  try {
+    const res = await fetch(`${apiBase}/ai-mentor/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: localStorage.getItem("studox-token") ? `Bearer ${localStorage.getItem("studox-token")}` : "",
+      },
+      body: JSON.stringify({ message }),
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    return res.ok ? { ok: true, ...data } : { ok: false, status: res.status, ...data };
+  } catch (_error) {
+    return { ok: false, message: "Server connection failed. Please check backend is running." };
+  }
+}
+
+function showMentorLimitModal(data = {}) {
+  document.querySelector(".upgrade-modal-backdrop")?.remove();
+  const used = data.used ?? mentorFreeChatLimit;
+  const limit = data.limit ?? mentorFreeChatLimit;
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<div class="upgrade-modal-backdrop">
+      <section class="upgrade-modal">
+        <button class="modal-close" data-modal-close aria-label="Close">x</button>
+        <div class="modal-orbit"><span>${icon("lock")}</span><i></i><i></i></div>
+        <span class="ai-pill">AI MENTOR LIMIT</span>
+        <h2>Your free mentor chats are finished</h2>
+        <p>You used ${used}/${limit} free AI Mentor conversations. Upgrade to Pro for unlimited mentor access, premium courses, resume review and career tools.</p>
+        <div class="modal-meter"><span style="width:${Math.min(100, (used / limit) * 100)}%"></span></div>
+        <div class="modal-actions"><button class="btn" data-modal-close>Not now</button><a class="btn primary glow" href="#pricing" data-modal-upgrade>Upgrade Plan</a></div>
+      </section>
+    </div>`,
+  );
+  document.querySelectorAll("[data-modal-close]").forEach((node) => node.addEventListener("click", () => document.querySelector(".upgrade-modal-backdrop")?.remove()));
+  document.querySelector("[data-modal-upgrade]")?.addEventListener("click", () => {
+    document.querySelector(".upgrade-modal-backdrop")?.remove();
+  });
 }
 
 function animateCounters() {
@@ -1295,6 +1444,17 @@ function animateCounters() {
 
 function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+}
+
+function formatMentorMessage(text = "") {
+  return escapeHtml(String(text))
+    .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.*)$/gm, "<h2>$1</h2>")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^\s*---+\s*$/gm, "<hr />")
+    .replace(/\n/g, "<br />");
 }
 
 window.addEventListener("hashchange", render);
@@ -1328,6 +1488,7 @@ const functionalState = {
   internships: [],
   hackathons: [],
   certificates: [],
+  chats: [],
   profile: null,
   settings: null,
   adminSummary: null,
@@ -1408,6 +1569,9 @@ async function loadFunctionalData(route) {
     },
     certificates: async () => {
       functionalState.certificates = await api("/certificates") || [];
+    },
+    mentor: async () => {
+      functionalState.chats = await api("/ai-mentor/chat") || [];
     },
     profile: async () => {
       functionalState.profile = await api("/profile");
@@ -1490,13 +1654,15 @@ routeMap.roadmap = function functionalRoadmapPage() {
     desc: item.description || "Roadmap module",
     skills: item.skills || [],
   }));
+  const completedModules = liveModules.filter((item) => item.status === "completed").length;
+  const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
   return appLayout(`<div class="page-head"><div><h1>My Learning Roadmap</h1><p>${roadmap.title || "Personalized roadmap"} - Continue course progress to unlock roadmap movement.</p></div><div class="toggle-group"><button class="active">Timeline View</button><button>Tree View</button></div></div>
     ${statCards([
-      ["Current Level", roadmap.currentLevel === "Intermediate" ? 12 : 1, "", "star", roadmap.currentLevel || "Beginner"],
+      ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
       ["Time to Goal", roadmap.timeToGoalWeeks || 0, "w", "map", "Estimated"],
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
-      ["Next Milestone", roadmap.overallProgress || 0, "%", "trophy", roadmap.nextMilestone || "Start"],
+      ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
     <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div></div></article>`).join("") || emptyState("No roadmap yet", "Signup ke goal se roadmap create hota hai.")}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
 };
@@ -1976,9 +2142,9 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const activity = data.recentActivity || [];
   const progressValue = Math.max(0, Math.min(100, Number(data.overallProgress || 0)));
   const firstName = currentUser.name.split(" ")[0] || "Student";
-  const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2) + 8));
-  const readinessScore = Math.min(100, Math.round(38 + progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
-  const weeklyMomentum = Math.min(100, Math.round(34 + (data.testsCompleted || 0) * 5 + (data.dsa?.problemsSolved || 0) / 8));
+  const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2)));
+  const readinessScore = Math.min(100, Math.round(progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
+  const weeklyMomentum = Math.min(100, Math.round((data.testsCompleted || 0) * 5 + (data.dsa?.problemsSolved || 0) / 8));
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
@@ -2156,8 +2322,8 @@ signupForm = function configuredSignupForm() {
       <div class="field"><label>Phone</label><input name="phone" autocomplete="tel" placeholder="+91 98765 43210" required /></div>
     </div>
     <div class="two-column">
-      <div class="field"><label>Goal</label><select name="goal"><option>Full Stack Developer</option><option>Data Scientist</option><option>Product Engineer</option><option>Cybersecurity Analyst</option></select></div>
-      <div class="field"><label>Field</label><select name="field"><option>Computer Science</option><option>Information Technology</option><option>Electronics</option><option>Business Analytics</option></select></div>
+      <div class="field"><label>Goal</label><input name="goal" list="goalOptions" placeholder="Example: Full Stack Developer" required /><datalist id="goalOptions"><option value="Full Stack Developer"></option><option value="Frontend Developer"></option><option value="Backend Developer"></option><option value="Data Scientist"></option><option value="AI Engineer"></option><option value="Product Engineer"></option><option value="Cybersecurity Analyst"></option></datalist></div>
+      <div class="field"><label>Field</label><input name="field" list="fieldOptions" placeholder="Example: Computer Science" required /><datalist id="fieldOptions"><option value="Computer Science"></option><option value="Information Technology"></option><option value="Electronics"></option><option value="Business Analytics"></option><option value="Design"></option><option value="Commerce"></option></datalist></div>
     </div>
     <div class="two-column">
       <div class="field password-field"><label>Password</label><input name="password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
@@ -2281,6 +2447,7 @@ function saveAuthSession(result, goal) {
     name: user.name || currentUser.name,
     email: user.email || currentUser.email,
     goal: goal || currentUser.goal,
+    plan: user.plan || currentUser.plan || "free",
     avatar: (user.name || currentUser.name)
       .split(" ")
       .map((word) => word[0])
@@ -2288,7 +2455,28 @@ function saveAuthSession(result, goal) {
       .slice(0, 2)
       .toUpperCase(),
   };
+  localStorage.setItem("studox-plan", currentUser.plan || "free");
   localStorage.setItem("studox-user", JSON.stringify(currentUser));
+}
+
+async function handlePlanUpgrade(event) {
+  event.preventDefault();
+  const plan = event.currentTarget.dataset.plan;
+  if (!plan) return;
+  if (getCurrentPlan() === plan) {
+    toast(`${plan === "elite" ? "Elite" : "Pro"} is already active.`);
+    return;
+  }
+  const result = await api("/billing/upgrade", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
+  if (!result?.plan) return;
+  currentUser = { ...currentUser, ...(result.user || {}), plan: result.plan };
+  localStorage.setItem("studox-plan", result.plan);
+  localStorage.setItem("studox-user", JSON.stringify(currentUser));
+  toast(result.message || "Plan upgraded.");
+  await render();
 }
 
 function showAuthFeedback(node, message, isError) {
@@ -2328,6 +2516,13 @@ bindPage = function configuredBindPage() {
   });
   document.querySelectorAll("[data-form='otp-request']").forEach((form) => form.addEventListener("submit", handleOtpRequest));
   document.querySelectorAll("[data-form='password-reset']").forEach((form) => form.addEventListener("submit", handlePasswordReset));
+  document.querySelectorAll("[data-action='upgrade-plan']").forEach((button) => button.addEventListener("click", handlePlanUpgrade));
+  document.querySelectorAll("[data-action='open-upgrade']").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setRoute("pricing");
+    });
+  });
 };
 
 async function handleOtpRequest(event) {

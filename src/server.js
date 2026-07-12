@@ -40,6 +40,7 @@ const port = process.env.PORT || 4000;
 const jwtSecret = process.env.JWT_SECRET || "studox_local_secret";
 const storePath = path.join(__dirname, "data", "runtime-store.json");
 const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
+const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
 const memory = loadMemoryStore();
 ensureDemoAccount();
 
@@ -157,6 +158,417 @@ function currentUserId(req) {
 
 function byUser(list, userId) {
   return (list || []).filter((item) => String(item.user || item.userId || "user_demo") === String(userId));
+}
+
+function isPremiumPlan(plan) {
+  return ["pro", "elite"].includes(String(plan || "").toLowerCase());
+}
+
+async function getUserPlan(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const user = await User.findById(userId).select("plan").lean();
+    return user?.plan || "free";
+  }
+  const user = memory.users.find((item) => String(item.id || item._id) === String(userId));
+  return user?.plan || "free";
+}
+
+async function countMentorChats(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    return AIMentorChat.countDocuments({ user: userId });
+  }
+  return byUser(memory.chats || [], userId).length;
+}
+
+function normalizeGoal(goal = "") {
+  const clean = String(goal || "").trim();
+  return clean || "Career";
+}
+
+function roadmapTemplate(goal = "", field = "") {
+  const normalized = `${goal} ${field}`.toLowerCase();
+  if (normalized.includes("data") || normalized.includes("machine") || normalized.includes("ml") || normalized.includes("ai")) {
+    return {
+      title: "Data Science & AI Roadmap",
+      timeToGoalWeeks: 24,
+      modules: [
+        ["Python Foundations", "Learn Python syntax, functions, files, Git and notebooks.", ["Python", "Git", "Jupyter"]],
+        ["Math & Statistics", "Build probability, statistics, linear algebra and experiment basics.", ["Statistics", "Probability", "Linear Algebra"]],
+        ["Data Analysis", "Use NumPy, Pandas, SQL and visualization for real datasets.", ["NumPy", "Pandas", "SQL", "Visualization"]],
+        ["Machine Learning", "Train, evaluate and tune supervised and unsupervised models.", ["Scikit-learn", "Model Evaluation", "Feature Engineering"]],
+        ["AI Projects", "Build portfolio projects with datasets, notebooks, APIs and dashboards.", ["Projects", "APIs", "Dashboards"]],
+        ["Career Readiness", "Prepare resume, case studies, interview stories and applications.", ["Resume", "Interview", "Portfolio"]],
+      ],
+    };
+  }
+  if (normalized.includes("cyber") || normalized.includes("security")) {
+    return {
+      title: "Cybersecurity Analyst Roadmap",
+      timeToGoalWeeks: 22,
+      modules: [
+        ["Networking Foundations", "Understand TCP/IP, DNS, HTTP, Linux and command-line basics.", ["Networking", "Linux", "HTTP"]],
+        ["Security Basics", "Learn CIA triad, threats, controls, IAM and common vulnerabilities.", ["Security Fundamentals", "IAM", "OWASP"]],
+        ["Tools & Labs", "Practice Wireshark, Nmap, Burp Suite and basic log analysis.", ["Wireshark", "Nmap", "Burp Suite"]],
+        ["Defensive Security", "Work on SIEM basics, incident response and vulnerability management.", ["SIEM", "Incident Response", "Vulnerability Management"]],
+        ["Projects & Reports", "Create lab reports, threat writeups and security portfolio proof.", ["Reports", "Labs", "Documentation"]],
+        ["Interview Readiness", "Prepare security scenarios, resume keywords and analyst interviews.", ["Resume", "Interview", "Scenarios"]],
+      ],
+    };
+  }
+  if (normalized.includes("product")) {
+    return {
+      title: "Product Engineer Roadmap",
+      timeToGoalWeeks: 18,
+      modules: [
+        ["Programming Foundations", "Strengthen JavaScript, Git, APIs and debugging basics.", ["JavaScript", "Git", "Debugging"]],
+        ["Frontend Product UI", "Build responsive, accessible and analytics-ready product screens.", ["React", "UX", "Accessibility"]],
+        ["Backend & Data", "Create APIs, auth flows, database models and product events.", ["Node.js", "APIs", "Databases"]],
+        ["Product Thinking", "Learn user problems, metrics, funnels, experiments and iteration.", ["Product Metrics", "User Research", "Experiments"]],
+        ["Shipping Projects", "Deploy real product features with README, demos and metrics.", ["Deployment", "Projects", "Analytics"]],
+        ["Career Readiness", "Prepare portfolio, resume and product engineering interviews.", ["Portfolio", "Resume", "Interview"]],
+      ],
+    };
+  }
+  if (normalized.includes("backend")) {
+    return {
+      title: "Backend Developer Roadmap",
+      timeToGoalWeeks: 18,
+      modules: [
+        ["Programming Foundations", "Strengthen JavaScript, Git, terminal and problem solving.", ["JavaScript", "Git", "CLI"]],
+        ["Node.js & Express", "Build REST APIs, middleware, validation and error handling.", ["Node.js", "Express", "REST"]],
+        ["Databases", "Model data with MongoDB/SQL, indexes, relations and migrations.", ["MongoDB", "SQL", "Data Modeling"]],
+        ["Authentication & Security", "Implement JWT, password hashing, permissions and rate limits.", ["JWT", "Auth", "Security"]],
+        ["Testing & Deployment", "Add API tests, logs, monitoring and deploy production services.", ["Testing", "Deployment", "Monitoring"]],
+        ["Backend Interviews", "Practice DSA, system design basics and API design questions.", ["DSA", "System Design", "Interview"]],
+      ],
+    };
+  }
+  if (normalized.includes("frontend") || normalized.includes("react")) {
+    return {
+      title: "Frontend Developer Roadmap",
+      timeToGoalWeeks: 16,
+      modules: [
+        ["Web Foundations", "Master HTML, CSS, JavaScript, Git and browser fundamentals.", ["HTML", "CSS", "JavaScript", "Git"]],
+        ["Responsive UI", "Build accessible layouts, forms, animations and design systems.", ["Responsive Design", "Accessibility", "CSS"]],
+        ["React Core", "Learn components, props, state, effects, routing and forms.", ["React", "Routing", "Forms"]],
+        ["API Integration", "Connect APIs, handle loading/errors and manage app state.", ["APIs", "State Management", "Error Handling"]],
+        ["Projects & Deployment", "Ship real projects with clean README, demos and hosting.", ["Projects", "Deployment", "Portfolio"]],
+        ["Interview Readiness", "Practice JS, React, UI tasks and portfolio walkthroughs.", ["JavaScript", "Interview", "Portfolio"]],
+      ],
+    };
+  }
+  return {
+    title: "Full Stack Developer Roadmap",
+    timeToGoalWeeks: 20,
+    modules: [
+      ["Web Foundations", "Master HTML, CSS, JavaScript, Git and browser fundamentals.", ["HTML", "CSS", "JavaScript", "Git"]],
+      ["Frontend Development", "Build React apps with routing, forms, API calls and polished UI.", ["React", "Routing", "UI Systems"]],
+      ["Backend Development", "Create Node.js and Express APIs with validation and error handling.", ["Node.js", "Express", "REST APIs"]],
+      ["Databases", "Design MongoDB schemas, relations, indexes and useful queries.", ["MongoDB", "Mongoose", "Data Modeling"]],
+      ["Authentication & Security", "Add JWT login, password hashing, roles and protected routes.", ["JWT", "Auth", "Security"]],
+      ["Projects & Deployment", "Build, deploy and document portfolio-ready full stack projects.", ["Projects", "Deployment", "Portfolio"]],
+      ["Career Readiness", "Prepare resume, GitHub, interview stories and internship applications.", ["Resume", "Interview", "Internships"]],
+    ],
+  };
+}
+
+function buildPersonalRoadmap(goal, field, userId) {
+  const cleanGoal = normalizeGoal(goal);
+  const template = roadmapTemplate(cleanGoal, field);
+  return {
+    id: memoryId("roadmap"),
+    user: userId,
+    title: `${cleanGoal} Roadmap`,
+    currentLevel: "Beginner",
+    overallProgress: 0,
+    timeToGoalWeeks: template.timeToGoalWeeks,
+    skillsLearned: 0,
+    nextMilestone: template.modules[0]?.[0] || "Start foundations",
+    modules: template.modules.map(([title, description, skills], index) => ({
+      title,
+      status: index === 0 ? "in-progress" : "upcoming",
+      progress: 0,
+      description,
+      skills,
+    })),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function roadmapSummary(roadmap = {}) {
+  const modules = roadmap.modules || [];
+  const completedModules = modules.filter((module) => module.status === "completed" || Number(module.progress || 0) >= 100);
+  const activeModule = modules.find((module) => module.status === "in-progress") || modules.find((module) => Number(module.progress || 0) < 100);
+  const learnedSkills = new Set(completedModules.flatMap((module) => module.skills || []));
+  const progress = modules.length ? Math.round(average(modules.map((module) => Number(module.progress || 0)))) : 0;
+  return {
+    overallProgress: progress,
+    skillsLearned: learnedSkills.size,
+    nextMilestone: activeModule?.title || "Roadmap completed",
+  };
+}
+
+function advanceRoadmapState(roadmap, amount = 8) {
+  if (!roadmap) return roadmap;
+  const modules = roadmap.modules || [];
+  let activeIndex = modules.findIndex((module) => module.status === "in-progress");
+  if (activeIndex === -1) activeIndex = modules.findIndex((module) => Number(module.progress || 0) < 100);
+  if (activeIndex === -1) return roadmap;
+  const activeModule = modules[activeIndex];
+  activeModule.status = "in-progress";
+  activeModule.progress = Math.min(100, Number(activeModule.progress || 0) + amount);
+  if (activeModule.progress >= 100) {
+    activeModule.status = "completed";
+    const nextModule = modules[activeIndex + 1];
+    if (nextModule && nextModule.status !== "completed") nextModule.status = "in-progress";
+  }
+  const summary = roadmapSummary(roadmap);
+  roadmap.overallProgress = summary.overallProgress;
+  roadmap.skillsLearned = summary.skillsLearned;
+  roadmap.nextMilestone = summary.nextMilestone;
+  roadmap.updatedAt = new Date().toISOString();
+  return roadmap;
+}
+
+function compactMentorText(message = "") {
+  return String(message).toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function detectMentorTopic(message = "") {
+  const text = compactMentorText(message);
+  if (/^(hi|hii+|hello|hey|yo|sup|namaste|namaskar|good morning|good afternoon|good evening|hello bhai|hi bhai)$/.test(text)) return "casual";
+  if (/^(kaise ho|kese ho|how are you|how r u|whats up|what's up|kya haal|kya haal hai|aur batao)$/.test(text)) return "casual";
+  if (/^(thanks|thank you|thx|shukriya|dhanyawad|ok thanks|okay thanks)$/.test(text)) return "thanks";
+  if (text.includes("motivate") || text.includes("motivation") || text.includes("mood") || text.includes("demotivate") || text.includes("tension")) return "motivation";
+  if (text.includes("resume") || text.includes("ats")) return "resume";
+  if (text.includes("career") || text.includes("internship") || text.includes("job")) return "career";
+  if (text.includes("code") || text.includes("bug") || text.includes("error")) return "code";
+  if (text.includes("dsa") || text.includes("leetcode") || text.includes("array") || text.includes("tree")) return "dsa";
+  if (text.includes("roadmap") || text.includes("course") || text.includes("learn")) return "roadmap";
+  if (text.includes("interview")) return "interview";
+  return "concept";
+}
+
+async function mentorUserContext(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const user = await User.findById(userId).lean();
+    const profile = await StudentProfile.findOne({ user: userId }).lean();
+    const roadmap = await Roadmap.findOne({ user: userId }).sort({ updatedAt: -1 }).lean();
+    return {
+      name: user?.name || profile?.username || "there",
+      goal: profile?.goal || "career growth",
+      field: profile?.field || profile?.branch || "student learning",
+      level: profile?.level || roadmap?.currentLevel || "Beginner",
+      skills: profile?.skills || [],
+      nextMilestone: roadmap?.nextMilestone || "finish the next learning milestone",
+    };
+  }
+  const user = (memory.users || []).find((item) => String(item.id || item._id) === String(userId));
+  const profile = (memory.profiles || []).find((item) => String(item.user || item.userId) === String(userId));
+  const roadmap = (memory.roadmaps || []).find((item) => String(item.user || item.userId) === String(userId));
+  return {
+    name: user?.name || profile?.username || "there",
+    goal: profile?.goal || "career growth",
+    field: profile?.field || profile?.branch || "student learning",
+    level: profile?.level || roadmap?.currentLevel || "Beginner",
+    skills: profile?.skills || [],
+    nextMilestone: roadmap?.nextMilestone || "finish the next learning milestone",
+  };
+}
+
+async function recentMentorMessages(userId) {
+  let chats = [];
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    chats = await AIMentorChat.find({ user: userId }).sort({ createdAt: -1 }).limit(4).lean();
+  } else {
+    chats = (memory.chats || [])
+      .filter((item) => String(item.user || item.userId) === String(userId))
+      .slice(0, 4);
+  }
+  return chats
+    .flatMap((chat) => chat.messages || [])
+    .slice(-8)
+    .map((item) => ({ role: item.role === "assistant" ? "assistant" : "user", content: String(item.content || "").slice(0, 900) }));
+}
+
+function mentorSystemPrompt(context) {
+  return [
+    "You are Studox.ai AI Mentor, a premium student learning and career mentor.",
+    "Give practical, accurate, structured guidance for learning, DSA, projects, resumes, internships, hackathons and interviews.",
+    "Keep answers student-friendly, concise and action-oriented.",
+    "If the student greets you or wants casual support, respond naturally and personally instead of forcing a study plan.",
+    "Match the student's tone and language where reasonable, including simple Hinglish when the student uses it.",
+    "When code is useful, include a small code example and explain it.",
+    "Never claim to submit applications, certify results or access private accounts.",
+    `Student name: ${context.name}.`,
+    `Student goal: ${context.goal}. Field: ${context.field}. Level: ${context.level}.`,
+    `Known skills: ${(context.skills || []).join(", ") || "not provided"}. Next milestone: ${context.nextMilestone}.`,
+  ].join("\n");
+}
+
+function localMentorReply(message, context) {
+  const topic = detectMentorTopic(message);
+  const firstName = String(context.name || "there").split(" ")[0];
+  if (topic === "casual") {
+    return `Hey ${firstName}! Main yahin hoon. Tum mujhse normal baat bhi kar sakte ho, aur study/career help bhi le sakte ho.\n\nAaj kya karna hai?\n1. Koi concept simple language mein samjhau\n2. DSA problem solve karwaun\n3. Resume ya internship plan banaun\n4. Bas study mood set karne mein help karun`;
+  }
+  if (topic === "thanks") {
+    return `Anytime, ${firstName}. Main tumhare saath hoon. Jab bhi doubt, roadmap, DSA, resume ya career confusion ho, seedha message kar dena.`;
+  }
+  if (topic === "motivation") {
+    return `${firstName}, thoda slow feel hona normal hai. Bas next 25 minutes ka target rakho, poore future ka pressure mat uthao.\n\nAaj ka tiny win:\n1. Ek concept revise karo\n2. Ek small question solve karo\n3. Ek line note likho: "aaj maine kya clear kiya"\n\nMomentum isi tarah banta hai. Batao, abhi tumhara mood low hai ya topic confusing hai?`;
+  }
+  const base = `Studox.ai Mentor plan for your ${context.goal || "goal"}:\n\n`;
+  const topicPlans = {
+    resume: [
+      "1. Rewrite your summary for one target role.",
+      "2. Add measurable project impact: users, speed, accuracy, revenue, rank or score.",
+      "3. Match keywords from the internship/job description.",
+      "4. Keep ATS format simple: headings, bullets, no heavy graphics.",
+      "Next action: paste one resume section and I will rewrite it.",
+    ],
+    career: [
+      "1. Pick one target role for the next 30 days.",
+      "2. Finish the roadmap modules that directly map to that role.",
+      "3. Publish two proof projects with README, screenshots and deployment links.",
+      "4. Apply to 5 matched internships after improving resume score.",
+      "Next action: tell me your target role and current skills.",
+    ],
+    code: [
+      "1. Reproduce the bug with the smallest input.",
+      "2. Check the exact error line and data shape.",
+      "3. Add one guard condition or test before changing logic.",
+      "4. Re-run the same failing case, then one normal case.",
+      "Next action: paste the error and the function where it happens.",
+    ],
+    dsa: [
+      "1. Identify the pattern first: two pointers, sliding window, stack, BFS/DFS or DP.",
+      "2. Write brute force in plain English.",
+      "3. Optimize one bottleneck only.",
+      "4. Dry-run with 2 examples before coding.",
+      "Next action: send the problem statement and your stuck point.",
+    ],
+    roadmap: [
+      "1. Study one concept for 25 minutes.",
+      "2. Build one tiny output from it.",
+      "3. Solve 3 practice questions.",
+      "4. Log one note in your roadmap before moving ahead.",
+      `Next milestone: ${context.nextMilestone || "complete the next module"}.`,
+    ],
+    interview: [
+      "1. Prepare a 45-second intro with goal, skills and best project.",
+      "2. Practice 5 role-specific technical questions.",
+      "3. Prepare STAR stories for teamwork, failure and debugging.",
+      "4. Review resume bullets before every mock.",
+      "Next action: tell me the company or role and I will run a mock interview.",
+    ],
+    concept: [
+      "1. Start with the simplest definition.",
+      "2. Connect it to one real project example.",
+      "3. Do one guided example, then one independent practice task.",
+      "4. End with a 3-line summary in your own words.",
+      "Next action: ask the exact concept you want explained.",
+    ],
+  };
+  return base + (topicPlans[topic] || topicPlans.concept).join("\n");
+}
+
+function extractOpenAiText(data) {
+  return data?.choices?.[0]?.message?.content?.trim()
+    || data?.output_text?.trim()
+    || "";
+}
+
+async function callOpenAiMentor(messages) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY missing");
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.35,
+      max_tokens: 5000,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || "OpenAI request failed");
+  const reply = extractOpenAiText(data);
+  if (!reply) throw new Error("OpenAI returned an empty response");
+  return { reply, provider: "openai", model, fallback: false };
+}
+
+async function callGeminiMentor(messages) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const prompt = messages.map((item) => `${item.role.toUpperCase()}:\n${item.content}`).join("\n\n");
+  const generate = async (text, maxOutputTokens = 6000) => {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text }] }],
+        generationConfig: { temperature: 0.45, maxOutputTokens },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || "Gemini request failed");
+    const candidate = data?.candidates?.[0] || {};
+    const textReply = (candidate?.content?.parts || []).map((part) => part.text || "").join("").trim();
+    return { textReply, finishReason: candidate.finishReason || "" };
+  };
+
+  const first = await generate(prompt);
+  let reply = first.textReply;
+  let finishReason = first.finishReason;
+
+  if (reply && finishReason === "MAX_TOKENS") {
+    const continuationPrompt = [
+      prompt,
+      "\n\nASSISTANT RESPONSE SO FAR:\n",
+      reply,
+      "\n\nContinue exactly from where the previous answer stopped. Do not restart, do not repeat earlier sections, and finish the remaining explanation clearly.",
+    ].join("");
+    const second = await generate(continuationPrompt, 4000);
+    if (second.textReply) {
+      reply = `${reply}\n\n${second.textReply}`;
+      finishReason = second.finishReason;
+    }
+  }
+
+  if (!reply) throw new Error("Gemini returned an empty response");
+  return { reply, provider: "gemini", model, fallback: false, finishReason };
+}
+
+async function generateMentorReply(message, userId) {
+  const context = await mentorUserContext(userId);
+  const history = await recentMentorMessages(userId);
+  const messages = [
+    { role: "system", content: mentorSystemPrompt(context) },
+    ...history,
+    { role: "user", content: message },
+  ];
+  const provider = String(process.env.AI_PROVIDER || "").toLowerCase();
+  try {
+    if (provider === "gemini") return await callGeminiMentor(messages);
+    if (provider === "openai" || process.env.OPENAI_API_KEY) return await callOpenAiMentor(messages);
+    if (process.env.GEMINI_API_KEY) return await callGeminiMentor(messages);
+  } catch (error) {
+    console.warn(`AI mentor provider failed: ${error.message}`);
+  }
+  return {
+    reply: localMentorReply(message, context),
+    provider: "local",
+    model: "studox-local-mentor",
+    fallback: true,
+  };
 }
 
 function memoryId(prefix) {
@@ -301,71 +713,55 @@ app.post("/api/auth/signup", async (req, res) => {
         goal,
         field,
         skills: [],
-        profileCompletion: 42,
+        level: "Beginner",
+        xp: 0,
+        profileCompletion: 0,
+        streak: 0,
       });
       await UserSettings.create({ user: user._id });
+      const roadmap = buildPersonalRoadmap(goal, field, user._id);
+      delete roadmap.id;
+      await Roadmap.create(roadmap);
     } else {
       const exists = memory.users.find((item) => item.email === email);
       if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student" };
+      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student", plan: "free" };
       memory.users.push(user);
       memory.profiles.push({
         user: user.id,
         username: email.split("@")[0],
         goal,
         field,
-        skills: ["HTML", "CSS"],
+        skills: [],
         level: "Beginner",
-        xp: 250,
-        profileCompletion: 42,
-        streak: 1,
+        xp: 0,
+        profileCompletion: 0,
+        streak: 0,
       });
       memory.settings.push({ user: user.id, theme: "system", accentColor: "#2563eb", language: "English" });
-      memory.roadmaps.push({
-        id: memoryId("roadmap"),
-        user: user.id,
-        title: `${goal || "Career"} Roadmap`,
-        currentLevel: "Beginner",
-        overallProgress: 8,
-        timeToGoalWeeks: 16,
-        skillsLearned: 2,
-        nextMilestone: "Complete foundations",
-        modules: [
-          { title: "Foundations", status: "in-progress", progress: 8, description: "Start HTML, CSS, JavaScript and Git.", skills: ["HTML", "CSS"] },
-          { title: "Core Skills", status: "upcoming", progress: 0, description: "Learn the core stack for your goal.", skills: [] },
-        ],
-      });
+      memory.roadmaps.push(buildPersonalRoadmap(goal, field, user.id));
       persistMemory();
     }
 
     let welcomeEmailSent = false;
+    let emailWarning = "";
     try {
       await sendWelcomeEmail({ to: email, name, goal: goal || "your learning goal" });
       welcomeEmailSent = true;
     } catch (error) {
-      const emailWarning = error.code === "EMAIL_NOT_CONFIGURED"
+      emailWarning = error.code === "EMAIL_NOT_CONFIGURED"
         ? "Signup email is not configured. Please contact admin."
-        : "We could not send email to this address. Please check your email and try again.";
+        : "We could not send welcome email right now. Account and roadmap were created.";
       console.warn(emailWarning);
       console.warn(error.message);
-      if (mongoReady() && createdUserId) {
-        await Promise.all([
-          User.findByIdAndDelete(createdUserId),
-          StudentProfile.deleteMany({ user: createdUserId }),
-          UserSettings.deleteMany({ user: createdUserId }),
-          Roadmap.deleteMany({ user: createdUserId }),
-        ]);
-      } else {
-        removeMemoryUserCascade(user.id);
-      }
-      return res.status(400).json({ message: emailWarning });
     }
 
     res.status(201).json({
-      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created.",
+      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created. Roadmap generated.",
       token: signToken(user),
       user: publicUser(user),
       welcomeEmailSent,
+      emailWarning,
     });
   } catch (error) {
     res.status(500).json({ message: "Signup failed.", error: error.message });
@@ -402,6 +798,50 @@ app.get("/api/auth/me", authRequired, async (req, res) => {
   const user = memory.users.find((item) => String(item.id || item._id) === String(req.user.id));
   if (!user) return res.status(404).json({ message: "User not found." });
   res.json({ user: publicUser(user) });
+});
+
+app.get("/api/billing/plan", authRequired, async (req, res) => {
+  const plan = await getUserPlan(req.user.id);
+  const used = await countMentorChats(req.user.id);
+  res.json({
+    plan,
+    mentor: {
+      used,
+      limit: mentorFreeChatLimit,
+      locked: !isPremiumPlan(plan) && used >= mentorFreeChatLimit,
+      unlimited: isPremiumPlan(plan),
+    },
+  });
+});
+
+app.post("/api/billing/upgrade", authRequired, async (req, res) => {
+  const plan = String(req.body.plan || "").toLowerCase();
+  if (!["pro", "elite"].includes(plan)) {
+    return res.status(400).json({ message: "Please choose a valid premium plan." });
+  }
+
+  let user;
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    user = await User.findByIdAndUpdate(req.user.id, { plan }, { new: true }).lean();
+  } else {
+    user = memory.users.find((item) => String(item.id || item._id) === String(req.user.id));
+    if (user) {
+      user.plan = plan;
+      persistMemory();
+    }
+  }
+
+  if (!user) return res.status(404).json({ message: "User not found." });
+
+  res.json({
+    message: `${plan === "elite" ? "Elite" : "Pro"} plan activated. AI Mentor is unlocked.`,
+    plan,
+    user: publicUser(user),
+    subscription: {
+      status: "active",
+      startedAt: new Date().toISOString(),
+    },
+  });
 });
 
 app.post("/api/auth/forgot-password", async (req, res) => {
@@ -506,33 +946,68 @@ app.put("/api/settings", authOptional, async (req, res) => {
   res.json(settings);
 });
 
-app.get("/api/dashboard/stats", authOptional, (req, res) => {
+app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   const userId = currentUserId(req);
-  const profile = memory.profiles.find((item) => String(item.user) === String(userId)) || memory.profiles[0] || {};
-  const roadmap = memory.roadmaps.find((item) => String(item.user || "user_demo") === String(userId)) || memory.roadmaps[0] || {};
-  const userResults = byUser(memory.testResults, userId);
-  const userProjects = byUser(memory.projects, userId);
-  const userCertificates = byUser(memory.certificates, userId);
-  const dsa = memory.dsaProgress.find((item) => String(item.user || "user_demo") === String(userId)) || memory.dsaProgress[0] || {};
+  let profile = {};
+  let roadmap = {};
+  let userResults = [];
+  let userProjects = [];
+  let userCertificates = [];
+  let dsa = {};
+
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    [profile, roadmap, userResults, userProjects, userCertificates, dsa] = await Promise.all([
+      StudentProfile.findOne({ user: userId }).lean(),
+      Roadmap.findOne({ user: userId }).sort({ createdAt: -1 }).lean(),
+      TestResult.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
+      Project.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
+      Certificate.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
+      DSAProgress.findOne({ user: userId }).lean(),
+    ]);
+  } else {
+    profile = memory.profiles.find((item) => String(item.user) === String(userId)) || {};
+    roadmap = memory.roadmaps.find((item) => String(item.user || item.userId) === String(userId)) || {};
+    userResults = byUser(memory.testResults, userId);
+    userProjects = byUser(memory.projects, userId);
+    userCertificates = byUser(memory.certificates, userId);
+    dsa = memory.dsaProgress.find((item) => String(item.user || item.userId) === String(userId)) || {};
+  }
+
+  profile = profile || {};
+  roadmap = roadmap || {};
+  if (!roadmap.title && profile.goal) {
+    const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", userId);
+    if (mongoReady() && mongoose.isValidObjectId(userId)) {
+      const created = await Roadmap.create({ ...generated, id: undefined });
+      roadmap = created.toObject();
+    } else {
+      memory.roadmaps.unshift(generated);
+      roadmap = generated;
+      persistMemory();
+    }
+  }
+  dsa = dsa || {};
   const appliedInternships = (memory.internships || []).filter((item) => (item.applicants || []).includes(userId));
   const registeredHackathons = (memory.hackathons || []).filter((item) => (item.registrations || []).includes(userId));
   const skills = new Set([...(profile.skills || []), ...((roadmap.modules || []).flatMap((module) => module.progress > 40 ? module.skills || [] : []))]);
-  const overallProgress = Math.round(roadmap.overallProgress || average((roadmap.modules || []).map((module) => module.progress)) || profile.profileCompletion || 0);
+  const overallProgress = Math.round(Number(roadmap.overallProgress ?? average((roadmap.modules || []).map((module) => module.progress)) ?? 0));
   const xpPoints = Number(profile.xp || 0) + userResults.length * 120 + Number(dsa.problemsSolved || 0) * 8 + userProjects.length * 90 + userCertificates.length * 150;
+  const courses = await listResource("courses");
+  const tests = await listResource("tests");
   res.json({
     overallProgress,
     testsCompleted: userResults.length,
     skillsMastered: skills.size,
     xpPoints,
-    learningTimeHours: Math.round(18 + userResults.length * 1.5 + Number(dsa.problemsSolved || 0) / 8),
+    learningTimeHours: Math.round(userResults.length * 1.5 + Number(dsa.problemsSolved || 0) / 8 + userProjects.length * 2),
     studyStreak: dsa.currentStreak || profile.streak || 0,
     applications: appliedInternships.length,
     hackathonRegistrations: registeredHackathons.length,
     projectCount: userProjects.length,
     certificatesEarned: userCertificates.length,
-    upcomingTests: memory.tests,
+    upcomingTests: tests,
     recentActivity: buildActivity(userId),
-    recommendedCourses: memory.courses,
+    recommendedCourses: courses,
     profile,
     roadmap,
     dsa,
@@ -558,50 +1033,57 @@ function buildActivity(userId) {
   ];
 }
 
-app.get("/api/roadmaps", authOptional, async (_req, res) => {
-  res.json(await listResource("roadmaps"));
-});
-
-app.post("/api/roadmaps/select", authRequired, async (req, res) => {
-  try {
-    if (!mongoReady() || !mongoose.isValidObjectId(req.user.id)) {
-      return res.status(400).json({ message: "Valid logged-in user is required." });
+app.get("/api/roadmaps", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    let roadmaps = await Roadmap.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
+    if (!roadmaps.length) {
+      const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
+      if (profile?.goal) {
+        const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", req.user.id);
+        const created = await Roadmap.create({ ...generated, id: undefined });
+        roadmaps = [created.toObject()];
+      }
     }
-
-    const selectedRoadmap = req.body.roadmap;
-    if (!selectedRoadmap || typeof selectedRoadmap !== "object") {
-      return res.status(400).json({ message: "Roadmap is required." });
-    }
-
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found." });
-
-    if (user.activeRoadmapId) {
-      await Roadmap.findByIdAndUpdate(user.activeRoadmapId, { status: "archived" });
-    }
-
-    const roadmap = await Roadmap.create({
-      ...selectedRoadmap,
-      userId: req.user.id,
-      status: "active",
-    });
-
-    user.activeRoadmapId = roadmap._id;
-    await user.save();
-
-    res.status(201).json({
-      message: "Roadmap selected successfully.",
-      activeRoadmapId: roadmap._id,
-      roadmap,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Roadmap selection failed.", error: error.message });
+    return res.json(roadmaps);
   }
+  let roadmaps = byUser(memory.roadmaps || [], req.user.id);
+  if (!roadmaps.length) {
+    const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
+    if (profile?.goal) {
+      const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", req.user.id);
+      memory.roadmaps.unshift(generated);
+      persistMemory();
+      roadmaps = [generated];
+    }
+  }
+  res.json(roadmaps);
 });
 
-app.get("/api/roadmaps/:id/progress", authOptional, async (req, res) => {
-  const roadmaps = await listResource("roadmaps");
-  const roadmap = roadmaps.find((item) => String(item._id || item.id) === req.params.id) || roadmaps[0];
+app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
+  const goal = req.body.goal || req.body.targetRole || "Career";
+  const field = req.body.field || "";
+  const roadmapPayload = buildPersonalRoadmap(goal, field, req.user.id);
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const created = await Roadmap.create({ ...roadmapPayload, id: undefined });
+    await StudentProfile.findOneAndUpdate({ user: req.user.id }, { goal, field, level: "Beginner" }, { upsert: true });
+    return res.status(201).json(created);
+  }
+  memory.roadmaps = (memory.roadmaps || []).filter((item) => String(item.user || item.userId) !== String(req.user.id));
+  memory.roadmaps.unshift(roadmapPayload);
+  const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
+  if (profile) Object.assign(profile, { goal, field, level: "Beginner", skills: [], xp: 0, streak: 0 });
+  persistMemory();
+  res.status(201).json(roadmapPayload);
+});
+
+app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {
+  let roadmap;
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id) && mongoose.isValidObjectId(req.params.id)) {
+    roadmap = await Roadmap.findOne({ _id: req.params.id, user: req.user.id }).lean();
+  } else {
+    roadmap = byUser(memory.roadmaps || [], req.user.id).find((item) => String(item._id || item.id) === req.params.id);
+  }
+  if (!roadmap) return res.status(404).json({ message: "Roadmap not found." });
   res.json({
     roadmapId: roadmap?._id || roadmap?.id,
     overallProgress: roadmap?.overallProgress || 0,
@@ -621,12 +1103,12 @@ app.get("/api/courses/:id", async (req, res) => {
   res.json({ ...course, modules: modules.filter((module) => !module.course || module.course === course.id || String(module.course) === String(course._id)) });
 });
 
-app.patch("/api/courses/:courseId/modules/:moduleId", authOptional, async (req, res) => {
+app.patch("/api/courses/:courseId/modules/:moduleId", authRequired, async (req, res) => {
   const updated = await updateResource("modules", req.params.moduleId, req.body);
   res.json(updated || { message: "Module progress updated in demo mode.", ...req.body });
 });
 
-app.post("/api/courses/:courseId/continue", authOptional, async (req, res) => {
+app.post("/api/courses/:courseId/continue", authRequired, async (req, res) => {
   const course = memory.courses.find((item) => String(item.id || item._id || item.slug) === String(req.params.courseId)) || memory.courses[0];
   const courseId = course?.id || course?._id || req.params.courseId;
   const module = memory.modules.find((item) => String(item.course) === String(courseId) && item.status !== "completed") || memory.modules.find((item) => String(item.course) === String(courseId)) || memory.modules[0];
@@ -637,20 +1119,24 @@ app.post("/api/courses/:courseId/continue", authOptional, async (req, res) => {
     module.updatedAt = new Date().toISOString();
   }
   if (course) course.progress = Math.min(100, Number(course.progress || 0) + 4);
-  const roadmap = memory.roadmaps.find((item) => String(item.user || "user_demo") === String(currentUserId(req))) || memory.roadmaps[0];
-  if (roadmap) {
-    roadmap.overallProgress = Math.min(100, Number(roadmap.overallProgress || 0) + 3);
-    const activeModule = (roadmap.modules || []).find((item) => item.status === "in-progress" || item.status === "active") || roadmap.modules?.[0];
-    if (activeModule) {
-      activeModule.progress = Math.min(100, Number(activeModule.progress || 0) + 8);
-      if (activeModule.progress >= 100) activeModule.status = "completed";
+  let roadmap;
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const roadmapDoc = await Roadmap.findOne({ user: req.user.id }).sort({ createdAt: -1 });
+    if (roadmapDoc) {
+      advanceRoadmapState(roadmapDoc, 8);
+      roadmapDoc.markModified("modules");
+      await roadmapDoc.save();
+      roadmap = roadmapDoc.toObject();
     }
-    roadmap.updatedAt = new Date().toISOString();
+    await StudentProfile.findOneAndUpdate({ user: req.user.id }, { $inc: { xp: 40 } });
+  } else {
+    roadmap = memory.roadmaps.find((item) => String(item.user || item.userId) === String(currentUserId(req)));
+    if (roadmap) advanceRoadmapState(roadmap, 8);
+    const profile = memory.profiles.find((item) => String(item.user) === String(currentUserId(req)));
+    if (profile) profile.xp = Number(profile.xp || 0) + 40;
+    persistMemory();
   }
-  const profile = memory.profiles.find((item) => String(item.user) === String(currentUserId(req))) || memory.profiles[0];
-  if (profile) profile.xp = Number(profile.xp || 0) + 40;
-  persistMemory();
-  res.json({ message: "Learning progress updated.", course, module });
+  res.json({ message: "Learning progress updated.", course, module, roadmap });
 });
 
 app.get("/api/tests", async (_req, res) => {
@@ -820,26 +1306,57 @@ app.post("/api/certificates/:id/share", authOptional, (req, res) => {
   res.json({ message: "Share card generated.", shareUrl: `${req.protocol}://${req.get("host")}/certificate/${req.params.id}` });
 });
 
-app.get("/api/ai-mentor/chat", authOptional, async (_req, res) => {
-  res.json(await listResource("ai-mentor"));
+app.get("/api/ai-mentor/chat", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const chats = await AIMentorChat.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(25).lean();
+    return res.json(chats);
+  }
+  res.json(byUser(memory.chats || [], req.user.id).slice(0, 25));
 });
 
-app.post("/api/ai-mentor/chat", authOptional, async (req, res) => {
-  const message = req.body.message || "";
-  const lower = message.toLowerCase();
-  let reply = `For "${message}", start with the core definition, then do one guided example and one independent practice task. I saved this as a mentor conversation so you can review it later.`;
-  if (lower.includes("resume")) reply = "Resume improvement plan: add role keywords, quantify project impact, keep sections ATS-friendly, and move strongest MERN/DSA projects near the top.";
-  if (lower.includes("career") || lower.includes("internship")) reply = "Career plan: pick one target role, finish the matching roadmap modules, publish two projects, improve ATS score above 85, then apply to 5 matched internships.";
-  if (lower.includes("code") || lower.includes("bug")) reply = "Code help plan: isolate the failing input, read the error, check data shape, then write a small test case before changing the implementation.";
+app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
+  const message = String(req.body.message || "").trim();
+  if (!message) return res.status(400).json({ message: "Message is required." });
+  if (message.length > 2000) return res.status(400).json({ message: "Message is too long. Keep it under 2000 characters." });
+  const plan = await getUserPlan(req.user.id);
+  const used = await countMentorChats(req.user.id);
+  if (!isPremiumPlan(plan) && used >= mentorFreeChatLimit) {
+    return res.status(402).json({
+      code: "MENTOR_LIMIT_REACHED",
+      message: `Free AI Mentor limit reached. You used ${mentorFreeChatLimit}/${mentorFreeChatLimit} chats. Upgrade to Pro for unlimited mentor access.`,
+      used,
+      limit: mentorFreeChatLimit,
+      plan,
+      upgradeUrl: "#pricing",
+    });
+  }
+  const mentor = await generateMentorReply(message, req.user.id);
   const chat = await createResource("ai-mentor", {
     user: req.user.id,
-    topic: req.body.topic || "general",
+    topic: req.body.topic || detectMentorTopic(message),
     messages: [
       { role: "user", content: message, createdAt: new Date() },
-      { role: "assistant", content: reply, createdAt: new Date() },
+      { role: "assistant", content: mentor.reply, createdAt: new Date() },
     ],
+    metadata: {
+      provider: mentor.provider,
+      model: mentor.model,
+      fallback: mentor.fallback,
+    },
   });
-  res.status(201).json({ reply, chat });
+  res.status(201).json({
+    reply: mentor.reply,
+    chat,
+    provider: mentor.provider,
+    model: mentor.model,
+    fallback: mentor.fallback,
+    usage: {
+      used: used + 1,
+      limit: mentorFreeChatLimit,
+      remaining: isPremiumPlan(plan) ? null : Math.max(0, mentorFreeChatLimit - used - 1),
+      plan,
+    },
+  });
 });
 
 app.get("/api/notifications", authOptional, async (_req, res) => {
