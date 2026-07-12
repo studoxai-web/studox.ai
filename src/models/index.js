@@ -57,20 +57,40 @@ const Roadmap = model(
   "Roadmap",
   new Schema(
     {
-      user: { type: Schema.Types.ObjectId, ref: "User" },
+      userId: { type: Schema.Types.ObjectId, ref: "User" },
       title: String,
-      currentLevel: String,
-      overallProgress: Number,
-      timeToGoalWeeks: Number,
-      skillsLearned: Number,
-      nextMilestone: String,
-      modules: [
+      careerGoal: String,
+      summary: String,
+      estimatedDurationWeeks: Number,
+      difficulty: String,
+      status: { type: String, enum: ["draft", "active", "completed", "archived"], default: "draft" },
+      generatedBy: String,
+      version: Number,
+      generatedAt: Date,
+      weeks: [
         {
+          weekId: String,
+          weekNumber: Number,
           title: String,
-          status: { type: String, enum: ["completed", "in-progress", "upcoming"], default: "upcoming" },
-          progress: Number,
           description: String,
-          skills: [String],
+          estimatedHours: Number,
+          tasks: [
+            {
+              taskId: String,
+              title: String,
+              description: String,
+              type: { type: String },
+              estimatedTimeMinutes: Number,
+            },
+          ],
+          resources: [
+            {
+              resourceId: String,
+              title: String,
+              url: String,
+              type: { type: String },
+            },
+          ],
         },
       ],
     },
