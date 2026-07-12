@@ -41,6 +41,7 @@ const jwtSecret = process.env.JWT_SECRET || "studox_local_secret";
 const storePath = path.join(__dirname, "data", "runtime-store.json");
 const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
 const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
+const mentorLimitTemporarilyDisabled = true;
 const memory = loadMemoryStore();
 ensureDemoAccount();
 
@@ -158,6 +159,36 @@ function currentUserId(req) {
 
 function byUser(list, userId) {
   return (list || []).filter((item) => String(item.user || item.userId || "user_demo") === String(userId));
+}
+
+function roadmapOwnerQuery(userId) {
+  return { $or: [{ user: userId }, { userId }] };
+}
+
+function normalizeRoadmapShape(roadmap = {}) {
+  const source = roadmap.toObject ? roadmap.toObject() : roadmap;
+  const modules = source.modules?.length
+    ? source.modules
+    : (source.weeks || []).map((week, index) => ({
+        title: week.title,
+        status: index === 0 ? "in-progress" : "upcoming",
+        progress: index === 0 ? Number(source.overallProgress || 0) : 0,
+        description: week.description,
+        skills: (week.tasks || []).map((task) => task.title).slice(0, 4),
+      }));
+  const progress = Number(source.overallProgress ?? average(modules.map((module) => module.progress)) ?? 0);
+  return {
+    ...source,
+    user: source.user || source.userId,
+    userId: source.userId || source.user,
+    title: source.title || `${source.careerGoal || "Career"} Roadmap`,
+    currentLevel: source.currentLevel || source.difficulty || "Beginner",
+    overallProgress: Math.round(progress),
+    timeToGoalWeeks: source.timeToGoalWeeks || source.estimatedDurationWeeks || 12,
+    skillsLearned: Number(source.skillsLearned || 0),
+    nextMilestone: source.nextMilestone || modules.find((module) => module.status !== "completed")?.title || "Start your first milestone",
+    modules,
+  };
 }
 
 function isPremiumPlan(plan) {
@@ -278,12 +309,19 @@ function buildPersonalRoadmap(goal, field, userId) {
   return {
     id: memoryId("roadmap"),
     user: userId,
+    userId,
     title: `${cleanGoal} Roadmap`,
+    careerGoal: cleanGoal,
     currentLevel: "Beginner",
     overallProgress: 0,
     timeToGoalWeeks: template.timeToGoalWeeks,
+    estimatedDurationWeeks: template.timeToGoalWeeks,
     skillsLearned: 0,
     nextMilestone: template.modules[0]?.[0] || "Start foundations",
+    status: "active",
+    generatedBy: "studox",
+    version: 1,
+    generatedAt: new Date(),
     modules: template.modules.map(([title, description, skills], index) => ({
       title,
       status: index === 0 ? "in-progress" : "upcoming",
@@ -353,14 +391,15 @@ async function mentorUserContext(userId) {
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
     const user = await User.findById(userId).lean();
     const profile = await StudentProfile.findOne({ user: userId }).lean();
-    const roadmap = await Roadmap.findOne({ user: userId }).sort({ updatedAt: -1 }).lean();
+    const roadmap = await Roadmap.findOne(roadmapOwnerQuery(userId)).sort({ updatedAt: -1 }).lean();
+    const normalizedRoadmap = normalizeRoadmapShape(roadmap || {});
     return {
       name: user?.name || profile?.username || "there",
       goal: profile?.goal || "career growth",
       field: profile?.field || profile?.branch || "student learning",
-      level: profile?.level || roadmap?.currentLevel || "Beginner",
+      level: profile?.level || normalizedRoadmap.currentLevel || "Beginner",
       skills: profile?.skills || [],
-      nextMilestone: roadmap?.nextMilestone || "finish the next learning milestone",
+      nextMilestone: normalizedRoadmap.nextMilestone || "finish the next learning milestone",
     };
   }
   const user = (memory.users || []).find((item) => String(item.id || item._id) === String(userId));
@@ -808,7 +847,7 @@ app.get("/api/billing/plan", authRequired, async (req, res) => {
     mentor: {
       used,
       limit: mentorFreeChatLimit,
-      locked: !isPremiumPlan(plan) && used >= mentorFreeChatLimit,
+      locked: !mentorLimitTemporarilyDisabled && !isPremiumPlan(plan) && used >= mentorFreeChatLimit,
       unlimited: isPremiumPlan(plan),
     },
   });
@@ -958,7 +997,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
     [profile, roadmap, userResults, userProjects, userCertificates, dsa] = await Promise.all([
       StudentProfile.findOne({ user: userId }).lean(),
-      Roadmap.findOne({ user: userId }).sort({ createdAt: -1 }).lean(),
+      Roadmap.findOne(roadmapOwnerQuery(userId)).sort({ createdAt: -1 }).lean(),
       TestResult.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
       Project.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
       Certificate.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
@@ -986,6 +1025,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
       persistMemory();
     }
   }
+  roadmap = normalizeRoadmapShape(roadmap);
   dsa = dsa || {};
   const appliedInternships = (memory.internships || []).filter((item) => (item.applicants || []).includes(userId));
   const registeredHackathons = (memory.hackathons || []).filter((item) => (item.registrations || []).includes(userId));
@@ -1035,7 +1075,7 @@ function buildActivity(userId) {
 
 app.get("/api/roadmaps", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    let roadmaps = await Roadmap.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
+    let roadmaps = await Roadmap.find(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 }).lean();
     if (!roadmaps.length) {
       const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
       if (profile?.goal) {
@@ -1044,7 +1084,7 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
         roadmaps = [created.toObject()];
       }
     }
-    return res.json(roadmaps);
+    return res.json(roadmaps.map(normalizeRoadmapShape));
   }
   let roadmaps = byUser(memory.roadmaps || [], req.user.id);
   if (!roadmaps.length) {
@@ -1079,11 +1119,12 @@ app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
 app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {
   let roadmap;
   if (mongoReady() && mongoose.isValidObjectId(req.user.id) && mongoose.isValidObjectId(req.params.id)) {
-    roadmap = await Roadmap.findOne({ _id: req.params.id, user: req.user.id }).lean();
+    roadmap = await Roadmap.findOne({ _id: req.params.id, ...roadmapOwnerQuery(req.user.id) }).lean();
   } else {
     roadmap = byUser(memory.roadmaps || [], req.user.id).find((item) => String(item._id || item.id) === req.params.id);
   }
   if (!roadmap) return res.status(404).json({ message: "Roadmap not found." });
+  roadmap = normalizeRoadmapShape(roadmap);
   res.json({
     roadmapId: roadmap?._id || roadmap?.id,
     overallProgress: roadmap?.overallProgress || 0,
@@ -1121,7 +1162,7 @@ app.post("/api/courses/:courseId/continue", authRequired, async (req, res) => {
   if (course) course.progress = Math.min(100, Number(course.progress || 0) + 4);
   let roadmap;
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const roadmapDoc = await Roadmap.findOne({ user: req.user.id }).sort({ createdAt: -1 });
+    const roadmapDoc = await Roadmap.findOne(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 });
     if (roadmapDoc) {
       advanceRoadmapState(roadmapDoc, 8);
       roadmapDoc.markModified("modules");
@@ -1320,7 +1361,7 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
   if (message.length > 2000) return res.status(400).json({ message: "Message is too long. Keep it under 2000 characters." });
   const plan = await getUserPlan(req.user.id);
   const used = await countMentorChats(req.user.id);
-  if (!isPremiumPlan(plan) && used >= mentorFreeChatLimit) {
+  if (!mentorLimitTemporarilyDisabled && !isPremiumPlan(plan) && used >= mentorFreeChatLimit) {
     return res.status(402).json({
       code: "MENTOR_LIMIT_REACHED",
       message: `Free AI Mentor limit reached. You used ${mentorFreeChatLimit}/${mentorFreeChatLimit} chats. Upgrade to Pro for unlimited mentor access.`,

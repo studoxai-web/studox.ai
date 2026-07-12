@@ -6,6 +6,7 @@ let publicConfigPromise = null;
 let googleScriptPromise = null;
 const themeKey = "studox-theme";
 const mentorFreeChatLimit = 10;
+const mentorLimitTemporarilyDisabled = true;
 
 function getStoredTheme() {
   return localStorage.getItem(themeKey) || "light";
@@ -978,7 +979,7 @@ function certificatesPage() {
 function mentorPage() {
   const chats = functionalState.chats || [];
   const plan = getCurrentPlan();
-  const premium = isPremiumPlan(plan);
+  const premium = isPremiumPlan(plan) || mentorLimitTemporarilyDisabled;
   const used = chats.length || 0;
   const chatsLeft = premium ? "Unlimited" : Math.max(0, mentorFreeChatLimit - used);
   const mentorLocked = !premium && used >= mentorFreeChatLimit;
@@ -1007,7 +1008,7 @@ function mentorPage() {
         <div class="panel-head"><h2>Chat with Studox.ai Mentor</h2><div class="filters">${["Explain Concept", "Career Guidance", "Code Help", "Resume Review", "Interview Prep"].map((prompt, i) => `<button data-prompt="${prompt}" class="${i === 0 ? "active" : ""}">${prompt}</button>`).join("")}</div></div>
         <div class="mentor-limit-strip ${mentorLocked ? "locked" : ""}">
           <span>${icon(mentorLocked ? "lock" : "bot")}</span>
-          <div><strong>${mentorLocked ? "Free mentor limit reached" : premium ? "Premium mentor access active" : `${chatsLeft} free mentor chats left`}</strong><p>${mentorLocked ? "Upgrade to Pro or Elite to continue unlimited AI Mentor conversations." : premium ? "Your plan includes unlimited AI Mentor access." : "Free plan includes 10 AI Mentor conversations."}</p></div>
+          <div><strong>${mentorLocked ? "Free mentor limit reached" : premium ? "AI Mentor access active" : `${chatsLeft} free mentor chats left`}</strong><p>${mentorLocked ? "Upgrade to Pro or Elite to continue unlimited AI Mentor conversations." : premium ? "Chat limit is temporarily disabled." : "Free plan includes 10 AI Mentor conversations."}</p></div>
           ${mentorLocked ? `<a class="btn primary" href="#pricing" data-action="open-upgrade">Upgrade Plan</a>` : ""}
         </div>
         <div class="chat-window" id="chatWindow">
@@ -1353,7 +1354,7 @@ async function handleChat(event) {
   const button = form.querySelector("button");
   const text = input.value.trim();
   if (!text) return;
-  if (!isPremiumPlan(getCurrentPlan()) && (functionalState.chats || []).length >= mentorFreeChatLimit) {
+  if (!mentorLimitTemporarilyDisabled && !isPremiumPlan(getCurrentPlan()) && (functionalState.chats || []).length >= mentorFreeChatLimit) {
     showMentorLimitModal({ used: mentorFreeChatLimit, limit: mentorFreeChatLimit });
     return;
   }
@@ -1380,7 +1381,7 @@ async function handleChat(event) {
     `<div class="message ai">${formatMentorMessage(result.reply)}</div>`,
   );
   windowNode.scrollTop = windowNode.scrollHeight;
-  if (!isPremiumPlan(result.usage?.plan) && result.usage?.remaining === 0) {
+  if (!mentorLimitTemporarilyDisabled && !isPremiumPlan(result.usage?.plan) && result.usage?.remaining === 0) {
     showMentorLimitModal({ used: result.usage.used, limit: result.usage.limit });
   }
 }
