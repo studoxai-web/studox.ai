@@ -992,6 +992,7 @@ function mentorPage() {
   const sourceLabel = latestMeta.provider
     ? `${latestMeta.provider}${latestMeta.fallback ? " fallback" : ""}`
     : "Ready";
+    const suggestions = mentorSuggestions();
   return appLayout(`<div class="page-head">
       <div><h1>AI Mentor Dashboard</h1><p>Ask doubts, get career guidance, review code, improve resumes and plan interviews.</p></div>
       <span class="chip purple">AI ${sourceLabel}</span>
@@ -1005,7 +1006,12 @@ function mentorPage() {
     ])}
     <div class="mentor-layout">
       <div class="panel">
-        <div class="panel-head"><h2>Chat with Studox.ai Mentor</h2><div class="filters">${["Explain Concept", "Career Guidance", "Code Help", "Resume Review", "Interview Prep"].map((prompt, i) => `<button data-prompt="${prompt}" class="${i === 0 ? "active" : ""}">${prompt}</button>`).join("")}</div></div>
+        <div class="panel-head">
+  <h2>Chat with Studox.ai Mentor</h2>
+  <div class="filters mentor-mode-single">
+    <button class="active" type="button">All-in-one AI Mentor</button>
+  </div>
+</div>
         <div class="mentor-limit-strip ${mentorLocked ? "locked" : ""}">
           <span>${icon(mentorLocked ? "lock" : "bot")}</span>
           <div><strong>${mentorLocked ? "Free mentor limit reached" : premium ? "AI Mentor access active" : `${chatsLeft} free mentor chats left`}</strong><p>${mentorLocked ? "Upgrade to Pro or Elite to continue unlimited AI Mentor conversations." : premium ? "Chat limit is temporarily disabled." : "Free plan includes 10 AI Mentor conversations."}</p></div>
@@ -1023,7 +1029,14 @@ function mentorPage() {
       </div>
       <aside class="panel">
         <h2>Suggested for you</h2>
-        <div class="list" style="margin-top:14px">${["Revise React performance patterns", "Practice 5 sliding window problems", "Improve resume project metrics"].map((item) => `<div class="list-item"><p>${item}</p><button class="btn icon">${icon("plus")}</button></div>`).join("")}</div>
+        <div class="list mentor-suggestions" style="margin-top:14px">
+  ${suggestions.map((item) => `
+    <button class="mentor-suggestion" type="button" data-mentor-suggestion="${escapeHtml(item.prompt)}">
+      <span>${escapeHtml(item.title)}</span>
+      <i>${icon("plus")}</i>
+    </button>
+  `).join("")}
+</div>
         <h3 style="margin-top:18px">Learning insights</h3>
         ${progress("Concept confidence", 82)}
         ${progress("Career readiness", 78)}
@@ -1572,8 +1585,22 @@ async function loadFunctionalData(route) {
       functionalState.certificates = await api("/certificates") || [];
     },
     mentor: async () => {
-      functionalState.chats = await api("/ai-mentor/chat") || [];
-    },
+  const [chats, profile, roadmaps, dsa, resume, projects] = await Promise.all([
+    api("/ai-mentor/chat"),
+    api("/profile"),
+    api("/roadmaps"),
+    api("/dsa/progress"),
+    api("/resume"),
+    api("/projects"),
+  ]);
+
+  functionalState.chats = chats || [];
+  functionalState.profile = profile || {};
+  functionalState.roadmaps = roadmaps || [];
+  functionalState.dsa = dsa || {};
+  functionalState.resume = resume || {};
+  functionalState.projects = projects || [];
+},
     profile: async () => {
       functionalState.profile = await api("/profile");
     },
@@ -1606,6 +1633,41 @@ function normalizeAdminResource(resource) {
 
 function emptyState(title, body) {
   return `<div class="empty-state"><div><h3>${title}</h3><p>${body}</p></div></div>`;
+}
+function mentorSuggestions() {
+  const profile = functionalState.profile || {};
+  const roadmap = functionalState.roadmaps?.[0] || functionalState.dashboard?.roadmap || {};
+  const modules = roadmap.modules || [];
+  const activeModule =
+    modules.find((item) => item.status === "in-progress" || item.progress < 100) ||
+    modules[0] ||
+    {};
+
+  const skillPool = [
+    ...(activeModule.skills || []),
+    ...(profile.skills || []),
+    ...((functionalState.projects || []).flatMap((item) => item.skills || [])),
+    ...((functionalState.dsa?.topics || []).map((item) => item.name)),
+  ].filter(Boolean);
+
+  const uniqueSkills = [...new Set(skillPool)].slice(0, 4);
+  const goal = profile.goal || currentUser.goal || roadmap.careerGoal || "career growth";
+  const mainSkill = uniqueSkills[0] || activeModule.title || goal;
+
+  return [
+    {
+      title: `Revise ${mainSkill}`,
+      prompt: `Teach me ${mainSkill} from basics to interview level according to my ${goal} roadmap.`,
+    },
+    {
+      title: `Practice ${mainSkill}`,
+      prompt: `Give me practice questions and mini tasks for ${mainSkill}. Start from easy and increase difficulty.`,
+    },
+    {
+      title: `Fix weak areas`,
+      prompt: `Analyze my current roadmap and skills. Tell me what I should study next for ${goal}.`,
+    },
+  ];
 }
 
 function courseCardFromApi(course) {
@@ -2519,6 +2581,17 @@ bindPage = function configuredBindPage() {
   document.querySelectorAll("[data-form='password-reset']").forEach((form) => form.addEventListener("submit", handlePasswordReset));
   document.querySelectorAll("[data-action='upgrade-plan']").forEach((button) => button.addEventListener("click", handlePlanUpgrade));
   document.querySelectorAll("[data-action='open-upgrade']").forEach((link) => {
+    document.querySelectorAll("[data-mentor-suggestion]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const form = document.querySelector("[data-form='chat']");
+    const input = form?.querySelector("input[name='message']");
+
+    if (!form || !input) return;
+
+    input.value = button.dataset.mentorSuggestion;
+    form.requestSubmit();
+  });
+});
     link.addEventListener("click", (event) => {
       event.preventDefault();
       setRoute("pricing");
