@@ -51,7 +51,6 @@ let pendingRoadmapGeneration = false;
 let pendingRoadmapSelection = false;
 let assessmentStep = 0;
 const assessmentAnswers = {};
-const pendingAssessmentKey = "studox-pending-assessment";
 
 if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
   localStorage.removeItem("demoSession");
@@ -133,6 +132,44 @@ const dashboardStats = [
   ["Learning Time", 126, "h", "book", "8h this week"],
 ];
 
+const roadmapModules = [
+  {
+    title: "Foundations",
+    status: "completed",
+    progress: 100,
+    desc: "HTML, CSS, JavaScript, Git, browser fundamentals and problem solving basics.",
+    skills: ["HTML", "CSS", "Git", "JavaScript"],
+  },
+  {
+    title: "Frontend Development",
+    status: "active",
+    progress: 68,
+    desc: "React, component architecture, state, routing, APIs, forms and polished UI systems.",
+    skills: ["React", "Routing", "State", "UI"],
+  },
+  {
+    title: "Backend Development",
+    status: "upcoming",
+    progress: 24,
+    desc: "Node.js, Express, authentication, REST APIs, validations and production structure.",
+    skills: ["Node.js", "Express", "JWT", "APIs"],
+  },
+  {
+    title: "Databases",
+    status: "upcoming",
+    progress: 8,
+    desc: "MongoDB modeling, aggregation, indexing, schema design and query optimization.",
+    skills: ["MongoDB", "Mongoose", "Indexes"],
+  },
+  {
+    title: "Projects & Deployment",
+    status: "upcoming",
+    progress: 0,
+    desc: "Ship portfolio-grade projects with CI, environment variables, cloud hosting and docs.",
+    skills: ["Deploy", "CI", "Portfolio"],
+  },
+];
+
 const courses = [
   {
     title: "Full Stack Developer",
@@ -173,6 +210,13 @@ const tests = [
   ["React Weekly Test", "Jul 08", "45 min", "20 questions"],
   ["DSA Arrays Sprint", "Jul 10", "60 min", "18 questions"],
   ["Backend API Quiz", "Jul 12", "40 min", "16 questions"],
+];
+
+const activities = [
+  ["Completed React hooks lesson", "2 hours ago", "green"],
+  ["Solved 6 DSA problems", "Yesterday", "blue"],
+  ["Uploaded resume v3", "2 days ago", "purple"],
+  ["Applied to Frontend internship", "3 days ago", "amber"],
 ];
 
 const dsaProblems = [
@@ -478,6 +522,10 @@ function studoxLandingPage() {
   </main>`;
 }
 
+function floatingCard(pos, title, sub, iconName) {
+  return `<article class="float-card ${pos}"><span class="mini-icon">${icon(iconName)}</span><div><strong>${title}</strong><span>${sub}</span></div></article>`;
+}
+
 function assessmentQuestionScreen() {
   const roadmaps = functionalState.generatedRoadmaps || [];
   const previewIndex = Math.min(functionalState.previewRoadmapIndex || 0, Math.max(0, roadmaps.length - 1));
@@ -524,95 +572,24 @@ function roadmapPreview(roadmap) {
     <button class="btn primary" type="button" data-action="choose-roadmap" ${pendingRoadmapSelection ? "disabled" : ""}>${pendingRoadmapSelection ? "Saving..." : "Choose Roadmap"}</button>
   </article>`;
 }
+
 const assessmentQuestions = [
-  {
-    id: "goal",
-    key: "goal",
-    label: "Career Goal",
-    title: "What do you want to become?",
-    question: "What do you want to become?",
-    hint: "Choose the main career direction for your roadmap.",
-    description: "Choose the main career direction for your roadmap.",
-    type: "radio",
-    options: ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Not sure yet"]
-  },
-  {
-    id: "level",
-    key: "level",
-    label: "Current Level",
-    title: "What is your current level?",
-    question: "What is your current level?",
-    hint: "This helps Studox.ai set the right difficulty.",
-    description: "This helps Studox.ai set the right difficulty.",
-    type: "radio",
-    options: ["Beginner", "Basic coding knowledge", "Intermediate", "Advanced"]
-  },
-  {
-    id: "timeline",
-    key: "timeline",
-    label: "Target Timeline",
-    title: "How fast do you want results?",
-    question: "How fast do you want results?",
-    hint: "We will create a realistic learning speed.",
-    description: "We will create a realistic learning speed.",
-    type: "radio",
-    options: ["1 month", "3 months", "6 months", "12 months"]
-  },
-  {
-    id: "hours",
-    key: "hours",
-    label: "Weekly Time",
-    title: "How many hours can you study weekly?",
-    question: "How many hours can you study weekly?",
-    hint: "Pick a schedule you can actually follow.",
-    description: "Pick a schedule you can actually follow.",
-    type: "radio",
-    options: ["3-5 hours", "6-8 hours", "9-12 hours", "15+ hours"]
-  },
-  {
-    id: "focus",
-    key: "focus",
-    label: "Main Focus",
-    title: "What should the roadmap focus on most?",
-    question: "What should the roadmap focus on most?",
-    hint: "Your roadmap will prioritize this area.",
-    description: "Your roadmap will prioritize this area.",
-    type: "radio",
-    options: ["Job ready skills", "Internship preparation", "Projects", "DSA and coding", "Interview preparation"]
-  },
-  {
-    id: "projects",
-    key: "projects",
-    label: "Project Experience",
-    title: "How many projects have you built?",
-    question: "How many projects have you built?",
-    hint: "This helps us decide your project difficulty.",
-    description: "This helps us decide your project difficulty.",
-    type: "radio",
-    options: ["0 projects", "1-2 projects", "3-5 projects", "5+ projects"]
-  },
-  {
-    id: "learningStyle",
-    key: "learningStyle",
-    label: "Learning Style",
-    title: "How do you learn best?",
-    question: "How do you learn best?",
-    hint: "We will shape your weekly plan around this.",
-    description: "We will shape your weekly plan around this.",
-    type: "radio",
-    options: ["Video lessons", "Practice tasks", "Projects", "Reading notes", "Mixed learning"]
-  },
-  {
-    id: "extra",
-    key: "extra",
-    label: "Extra Context",
-    title: "Anything else Studox.ai should know?",
-    question: "Anything else Studox.ai should know?",
-    hint: "Example: college year, weak topics, target company, current skills.",
-    description: "Example: college year, weak topics, target company, current skills.",
-    type: "textarea",
-    placeholder: "Write your current skills, target, weak topics, or dream role..."
-  }
+  { id: "q1", section: "Career Identity", title: "Career Identity", prompt: "Which career path are you most interested in pursuing?", options: ["Software Development", "AI / Data", "Cybersecurity", "Design & Creative"] },
+  { id: "q2", section: "Career Identity", title: "Career Identity", prompt: "What is your primary reason for learning this field?", options: ["Get a Job / Internship", "Build My Own Startup / Business", "Freelancing / Earn Money", "Learn for Personal Growth"] },
+  { id: "q3", section: "Career Identity", title: "Career Identity", prompt: "When do you want to achieve this goal?", options: ["Within 6 Months", "Within 1 Year", "More than 1 Year", "No Fixed Timeline"] },
+  { id: "q4", section: "Career Identity", title: "Career Identity", prompt: "How confident are you about this career choice?", options: ["Very Confident", "Somewhat Confident", "Just Exploring", "Completely Unsure"] },
+  { id: "q5", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How many hours can you realistically study each week?", options: ["Less than 5 Hours", "5-10 Hours", "10-20 Hours", "More than 20 Hours"] },
+  { id: "q6", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What device will you mainly use?", options: ["Laptop/Desktop", "Tablet", "Mobile Phone", "Shared Computer"] },
+  { id: "q7", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What is your learning budget?", options: ["Free Resources Only", "Up to Rs. 2,000", "Up to Rs. 10,000", "No Budget Limit"] },
+  { id: "q8", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How comfortable are you with English technical content?", options: ["Very Comfortable", "Comfortable", "Need Simple Explanations", "Prefer Regional Language"] },
+  { id: "q9", section: "Experience", title: "Experience", prompt: "Have you built any projects before?", options: ["Yes, Many", "Yes, A Few", "Only Small Practice Projects", "Never"] },
+  { id: "q10", section: "Experience", title: "Experience", prompt: "Have you completed any online courses?", options: ["Several", "A Few", "Started but Didn't Finish", "Never"] },
+  { id: "q11", section: "Experience", title: "Experience", prompt: "Which statement best describes your practical experience?", options: ["I build complete projects independently.", "I need guidance but can complete projects.", "I understand concepts but rarely build projects.", "I'm just starting."] },
+  { id: "q12", section: "Learning Style", title: "Learning Style", prompt: "How do you learn fastest?", options: ["Building Projects", "Watching Videos", "Reading Documentation", "Classroom Teaching"] },
+  { id: "q13", section: "Learning Style", title: "Learning Style", prompt: "Which resource do you trust most?", options: ["Official Documentation", "YouTube", "AI Assistants", "Online Courses"] },
+  { id: "q14", section: "Motivation", title: "Motivation", prompt: "What usually stops your learning progress?", options: ["Lack of Time", "Lack of Motivation", "Confusion", "Distractions"] },
+  { id: "q15", section: "Motivation", title: "Motivation", prompt: "What motivates you the most?", options: ["Career Growth", "Money", "Building Products", "Learning New Things"] },
+  { id: "q16", section: "Portfolio & Additional Context", title: "Portfolio & Additional Context", prompt: "Is there anything else you'd like the AI to know before creating your personalized roadmap?", type: "textarea" },
 ];
 
 function currentAssessmentValue(question = assessmentQuestions[assessmentStep]) {
@@ -653,35 +630,6 @@ function assessmentFormData() {
     payload[question.id] = currentAssessmentValue(question);
     return payload;
   }, {});
-}
-
-function savePendingAssessment(data) {
-  sessionStorage.setItem(pendingAssessmentKey, JSON.stringify({
-    data,
-    answers: assessmentAnswers,
-    step: assessmentStep,
-    savedAt: new Date().toISOString(),
-  }));
-}
-
-function getPendingAssessment() {
-  try {
-    return JSON.parse(sessionStorage.getItem(pendingAssessmentKey) || "null");
-  } catch (_error) {
-    sessionStorage.removeItem(pendingAssessmentKey);
-    return null;
-  }
-}
-
-function clearPendingAssessment() {
-  sessionStorage.removeItem(pendingAssessmentKey);
-}
-
-function restorePendingAssessment(pending) {
-  if (!pending?.answers) return;
-  Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
-  Object.assign(assessmentAnswers, pending.answers);
-  assessmentStep = Math.min(assessmentQuestions.length - 1, Number(pending.step || assessmentQuestions.length - 1));
 }
 
 function courseCard(course) {
@@ -808,6 +756,86 @@ function topbar(dark) {
       </div>
     </div>
   </header>`;
+}
+
+function dashboardPage() {
+  return appLayout(`<div class="welcome-card">
+      <h1>Welcome back, ${currentUser.name.split(" ")[0]}</h1>
+      <p>Your AI mentor has adjusted this week's roadmap around React performance, backend APIs and DSA pattern practice.</p>
+      <div class="welcome-meta"><span class="chip">Current goal: ${currentUser.goal}</span><span class="chip">Study streak: 18 days</span><span class="chip">Next test: React Weekly</span></div>
+    </div>
+    ${statCards()}
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Performance Overview</h2><span class="chip purple">Animated analytics</span></div>
+        ${barChart()}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Learning Progress</h2><span class="chip green">On track</span></div>
+        <div class="circle-progress" style="--percent:72" data-label="72%"></div>
+        ${progress("Frontend roadmap", 68)}
+        ${progress("Backend readiness", 42)}
+        ${progress("DSA consistency", 81)}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Upcoming Tests</h2><a href="#tests">View tests</a></div>
+        <div class="list">${tests.map(testItem).join("")}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Study Streak</h2><span class="chip amber">18 days</span></div>
+        ${barChart([42, 55, 60, 66, 84, 78, 91], ["M", "T", "W", "T", "F", "S", "S"])}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Recent Activity</h2></div>
+        <div class="list">${activities.map(([title, time, color]) => `<div class="list-item"><div><h4>${title}</h4><p>${time}</p></div><span class="chip ${color === "green" ? "green" : color === "amber" ? "amber" : "purple"}">${color}</span></div>`).join("")}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Recommended Courses</h2><a href="#courses">Open</a></div>
+        <div class="list">${courses.slice(0, 3).map((course) => `<div class="list-item"><div><h4>${course.title}</h4><p>${course.desc}</p></div><span class="chip">${course.progress}%</span></div>`).join("")}</div>
+      </div>
+    </div>`, "dashboard");
+}
+
+function roadmapPage() {
+  return appLayout(`<div class="page-head">
+      <div><h1>My Learning Roadmap</h1><p>Track every milestone from foundations to deployed projects with AI-adjusted sequencing.</p></div>
+      <div class="toggle-group"><button class="active">Timeline View</button><button data-toast="Tree view placeholder switched.">Tree View</button></div>
+    </div>
+    ${statCards([
+      ["Current Level", 12, "", "star", "Intermediate"],
+      ["Overall Progress", 72, "%", "chart", "On track"],
+      ["Time to Goal", 9, "w", "map", "Estimated"],
+      ["Skills Learned", 36, "", "book", "12 advanced"],
+      ["Next Milestone", 68, "%", "trophy", "React master"],
+    ])}
+    <div class="roadmap-layout">
+      <div class="panel">
+        <div class="timeline">
+          ${roadmapModules
+            .map(
+              (item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}">
+                <span class="node"></span>
+                <div class="module-card">
+                  <header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>
+                  ${progress("Module progress", item.progress)}
+                  <div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div>
+                </div>
+              </article>`,
+            )
+            .join("")}
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head"><h2>Roadmap Health</h2><span class="chip green">Healthy</span></div>
+        <div class="circle-progress" style="--percent:72" data-label="72%"></div>
+        ${progress("Daily learning goal", 84)}
+        ${progress("Milestone confidence", 76)}
+        <h3 style="margin-top:18px">Skills you will gain</h3>
+        <div class="skills-row">${["React", "Node.js", "MongoDB", "Testing", "Deployment", "System Design"].map((skill) => `<span class="chip purple">${skill}</span>`).join("")}</div>
+        <h3 style="margin-top:18px">Next milestone</h3>
+        <p class="muted">Complete React forms, API integration and performance mini project.</p>
+      </aside>
+    </div>`, "roadmap");
 }
 
 function coursesPage() {
@@ -1275,8 +1303,8 @@ const routeMap = {
   landing: studoxLandingPage,
   login: () => authPage("login"),
   signup: () => authPage("signup"),
-  dashboard: () => "",
-  roadmap: () => "",
+  dashboard: dashboardPage,
+  roadmap: roadmapPage,
   courses: coursesPage,
   tests: testsPage,
   dsa: dsaPage,
@@ -1588,24 +1616,13 @@ api = async function functionalApi(path, options = {}) {
     const res = await fetch(`${apiBase}${path}`, { ...options, headers });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
-    if (!res.ok) throw new Error(userFriendlyApiError(data.error || data.message || "Request failed."));
+    if (!res.ok) throw new Error(data.message || "Request failed.");
     return data;
   } catch (error) {
     toast(error.message || "Server se connection nahi ho paaya.");
     return null;
   }
 };
-
-function userFriendlyApiError(message) {
-  const text = String(message || "");
-  if (/quota exceeded|exceeded your current quota|rate-limit|rate limit/i.test(text)) {
-    const retry = text.match(/retry in\s+([\d.]+)s/i);
-    return `AI limit reached. Please try again${retry ? ` in ${Math.ceil(Number(retry[1]))} seconds` : " after some time"}.`;
-  }
-  if (/api key|permission|unauthorized|forbidden/i.test(text)) return "AI setup issue. Please check the API key.";
-  if (/invalid json|empty response/i.test(text)) return "AI response was incomplete. Please try again.";
-  return text.length > 140 ? `${text.slice(0, 137)}...` : text;
-}
 
 render = async function functionalRender() {
   const route = routeMap[getRoute()] ? getRoute() : "landing";
@@ -1788,13 +1805,12 @@ routeMap.dashboard = function functionalDashboardPage() {
 
 routeMap.roadmap = function functionalRoadmapPage() {
   const roadmap = functionalState.roadmaps[0] || {};
-  const liveModules = (roadmap.modules || roadmap.weeks || []).map((item, index) => ({
+  const liveModules = (roadmap.modules || []).map((item) => ({
     title: item.title,
-    status: item.status === "in-progress" ? "active" : item.status || (index === 0 ? "active" : "locked"),
+    status: item.status === "in-progress" ? "active" : item.status,
     progress: item.progress || 0,
-    desc: item.description || `${item.estimatedHours || 0} estimated hours`,
-    skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
-    resources: item.resources || [],
+    desc: item.description || "Roadmap module",
+    skills: item.skills || [],
   }));
   const completedModules = liveModules.filter((item) => item.status === "completed").length;
   const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
@@ -1802,11 +1818,11 @@ routeMap.roadmap = function functionalRoadmapPage() {
     ${statCards([
       ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
-      ["Time to Goal", roadmap.timeToGoalWeeks || roadmap.estimatedDurationWeeks || 0, "w", "map", "Estimated"],
+      ["Time to Goal", roadmap.timeToGoalWeeks || 0, "w", "map", "Estimated"],
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
       ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
-    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("")}</div></div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized AI roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
+    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div></div></article>`).join("") || emptyState("No roadmap yet", "Signup ke goal se roadmap create hota hai.")}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
 };
 
 routeMap.courses = function functionalCoursesPage() {
@@ -1986,7 +2002,6 @@ bindPage = function functionalBindPage() {
     });
   });
   bindFunctionalActions();
-
 };
 
 function bindFunctionalActions() {
@@ -1994,9 +2009,6 @@ function bindFunctionalActions() {
     const result = await api(`/courses/${button.dataset.courseId}/continue`, { method: "POST", body: "{}" });
     toast(result?.message || "Progress updated.");
     await render();
-    document.querySelectorAll("[data-action='choose-roadmap-signup']").forEach((button) => {
-  button.addEventListener("click", handleChooseRoadmapSignup);
-});
   }));
   document.querySelectorAll("[data-action='bookmark-course']").forEach((button) => button.addEventListener("click", () => toast("Course bookmarked locally.")));
   document.querySelectorAll("[data-action='share-course']").forEach((button) => button.addEventListener("click", () => toast("Course share link ready.")));
@@ -2053,72 +2065,41 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='admin-delete']").forEach((button) => button.addEventListener("click", handleAdminDelete));
 }
 
-function assessmentTimelineWeeks(value = "") {
-  if (value.includes("1 month")) return 4;
-  if (value.includes("3 months")) return 12;
-  if (value.includes("6 months")) return 24;
-  if (value.includes("12 months")) return 48;
-  return 12;
-}
-
-function assessmentWeeklyHours(value = "") {
-  if (value.includes("3-5")) return 4;
-  if (value.includes("6-8")) return 7;
-  if (value.includes("9-12")) return 10;
-  if (value.includes("15")) return 15;
-  return 7;
-}
-
-function assessmentFieldFromGoal(goal = "") {
-  const text = String(goal).toLowerCase();
-  if (text.includes("ai") || text.includes("ml")) return "Artificial Intelligence";
-  if (text.includes("data")) return "Data Science";
-  if (text.includes("cyber")) return "Cybersecurity";
-  if (text.includes("design")) return "Design";
-  return "Computer Science";
-}
-
-function assessmentInputPayload() {
-  const profile = state.profile || {};
-  const goal = assessmentAnswers.goal || "Full Stack Developer";
-  const field = profile.field || profile.branch || assessmentFieldFromGoal(goal);
-
+function assessmentInputPayload(data) {
+  const profile = functionalState.profile || {};
+  const goal = data.q1 || profile.goal || currentUser.goal || "Full Stack Developer";
+  const field = data.q2 || profile.field || profile.branch || "Computer Science";
   return {
-    goal,
-    targetRole: goal,
-    field,
-    level: assessmentAnswers.level || "Beginner",
-    targetTimelineWeeks: assessmentTimelineWeeks(assessmentAnswers.timeline || "3 months"),
-    weeklyAvailabilityHours: assessmentWeeklyHours(assessmentAnswers.hours || "6-8 hours"),
-    preferredLearningStyle: assessmentAnswers.learningStyle || "Mixed learning",
-    focusArea: assessmentAnswers.focus || "Job ready skills",
-    projectExperience: assessmentAnswers.projects || "0 projects",
-    extraContext: assessmentAnswers.extra || "",
+    careerGoal: goal,
+    currentLevel: String(data.q4 || profile.level || currentUser.level || "beginner").toLowerCase(),
+    targetTimelineWeeks: Number(data.q5) || 12,
+    weeklyAvailabilityHours: Number(data.q6) || 10,
+    learningStyle: data.q12 || "project-based",
+    preferredLanguage: data.q13 || "English",
     background: {
+      educationLevel: data.q3,
       fieldOfStudy: field,
-      currentLevel: assessmentAnswers.level || "Beginner",
-      currentSkills: [assessmentAnswers.focus || "Job ready skills"],
-      learningGoal: goal
-    }
+      workExperience: data.q9 || "none",
+      motivation: data.q14 || "",
+      additionalContext: data.q16 || "",
+    },
+    skills: {
+      known: data.q10 ? [data.q10] : profile.skills || [],
+      weak: data.q11 ? [data.q11] : [],
+      target: [goal, field, data.q15].filter(Boolean),
+    },
+    constraints: {
+      budget: data.q8 || "free",
+      deviceAccess: data.q7 || "laptop",
+      internetAccess: "stable",
+    },
+    preferences: {
+      includeProjects: true,
+      includePracticeTasks: true,
+      includeFreeResources: true,
+      includeInterviewPrep: true,
+    },
   };
-}
-function handleChooseRoadmapSignup(event) {
-  const card = event.target.closest("[data-action='choose-roadmap-signup']");
-  if (!card) return;
-
-  const index = Number(card.dataset.roadmapIndex || 0);
-  const roadmap = functionalState.generatedRoadmaps[index];
-
-  if (roadmap) {
-    localStorage.setItem("studox-pending-roadmap", JSON.stringify({
-      selectedAt: new Date().toISOString(),
-      roadmap,
-      assessment: assessmentInputPayload()
-    }));
-  }
-
-  toast("Roadmap selected. Create your account to save it.");
-  navigate("signup");
 }
 
 function handleAssessmentOptionChange(event) {
@@ -2126,7 +2107,7 @@ function handleAssessmentOptionChange(event) {
   const other = form?.querySelector(`[data-assessment-other="${event.currentTarget.name}"]`);
   if (other) other.style.display = event.currentTarget.value === "Other" ? "" : "none";
   syncAssessmentAnswer(form);
-  if (event.currentTarget.value !== "Other" && assessmentStep < assessmentQuestions.length - 1) {
+  if (event.currentTarget.value !== "Other" && assessmentStep < 13) {
     assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
     app.innerHTML = assessmentQuestionScreen();
     bindPage();
@@ -2196,52 +2177,24 @@ async function handleRoadmapAssessmentSubmit(event) {
   const form = event.currentTarget;
   if (!validateAssessmentStep(form)) return;
   const data = assessmentFormData();
-  if (!hasDemoSession()) {
-    savePendingAssessment(data);
-    toast("Please log in to generate your roadmap.");
-    setRoute("login");
-    return;
-  }
-  await generateRoadmapsFromAssessment(data, form);
-}
-
-async function generateRoadmapsFromAssessment(data, form = null) {
-  if (pendingRoadmapGeneration) return false;
   pendingRoadmapGeneration = true;
-  form?.querySelectorAll("button, input, textarea").forEach((node) => {
+  form.querySelectorAll("button, input, textarea").forEach((node) => {
     node.disabled = true;
   });
-  if (!form) {
-    app.innerHTML = assessmentQuestionScreen();
-    bindPage();
-  }
   const result = await api("/roadmaps/generate", {
     method: "POST",
     body: JSON.stringify(assessmentInputPayload(data)),
   });
   pendingRoadmapGeneration = false;
-  form?.querySelectorAll("button, input, textarea").forEach((node) => {
+  form.querySelectorAll("button, input, textarea").forEach((node) => {
     node.disabled = false;
   });
-  if (!result?.roadmaps) {
-    app.innerHTML = assessmentQuestionScreen();
-    bindPage();
-    return false;
-  }
+  if (!result?.roadmaps) return;
   functionalState.generatedRoadmaps = result.roadmaps;
   functionalState.previewRoadmapIndex = 0;
-  clearPendingAssessment();
   toast("Roadmap options received.");
   app.innerHTML = assessmentQuestionScreen();
   bindPage();
-  return true;
-}
-
-async function resumePendingRoadmapGeneration() {
-  const pending = getPendingAssessment();
-  if (!pending?.data) return false;
-  restorePendingAssessment(pending);
-  return await generateRoadmapsFromAssessment(pending.data);
 }
 
 async function handleFunctionalTestSubmit(event) {
@@ -2481,11 +2434,6 @@ function miniCourseCard(course, index) {
 
 routeMap.dashboard = function properStudentDashboardPage() {
   const data = functionalState.dashboard || {};
-  const roadmap = data.roadmap || {};
-  const roadmapWeeks = roadmap.weeks || roadmap.modules || [];
-  const roadmapTitle = roadmap.title || "Roadmap";
-  const roadmapSummary = roadmap.summary || "Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.";
-  const nextMilestone = roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path";
   const liveCourses = data.recommendedCourses || [];
   const liveTests = data.upcomingTests || [];
   const activity = data.recentActivity || [];
@@ -2497,8 +2445,8 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
-    ["Roadmap Weeks", roadmapWeeks.length, "", "map", "Modules"],
-    ["Duration", roadmap.estimatedDurationWeeks || 0, "w", "trophy", "Estimated"],
+    ["DSA Solved", data.dsa?.problemsSolved || 0, "", "code", "Practice"],
+    ["XP Points", data.xpPoints || 0, "", "trophy", "Live"],
   ];
 
   return appLayout(`<section class="proper-dashboard premium-dashboard">
@@ -2507,7 +2455,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
       <div>
         <span class="ai-pill">AI STUDENT COMMAND CENTER</span>
         <h1>Welcome back, ${firstName}</h1>
-        <p>${roadmapSummary}</p>
+        <p>Your live learning cockpit is ready. Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.</p>
         <div class="hero-actions">
           <a class="btn primary beast-glow" href="#courses">Continue Learning</a>
           <a class="btn" href="#tests">Start Test</a>
@@ -2526,7 +2474,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
     <div class="dashboard-command-deck">
       <a class="command-card primary" href="#roadmap">
         <span>${icon("map")}</span>
-        <div><strong>${roadmapTitle}</strong><small>${nextMilestone}</small></div>
+        <div><strong>Next Milestone</strong><small>Open roadmap path</small></div>
         <b>${progressValue}%</b>
       </a>
       <a class="command-card" href="#tests">
@@ -2745,7 +2693,6 @@ handleLogin = async function configuredHandleLogin(event) {
   setFormBusy(form, false);
   if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
   saveAuthSession(result);
-  if (await resumePendingRoadmapGeneration()) return;
   setRoute("dashboard");
 };
 
