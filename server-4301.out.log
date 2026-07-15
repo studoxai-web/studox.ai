@@ -1,0 +1,7 @@
+MongoDB connected.
+Studox.ai running at http://localhost:4301
+[0mGET / [32m200[0m 51.337 ms - 980[0m
+[0mGET /api/health [32m200[0m 12.538 ms - 89[0m
+[0mGET /app.js [32m200[0m 3.347 ms - 181468[0m
+[0mPOST /api/roadmaps/generate [32m200[0m 17173.046 ms - 3491[0m
+[0mGET /styles.css [32m200[0m 2.607 ms - 132183[0m

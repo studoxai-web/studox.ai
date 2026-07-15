@@ -124,6 +124,17 @@ const sideLinks = [
   ["settings", "Settings", "settings"],
   ["admin", "Admin Panel", "admin"],
 ];
+const webAvailableFeatureRoutes = new Set(["dashboard", "roadmap", "courses", "mentor", "profile", "settings"]);
+const appComingSoonRoutes = new Set(sideLinks.map(([key]) => key).filter((key) => !webAvailableFeatureRoutes.has(key)));
+const appComingSoonLabels = Object.fromEntries(sideLinks.map(([key, label]) => [key, label]));
+
+function isAppComingSoonRoute(route) {
+  return appComingSoonRoutes.has(String(route || "").replace("#", ""));
+}
+
+function appComingSoonLabel(route) {
+  return appComingSoonLabels[String(route || "").replace("#", "")] || "This feature";
+}
 
 const dashboardStats = [
   ["Overall Progress", 72, "%", "chart", "12% faster this month"],
@@ -218,7 +229,27 @@ function brand() {
 }
 
 function setRoute(route) {
+  if (isAppComingSoonRoute(route)) {
+    showAppComingSoonModal(route);
+    window.location.hash = hasDemoSession() ? "dashboard" : "landing";
+    return;
+  }
   window.location.hash = route;
+}
+
+function scrollAssessmentToTop() {
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    document.querySelector(".assessment-view")?.scrollIntoView({ block: "start" });
+  });
+}
+
+function renderAssessmentScreen(options = {}) {
+  app.innerHTML = assessmentQuestionScreen();
+  bindPage();
+  if (options.scroll !== false) scrollAssessmentToTop();
 }
 
 function getRoute() {
@@ -236,6 +267,46 @@ function toast(message) {
     window.setTimeout(() => node.remove(), 220);
   }, 2600);
 }
+function closeAppComingSoonModal() {
+  document.querySelector(".app-coming-soon-backdrop")?.remove();
+}
+
+function showAppComingSoonModal(route) {
+  const label = appComingSoonLabel(route);
+  closeAppComingSoonModal();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<div class="app-coming-soon-backdrop" role="dialog" aria-modal="true" aria-label="Studox.ai app coming soon">
+      <section class="app-coming-soon-modal">
+        <button class="modal-close" type="button" data-app-coming-close aria-label="Close">x</button>
+        <div class="app-coming-icon"><span>${icon("lock")}</span></div>
+        <span class="ai-pill">STUDOX.AI APP</span>
+        <h2>${label} is coming to the app</h2>
+        <p>This feature will be available inside the Studox.ai app. The app is coming soon with the complete student toolkit, while Roadmap, Courses and AI Mentor stay open on web.</p>
+        <div class="app-coming-actions">
+          <button class="btn" type="button" data-app-coming-close>Got it</button>
+          <a class="btn primary glow" href="#roadmap" data-app-coming-open>Open Roadmap</a>
+        </div>
+      </section>
+    </div>`,
+  );
+  document.querySelectorAll("[data-app-coming-close]").forEach((node) => node.addEventListener("click", closeAppComingSoonModal));
+  document.querySelector("[data-app-coming-open]")?.addEventListener("click", closeAppComingSoonModal);
+}
+function handleAppComingSoonLinkClick(event) {
+  const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+  const link = target?.closest("a[href^='#'], [data-route]");
+  if (!link) return;
+  const rawRoute = link.dataset.route || link.getAttribute("href")?.replace("#", "");
+  if (!isAppComingSoonRoute(rawRoute)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  document.getElementById("sidebar")?.classList.remove("open");
+  document.querySelector("[data-mobile-close]")?.classList.remove("open");
+  showAppComingSoonModal(rawRoute);
+}
+
+document.addEventListener("click", handleAppComingSoonLinkClick, true);
 
 async function api(path, options = {}) {
   try {
@@ -312,7 +383,7 @@ function studoxLandingPage() {
           practice, real projects and career guidance all in one place.
         </p>
         <div class="hero-actions">
-          <button class="btn primary" type="button" data-action="start-assessment">✨ Build My AI Roadmap</button>
+          <button class="btn primary" type="button" data-action="start-assessment">Build My AI Roadmap</button>
           <a class="btn ghost" href="#how-it-works">${icon("test")} See How It Works</a>
         </div>
         <div class="hero-trust">
@@ -485,6 +556,7 @@ function assessmentQuestionScreen() {
   const hasRoadmaps = !pendingRoadmapGeneration && roadmaps.length > 0;
   const progressValue = hasRoadmaps ? 100 : Math.round(((assessmentStep + 1) / assessmentQuestions.length) * 100);
   const answeredCount = assessmentQuestions.filter((item) => currentAssessmentValue(item)).length;
+  const selectedValue = currentAssessmentValue(question);
 
   return `<main class="landing view assessment-view classic-premium-assessment">
     <nav class="landing-nav assessment-nav">
@@ -496,11 +568,15 @@ function assessmentQuestionScreen() {
         <div class="assessment-grid">
           <aside class="assessment-side classic-panel">
             <span class="eyebrow">Career assignment</span>
-            <h1>Build your AI roadmap</h1>
-            <p>Answer quick questions. Studox.ai will convert your goal, level, time and learning style into three clear roadmap tracks.</p>
-            <div class="assessment-meter"><span style="width:${progressValue}%"></span></div>
+            <h1>Build a focused AI roadmap</h1>
+            <p>Answer a few sharp questions and get three practical roadmap tracks built around your goal, level, weekly time and learning style.</p>
+            <div class="assessment-meter" aria-label="Assessment progress"><span style="width:${progressValue}%"></span></div>
             <div class="assessment-mini"><strong>${progressValue}%</strong><span>${answeredCount}/${assessmentQuestions.length} answers completed</span></div>
-            <div class="assessment-tags"><span>Classic planning</span><span>Premium roadmap</span><span>Signup ready</span></div>
+            <div class="assessment-highlight-panel">
+              <strong>${question.label}</strong>
+              <span>${question.hint || question.description || "This answer helps personalize your roadmap."}</span>
+            </div>
+            <div class="assessment-tags"><span>Goal clarity</span><span>Weekly plan</span><span>Signup ready</span></div>
           </aside>
           <form class="assessment-card premium-panel" data-form="roadmap-assessment">
             <div class="assessment-card-head">
@@ -511,44 +587,48 @@ function assessmentQuestionScreen() {
               <strong>${assessmentStep + 1}/${assessmentQuestions.length}</strong>
             </div>
             <p>${question.prompt || question.description || ""}</p>
+            ${selectedValue ? `<div class="assessment-selected-note"><b>Selected</b><span>${selectedValue}</span></div>` : ""}
             <div class="assessment-options ${question.type === "textarea" ? "single" : ""}">
               ${question.type === "textarea"
                 ? `<textarea class="assessment-textarea" name="${question.id}" data-assessment-field="${question.id}" placeholder="${question.placeholder || "Share anything useful for your roadmap..."}" required>${answer.value || ""}</textarea>`
-                : question.options.concat("Other").map((option) => `<label class="assessment-option"><input type="radio" name="${question.id}" value="${option}" ${answer.value === option ? "checked" : ""} required /><span>${option}</span><b>Choose</b></label>`).join("")}
-              ${question.type !== "textarea" ? `<input class="assessment-other" name="${question.id}_other" data-assessment-other="${question.id}" placeholder="Please specify" value="${answer.other || ""}" style="${answer.value === "Other" ? "" : "display:none"}" />` : ""}
+                : question.options.concat("Other").map((option) => `<label class="assessment-option"><input type="radio" name="${question.id}" value="${option}" ${answer.value === option ? "checked" : ""} required /><span class="option-copy">${option}</span><b class="option-status">${answer.value === option ? "Selected" : "Select"}</b></label>`).join("")}
+              ${question.type !== "textarea" ? `<input class="assessment-other" name="${question.id}_other" data-assessment-other="${question.id}" placeholder="Please specify your answer" value="${answer.other || ""}" style="${answer.value === "Other" ? "" : "display:none"}" />` : ""}
             </div>
             <div class="assessment-actions">
               <button class="btn" type="button" data-action="assessment-prev" ${assessmentStep === 0 ? "disabled" : ""}>Previous</button>
               ${assessmentStep < assessmentQuestions.length - 1
-                ? `<button class="btn primary" type="button" data-action="assessment-next">Next</button>`
-                : `<button class="btn primary glow" type="submit">${pendingRoadmapGeneration ? "Generating..." : "Generate 3 Roadmaps"}</button>`}
+                ? `<button class="btn primary" type="button" data-action="assessment-next">Next question</button>`
+                : `<button class="btn primary glow" type="submit">${pendingRoadmapGeneration ? "Generating roadmaps..." : "Generate 3 Roadmaps"}</button>`}
             </div>
           </form>
         </div>
+        ${pendingRoadmapGeneration ? `<div class="assessment-loading"><span class="loader"></span><div><strong>Creating your three roadmap tracks</strong><p>Studox.ai is structuring fast-track, balanced and project-heavy options from your answers.</p></div></div>` : ""}
       `}
     </section>
   </main>`;
 }
 
 function assessmentResultScreen(roadmaps) {
+  const trackNames = ["Fast Track", "Balanced Plan", "Project Heavy"];
   return `<div class="assessment-results premium-results">
     <div class="assessment-result-head">
       <span class="eyebrow">Roadmap generated</span>
       <h1>Choose your roadmap track</h1>
-      <p>Pick any one option. Signup opens immediately so the selected roadmap can be saved to your account.</p>
+      <p>Pick the path that matches your speed. Signup opens immediately and your selected roadmap stays ready for your account.</p>
     </div>
     <div class="assessment-answer-pills">
-      ${assessmentQuestions.slice(0, 6).map((question) => `<span>${question.label}: <strong>${currentAssessmentValue(question) || "Not set"}</strong></span>`).join("")}
+      ${assessmentQuestions.slice(0, 6).map((question) => `<span><em>${question.label}</em><strong>${currentAssessmentValue(question) || "Not set"}</strong></span>`).join("")}
     </div>
     <div class="assessment-roadmaps">
       ${roadmaps.slice(0, 3).map((roadmap, index) => `<button class="assessment-roadmap-card" type="button" data-action="choose-roadmap-signup" data-roadmap-index="${index}">
-        <div class="roadmap-card-top"><span class="chip purple">${roadmap.difficulty || roadmap.badge || "recommended"}</span><strong>${roadmap.estimatedDurationWeeks || 12} weeks</strong></div>
+        <div class="roadmap-card-top"><span class="track-label">Track ${String(index + 1).padStart(2, "0")}</span><strong>${roadmap.estimatedDurationWeeks || 12} weeks</strong></div>
+        <span class="roadmap-track-name">${trackNames[index] || "Roadmap Track"}</span>
         <h3>${roadmap.title || "Roadmap option"}</h3>
         <p>${roadmap.summary || "Personalized roadmap option for your selected career goal."}</p>
         <div class="roadmap-card-plan">
           ${roadmapCardSteps(roadmap).map((step, stepIndex) => `<div><span>${stepIndex + 1}</span><p>${step}</p></div>`).join("")}
         </div>
-        <small>Click to continue to signup</small>
+        <small>Continue with this roadmap</small>
       </button>`).join("")}
     </div>
     <div class="assessment-actions result-actions">
@@ -561,7 +641,7 @@ function assessmentResultScreen(roadmaps) {
 function roadmapCardSteps(roadmap = {}) {
   const weekTitles = (roadmap.weeks || []).slice(0, 3).map((week) => week.title).filter(Boolean);
   if (weekTitles.length) return weekTitles;
-  return ["Foundation plan", "Project practice", "Interview and portfolio prep"];
+  return ["Foundation and skill setup", "Guided projects and practice", "Interview and portfolio polish"];
 }
 
 function roadmapPreview(roadmap) {
@@ -577,10 +657,12 @@ const assessmentQuestions = [
   {
     id: "goal",
     key: "goal",
-    label: "Career Goal",
-    title: "What do you want to become?",
-    question: "What do you want to become?",
-    hint: "Choose the main career direction for your roadmap.",
+    label: "Career goal",
+    section: "Goal clarity",
+    title: "Which career goal should we build for?",
+    question: "Which career goal should we build for?",
+    prompt: "Choose the role you want to move toward. If you are unsure, select Not sure yet and we will keep the roadmap flexible.",
+    hint: "Your goal decides the roadmap direction, tools and project type.",
     description: "Choose the main career direction for your roadmap.",
     type: "radio",
     options: ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Not sure yet"]
@@ -588,10 +670,12 @@ const assessmentQuestions = [
   {
     id: "level",
     key: "level",
-    label: "Current Level",
-    title: "What is your current level?",
-    question: "What is your current level?",
-    hint: "This helps Studox.ai set the right difficulty.",
+    label: "Current level",
+    section: "Skill level",
+    title: "What is your current skill level?",
+    question: "What is your current skill level?",
+    prompt: "Pick the option that feels closest to your current ability. The roadmap will start from there.",
+    hint: "This keeps the roadmap realistic instead of too easy or too advanced.",
     description: "This helps Studox.ai set the right difficulty.",
     type: "radio",
     options: ["Beginner", "Basic coding knowledge", "Intermediate", "Advanced"]
@@ -599,10 +683,12 @@ const assessmentQuestions = [
   {
     id: "timeline",
     key: "timeline",
-    label: "Target Timeline",
-    title: "How fast do you want results?",
-    question: "How fast do you want results?",
-    hint: "We will create a realistic learning speed.",
+    label: "Timeline",
+    section: "Target speed",
+    title: "What timeline should we plan around?",
+    question: "What timeline should we plan around?",
+    prompt: "Choose how quickly you want to see visible progress. We will keep the plan achievable.",
+    hint: "The timeline controls weekly depth, revision and project load.",
     description: "We will create a realistic learning speed.",
     type: "radio",
     options: ["1 month", "3 months", "6 months", "12 months"]
@@ -610,10 +696,12 @@ const assessmentQuestions = [
   {
     id: "hours",
     key: "hours",
-    label: "Weekly Time",
-    title: "How many hours can you study weekly?",
-    question: "How many hours can you study weekly?",
-    hint: "Pick a schedule you can actually follow.",
+    label: "Weekly time",
+    section: "Study capacity",
+    title: "How many hours can you study each week?",
+    question: "How many hours can you study each week?",
+    prompt: "Select a weekly commitment you can actually follow with classes, work or exams.",
+    hint: "Your weekly time decides task size and practice intensity.",
     description: "Pick a schedule you can actually follow.",
     type: "radio",
     options: ["3-5 hours", "6-8 hours", "9-12 hours", "15+ hours"]
@@ -621,21 +709,25 @@ const assessmentQuestions = [
   {
     id: "focus",
     key: "focus",
-    label: "Main Focus",
-    title: "What should the roadmap focus on most?",
-    question: "What should the roadmap focus on most?",
-    hint: "Your roadmap will prioritize this area.",
+    label: "Main focus",
+    section: "Priority",
+    title: "What should your roadmap prioritize?",
+    question: "What should your roadmap prioritize?",
+    prompt: "Choose the outcome that matters most right now. The weekly plan will highlight this priority.",
+    hint: "This affects projects, practice tasks and interview preparation.",
     description: "Your roadmap will prioritize this area.",
     type: "radio",
-    options: ["Job ready skills", "Internship preparation", "Projects", "DSA and coding", "Interview preparation"]
+    options: ["Job-ready skills", "Internship preparation", "Portfolio projects", "DSA and coding", "Interview preparation"]
   },
   {
     id: "projects",
     key: "projects",
-    label: "Project Experience",
-    title: "How many projects have you built?",
-    question: "How many projects have you built?",
-    hint: "This helps us decide your project difficulty.",
+    label: "Projects built",
+    section: "Portfolio base",
+    title: "How much project experience do you have?",
+    question: "How much project experience do you have?",
+    prompt: "Tell us your current project level so the roadmap can choose the right build difficulty.",
+    hint: "Project experience helps set portfolio expectations.",
     description: "This helps us decide your project difficulty.",
     type: "radio",
     options: ["0 projects", "1-2 projects", "3-5 projects", "5+ projects"]
@@ -643,10 +735,12 @@ const assessmentQuestions = [
   {
     id: "learningStyle",
     key: "learningStyle",
-    label: "Learning Style",
+    label: "Learning style",
+    section: "Learning style",
     title: "How do you learn best?",
     question: "How do you learn best?",
-    hint: "We will shape your weekly plan around this.",
+    prompt: "Choose the format that helps you stay consistent and understand faster.",
+    hint: "This shapes the balance between videos, reading, tasks and projects.",
     description: "We will shape your weekly plan around this.",
     type: "radio",
     options: ["Video lessons", "Practice tasks", "Projects", "Reading notes", "Mixed learning"]
@@ -654,13 +748,15 @@ const assessmentQuestions = [
   {
     id: "extra",
     key: "extra",
-    label: "Extra Context",
-    title: "Anything else Studox.ai should know?",
-    question: "Anything else Studox.ai should know?",
-    hint: "Example: college year, weak topics, target company, current skills.",
+    label: "Extra context",
+    section: "Personal details",
+    title: "Anything else we should consider?",
+    question: "Anything else we should consider?",
+    prompt: "Add your college year, weak topics, target company, current skills or any constraint that matters.",
+    hint: "Extra context makes the final roadmap more personal.",
     description: "Example: college year, weak topics, target company, current skills.",
     type: "textarea",
-    placeholder: "Write your current skills, target, weak topics, or dream role..."
+    placeholder: "Example: I know HTML/CSS, weak in DSA, want an internship in 3 months..."
   }
 ];
 
@@ -819,10 +915,10 @@ function appLayout(content, route) {
         ${brand()}
         <nav class="side-nav">
           ${sideLinks
-            .map(
-              ([key, label, iconName]) =>
-                `<a class="side-link ${route === key ? "active" : ""}" href="#${key}" data-route="${key}">${icon(iconName)}<span>${label}</span></a>`,
-            )
+            .map(([key, label, iconName]) => {
+              const locked = isAppComingSoonRoute(key);
+              return `<a class="side-link ${route === key ? "active" : ""} ${locked ? "locked" : ""}" href="#${key}" data-route="${key}" ${locked ? "data-app-locked=\"true\"" : ""}>${icon(iconName)}<span>${label}</span>${locked ? "<small>App</small>" : ""}</a>`;
+            })
             .join("")}
         </nav>
         <div class="side-footer">
@@ -1342,7 +1438,13 @@ const routeMap = {
 };
 
 function render() {
-  const route = routeMap[getRoute()] ? getRoute() : "landing";
+  const requestedRoute = routeMap[getRoute()] ? getRoute() : "landing";
+  if (isAppComingSoonRoute(requestedRoute)) {
+    showAppComingSoonModal(requestedRoute);
+    window.location.hash = hasDemoSession() ? "dashboard" : "landing";
+    return;
+  }
+  const route = requestedRoute;
   app.innerHTML = routeMap[route]();
   bindPage();
   animateCounters();
@@ -2008,8 +2110,7 @@ bindPage = function functionalBindPage() {
       Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
       functionalState.generatedRoadmaps = [];
       functionalState.previewRoadmapIndex = 0;
-      app.innerHTML = assessmentQuestionScreen();
-      bindPage();
+      renderAssessmentScreen();
     });
   });
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
@@ -2235,8 +2336,7 @@ function handleAssessmentOptionChange(event) {
   syncAssessmentAnswer(form);
   if (event.currentTarget.value !== "Other" && assessmentStep < assessmentQuestions.length - 1) {
     assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
-    app.innerHTML = assessmentQuestionScreen();
-    bindPage();
+    renderAssessmentScreen();
   }
 }
 
@@ -2244,8 +2344,7 @@ function handleAssessmentNext(event) {
   const form = event.currentTarget.closest("[data-form='roadmap-assessment']");
   if (!validateAssessmentStep(form)) return;
   assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
-  app.innerHTML = assessmentQuestionScreen();
-  bindPage();
+  renderAssessmentScreen();
 }
 
 function handleAssessmentPrev(event) {
@@ -2253,14 +2352,12 @@ function handleAssessmentPrev(event) {
   if (form) syncAssessmentAnswer(form);
   if ((functionalState.generatedRoadmaps || []).length) functionalState.generatedRoadmaps = [];
   assessmentStep = Math.max(0, assessmentStep - 1);
-  app.innerHTML = assessmentQuestionScreen();
-  bindPage();
+  renderAssessmentScreen();
 }
 
 function handleRoadmapPreview(event) {
   functionalState.previewRoadmapIndex = Number(event.currentTarget.dataset.roadmapIndex || 0);
-  app.innerHTML = assessmentQuestionScreen();
-  bindPage();
+  renderAssessmentScreen();
 }
 
 async function handleChooseRoadmap(event) {
@@ -2282,8 +2379,7 @@ async function handleChooseRoadmap(event) {
 
   pendingRoadmapSelection = false;
   if (!result?.roadmap) {
-    app.innerHTML = assessmentQuestionScreen();
-    bindPage();
+    renderAssessmentScreen();
     return;
   }
 
@@ -2311,8 +2407,7 @@ async function generateRoadmapsFromAssessment(data, form = null) {
   if (pendingRoadmapGeneration) return false;
   pendingRoadmapGeneration = true;
   functionalState.generatedRoadmaps = [];
-  app.innerHTML = assessmentQuestionScreen();
-  bindPage();
+  renderAssessmentScreen();
 
   const result = await requestRoadmapOptions(assessmentInputPayload(data), data);
   pendingRoadmapGeneration = false;
@@ -2320,8 +2415,7 @@ async function generateRoadmapsFromAssessment(data, form = null) {
   functionalState.previewRoadmapIndex = 0;
   clearPendingAssessment();
   toast(result?.fallback ? "Starter roadmap options are ready." : "Roadmap options received.");
-  app.innerHTML = assessmentQuestionScreen();
-  bindPage();
+  renderAssessmentScreen();
   return true;
 }
 
@@ -2810,7 +2904,13 @@ function authResetPage() {
 }
 
 render = async function configuredRender() {
-  const route = routeMap[getRoute()] ? getRoute() : "landing";
+  const requestedRoute = routeMap[getRoute()] ? getRoute() : "landing";
+  if (isAppComingSoonRoute(requestedRoute)) {
+    showAppComingSoonModal(requestedRoute);
+    window.location.hash = hasDemoSession() ? "dashboard" : "landing";
+    return;
+  }
+  const route = requestedRoute;
   if (protectedRoutes.has(route) && !hasDemoSession()) {
     setRoute("landing");
     return;
