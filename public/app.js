@@ -525,8 +525,10 @@ function assessmentQuestionScreen() {
             </div>
           </form>
         </div>
-        ${pendingRoadmapGeneration ? `<div class="assessment-loading">${icon("bot")}<h2>Generating roadmap options</h2><p>Preparing three structured tracks. If AI takes time, Studox.ai will show instant starter options.</p></div>` : ""}
-      `}
+      </form>
+      ${pendingRoadmapGeneration ? `<div class="panel" style="width:min(100%, 620px);margin-top:16px">${emptyState("Generating roadmaps", "AI roadmap options are being prepared.")}</div>` : ""}
+      ${!pendingRoadmapGeneration && !roadmaps.length ? `<div class="panel" style="width:min(100%, 620px);margin-top:16px">${emptyState("No roadmap options yet", "Submit the assessment to generate three roadmap options.")}</div>` : ""}
+      ${!pendingRoadmapGeneration && roadmaps.length ? `<section class="pricing-grid" style="width:min(100%, 1100px);margin-top:16px">${roadmaps.slice(0, 3).map((roadmap, index) => `<article class="plan-card ${previewIndex === index ? "featured" : ""}" data-action="preview-roadmap" data-roadmap-index="${index}">${index === 1 ? `<div class="popular-badge">${icon("star")} Recommended</div>` : ""}<div class="plan-icon ${index === 1 ? "pro" : index === 2 ? "elite" : "soft"}">${icon(index === 1 ? "star" : "map")}</div><h2>${roadmap.title || `Roadmap Option ${index + 1}`}</h2><div class="plan-price">${roadmap.estimatedDurationWeeks || 0}<span> weeks</span></div><p class="muted">${roadmap.summary || "Personalized roadmap option."}</p><ul><li>${roadmap.careerGoal || "Career Goal"}</li><li>${roadmap.difficulty || "Beginner"} difficulty</li>${(roadmap.weeks || []).slice(0, 3).map((week) => `<li>${week.title || `Week ${week.weekNumber || ""}`}</li>`).join("")}</ul><button class="btn ${previewIndex === index ? "primary glow" : ""}" type="button">${previewIndex === index ? "Previewing" : "Preview Roadmap"}</button></article>`).join("")}</section>${roadmapPreview(previewRoadmap)}` : ""}
     </section>
   </main>`;
 }

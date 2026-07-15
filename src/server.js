@@ -1258,7 +1258,10 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
     }
     [profile, roadmap, userResults, userProjects, userCertificates, dsa] = await Promise.all([
       StudentProfile.findOne({ user: userId }).lean(),
+<<<<<<< HEAD
+=======
       Roadmap.findOne(roadmapOwnerQuery(userId)).sort({ createdAt: -1 }).lean(),
+>>>>>>> 3f9a0a573dd1e5e5c3a192fcbcc1fb151c247ede
       TestResult.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
       Project.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
       Certificate.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
@@ -1339,7 +1342,11 @@ function buildActivity(userId) {
 
 app.get("/api/roadmaps", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+<<<<<<< HEAD
+    let roadmaps = await Roadmap.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
+=======
     let roadmaps = await Roadmap.find(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 }).lean();
+>>>>>>> 3f9a0a573dd1e5e5c3a192fcbcc1fb151c247ede
     if (!roadmaps.length) {
       const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
       if (profile?.goal) {
