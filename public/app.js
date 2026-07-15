@@ -51,6 +51,7 @@ let pendingRoadmapGeneration = false;
 let pendingRoadmapSelection = false;
 let assessmentStep = 0;
 const assessmentAnswers = {};
+const pendingAssessmentKey = "studox-pending-assessment";
 
 if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
   localStorage.removeItem("demoSession");
@@ -132,44 +133,6 @@ const dashboardStats = [
   ["Learning Time", 126, "h", "book", "8h this week"],
 ];
 
-const roadmapModules = [
-  {
-    title: "Foundations",
-    status: "completed",
-    progress: 100,
-    desc: "HTML, CSS, JavaScript, Git, browser fundamentals and problem solving basics.",
-    skills: ["HTML", "CSS", "Git", "JavaScript"],
-  },
-  {
-    title: "Frontend Development",
-    status: "active",
-    progress: 68,
-    desc: "React, component architecture, state, routing, APIs, forms and polished UI systems.",
-    skills: ["React", "Routing", "State", "UI"],
-  },
-  {
-    title: "Backend Development",
-    status: "upcoming",
-    progress: 24,
-    desc: "Node.js, Express, authentication, REST APIs, validations and production structure.",
-    skills: ["Node.js", "Express", "JWT", "APIs"],
-  },
-  {
-    title: "Databases",
-    status: "upcoming",
-    progress: 8,
-    desc: "MongoDB modeling, aggregation, indexing, schema design and query optimization.",
-    skills: ["MongoDB", "Mongoose", "Indexes"],
-  },
-  {
-    title: "Projects & Deployment",
-    status: "upcoming",
-    progress: 0,
-    desc: "Ship portfolio-grade projects with CI, environment variables, cloud hosting and docs.",
-    skills: ["Deploy", "CI", "Portfolio"],
-  },
-];
-
 const courses = [
   {
     title: "Full Stack Developer",
@@ -210,13 +173,6 @@ const tests = [
   ["React Weekly Test", "Jul 08", "45 min", "20 questions"],
   ["DSA Arrays Sprint", "Jul 10", "60 min", "18 questions"],
   ["Backend API Quiz", "Jul 12", "40 min", "16 questions"],
-];
-
-const activities = [
-  ["Completed React hooks lesson", "2 hours ago", "green"],
-  ["Solved 6 DSA problems", "Yesterday", "blue"],
-  ["Uploaded resume v3", "2 days ago", "purple"],
-  ["Applied to Frontend internship", "3 days ago", "amber"],
 ];
 
 const dsaProblems = [
@@ -522,10 +478,6 @@ function studoxLandingPage() {
   </main>`;
 }
 
-function floatingCard(pos, title, sub, iconName) {
-  return `<article class="float-card ${pos}"><span class="mini-icon">${icon(iconName)}</span><div><strong>${title}</strong><span>${sub}</span></div></article>`;
-}
-
 function assessmentQuestionScreen() {
   const roadmaps = functionalState.generatedRoadmaps || [];
   const previewIndex = Math.min(functionalState.previewRoadmapIndex || 0, Math.max(0, roadmaps.length - 1));
@@ -703,6 +655,35 @@ function assessmentFormData() {
   }, {});
 }
 
+function savePendingAssessment(data) {
+  sessionStorage.setItem(pendingAssessmentKey, JSON.stringify({
+    data,
+    answers: assessmentAnswers,
+    step: assessmentStep,
+    savedAt: new Date().toISOString(),
+  }));
+}
+
+function getPendingAssessment() {
+  try {
+    return JSON.parse(sessionStorage.getItem(pendingAssessmentKey) || "null");
+  } catch (_error) {
+    sessionStorage.removeItem(pendingAssessmentKey);
+    return null;
+  }
+}
+
+function clearPendingAssessment() {
+  sessionStorage.removeItem(pendingAssessmentKey);
+}
+
+function restorePendingAssessment(pending) {
+  if (!pending?.answers) return;
+  Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
+  Object.assign(assessmentAnswers, pending.answers);
+  assessmentStep = Math.min(assessmentQuestions.length - 1, Number(pending.step || assessmentQuestions.length - 1));
+}
+
 function courseCard(course) {
   return `<article class="card course-card">
     <div class="course-art"><div><span class="chip">${course.level}</span><h3>${course.title}</h3></div><strong>${course.progress}%</strong></div>
@@ -827,86 +808,6 @@ function topbar(dark) {
       </div>
     </div>
   </header>`;
-}
-
-function dashboardPage() {
-  return appLayout(`<div class="welcome-card">
-      <h1>Welcome back, ${currentUser.name.split(" ")[0]}</h1>
-      <p>Your AI mentor has adjusted this week's roadmap around React performance, backend APIs and DSA pattern practice.</p>
-      <div class="welcome-meta"><span class="chip">Current goal: ${currentUser.goal}</span><span class="chip">Study streak: 18 days</span><span class="chip">Next test: React Weekly</span></div>
-    </div>
-    ${statCards()}
-    <div class="dash-grid">
-      <div class="panel">
-        <div class="panel-head"><h2>Performance Overview</h2><span class="chip purple">Animated analytics</span></div>
-        ${barChart()}
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Learning Progress</h2><span class="chip green">On track</span></div>
-        <div class="circle-progress" style="--percent:72" data-label="72%"></div>
-        ${progress("Frontend roadmap", 68)}
-        ${progress("Backend readiness", 42)}
-        ${progress("DSA consistency", 81)}
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Upcoming Tests</h2><a href="#tests">View tests</a></div>
-        <div class="list">${tests.map(testItem).join("")}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Study Streak</h2><span class="chip amber">18 days</span></div>
-        ${barChart([42, 55, 60, 66, 84, 78, 91], ["M", "T", "W", "T", "F", "S", "S"])}
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Recent Activity</h2></div>
-        <div class="list">${activities.map(([title, time, color]) => `<div class="list-item"><div><h4>${title}</h4><p>${time}</p></div><span class="chip ${color === "green" ? "green" : color === "amber" ? "amber" : "purple"}">${color}</span></div>`).join("")}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Recommended Courses</h2><a href="#courses">Open</a></div>
-        <div class="list">${courses.slice(0, 3).map((course) => `<div class="list-item"><div><h4>${course.title}</h4><p>${course.desc}</p></div><span class="chip">${course.progress}%</span></div>`).join("")}</div>
-      </div>
-    </div>`, "dashboard");
-}
-
-function roadmapPage() {
-  return appLayout(`<div class="page-head">
-      <div><h1>My Learning Roadmap</h1><p>Track every milestone from foundations to deployed projects with AI-adjusted sequencing.</p></div>
-      <div class="toggle-group"><button class="active">Timeline View</button><button data-toast="Tree view placeholder switched.">Tree View</button></div>
-    </div>
-    ${statCards([
-      ["Current Level", 12, "", "star", "Intermediate"],
-      ["Overall Progress", 72, "%", "chart", "On track"],
-      ["Time to Goal", 9, "w", "map", "Estimated"],
-      ["Skills Learned", 36, "", "book", "12 advanced"],
-      ["Next Milestone", 68, "%", "trophy", "React master"],
-    ])}
-    <div class="roadmap-layout">
-      <div class="panel">
-        <div class="timeline">
-          ${roadmapModules
-            .map(
-              (item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}">
-                <span class="node"></span>
-                <div class="module-card">
-                  <header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>
-                  ${progress("Module progress", item.progress)}
-                  <div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div>
-                </div>
-              </article>`,
-            )
-            .join("")}
-        </div>
-      </div>
-      <aside class="panel">
-        <div class="panel-head"><h2>Roadmap Health</h2><span class="chip green">Healthy</span></div>
-        <div class="circle-progress" style="--percent:72" data-label="72%"></div>
-        ${progress("Daily learning goal", 84)}
-        ${progress("Milestone confidence", 76)}
-        <h3 style="margin-top:18px">Skills you will gain</h3>
-        <div class="skills-row">${["React", "Node.js", "MongoDB", "Testing", "Deployment", "System Design"].map((skill) => `<span class="chip purple">${skill}</span>`).join("")}</div>
-        <h3 style="margin-top:18px">Next milestone</h3>
-        <p class="muted">Complete React forms, API integration and performance mini project.</p>
-      </aside>
-    </div>`, "roadmap");
 }
 
 function coursesPage() {
@@ -1374,8 +1275,8 @@ const routeMap = {
   landing: studoxLandingPage,
   login: () => authPage("login"),
   signup: () => authPage("signup"),
-  dashboard: dashboardPage,
-  roadmap: roadmapPage,
+  dashboard: () => "",
+  roadmap: () => "",
   courses: coursesPage,
   tests: testsPage,
   dsa: dsaPage,
@@ -1687,13 +1588,24 @@ api = async function functionalApi(path, options = {}) {
     const res = await fetch(`${apiBase}${path}`, { ...options, headers });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
-    if (!res.ok) throw new Error(data.message || "Request failed.");
+    if (!res.ok) throw new Error(userFriendlyApiError(data.error || data.message || "Request failed."));
     return data;
   } catch (error) {
     toast(error.message || "Server se connection nahi ho paaya.");
     return null;
   }
 };
+
+function userFriendlyApiError(message) {
+  const text = String(message || "");
+  if (/quota exceeded|exceeded your current quota|rate-limit|rate limit/i.test(text)) {
+    const retry = text.match(/retry in\s+([\d.]+)s/i);
+    return `AI limit reached. Please try again${retry ? ` in ${Math.ceil(Number(retry[1]))} seconds` : " after some time"}.`;
+  }
+  if (/api key|permission|unauthorized|forbidden/i.test(text)) return "AI setup issue. Please check the API key.";
+  if (/invalid json|empty response/i.test(text)) return "AI response was incomplete. Please try again.";
+  return text.length > 140 ? `${text.slice(0, 137)}...` : text;
+}
 
 render = async function functionalRender() {
   const route = routeMap[getRoute()] ? getRoute() : "landing";
@@ -1876,12 +1788,13 @@ routeMap.dashboard = function functionalDashboardPage() {
 
 routeMap.roadmap = function functionalRoadmapPage() {
   const roadmap = functionalState.roadmaps[0] || {};
-  const liveModules = (roadmap.modules || []).map((item) => ({
+  const liveModules = (roadmap.modules || roadmap.weeks || []).map((item, index) => ({
     title: item.title,
-    status: item.status === "in-progress" ? "active" : item.status,
+    status: item.status === "in-progress" ? "active" : item.status || (index === 0 ? "active" : "locked"),
     progress: item.progress || 0,
-    desc: item.description || "Roadmap module",
-    skills: item.skills || [],
+    desc: item.description || `${item.estimatedHours || 0} estimated hours`,
+    skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
+    resources: item.resources || [],
   }));
   const completedModules = liveModules.filter((item) => item.status === "completed").length;
   const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
@@ -1889,11 +1802,11 @@ routeMap.roadmap = function functionalRoadmapPage() {
     ${statCards([
       ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
-      ["Time to Goal", roadmap.timeToGoalWeeks || 0, "w", "map", "Estimated"],
+      ["Time to Goal", roadmap.timeToGoalWeeks || roadmap.estimatedDurationWeeks || 0, "w", "map", "Estimated"],
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
       ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
-    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div></div></article>`).join("") || emptyState("No roadmap yet", "Signup ke goal se roadmap create hota hai.")}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
+    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("")}</div></div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized AI roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
 };
 
 routeMap.courses = function functionalCoursesPage() {
@@ -2283,24 +2196,52 @@ async function handleRoadmapAssessmentSubmit(event) {
   const form = event.currentTarget;
   if (!validateAssessmentStep(form)) return;
   const data = assessmentFormData();
+  if (!hasDemoSession()) {
+    savePendingAssessment(data);
+    toast("Please log in to generate your roadmap.");
+    setRoute("login");
+    return;
+  }
+  await generateRoadmapsFromAssessment(data, form);
+}
+
+async function generateRoadmapsFromAssessment(data, form = null) {
+  if (pendingRoadmapGeneration) return false;
   pendingRoadmapGeneration = true;
-  form.querySelectorAll("button, input, textarea").forEach((node) => {
+  form?.querySelectorAll("button, input, textarea").forEach((node) => {
     node.disabled = true;
   });
+  if (!form) {
+    app.innerHTML = assessmentQuestionScreen();
+    bindPage();
+  }
   const result = await api("/roadmaps/generate", {
     method: "POST",
     body: JSON.stringify(assessmentInputPayload(data)),
   });
   pendingRoadmapGeneration = false;
-  form.querySelectorAll("button, input, textarea").forEach((node) => {
+  form?.querySelectorAll("button, input, textarea").forEach((node) => {
     node.disabled = false;
   });
-  if (!result?.roadmaps) return;
+  if (!result?.roadmaps) {
+    app.innerHTML = assessmentQuestionScreen();
+    bindPage();
+    return false;
+  }
   functionalState.generatedRoadmaps = result.roadmaps;
   functionalState.previewRoadmapIndex = 0;
+  clearPendingAssessment();
   toast("Roadmap options received.");
   app.innerHTML = assessmentQuestionScreen();
   bindPage();
+  return true;
+}
+
+async function resumePendingRoadmapGeneration() {
+  const pending = getPendingAssessment();
+  if (!pending?.data) return false;
+  restorePendingAssessment(pending);
+  return await generateRoadmapsFromAssessment(pending.data);
 }
 
 async function handleFunctionalTestSubmit(event) {
@@ -2540,6 +2481,11 @@ function miniCourseCard(course, index) {
 
 routeMap.dashboard = function properStudentDashboardPage() {
   const data = functionalState.dashboard || {};
+  const roadmap = data.roadmap || {};
+  const roadmapWeeks = roadmap.weeks || roadmap.modules || [];
+  const roadmapTitle = roadmap.title || "Roadmap";
+  const roadmapSummary = roadmap.summary || "Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.";
+  const nextMilestone = roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path";
   const liveCourses = data.recommendedCourses || [];
   const liveTests = data.upcomingTests || [];
   const activity = data.recentActivity || [];
@@ -2551,8 +2497,8 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
-    ["DSA Solved", data.dsa?.problemsSolved || 0, "", "code", "Practice"],
-    ["XP Points", data.xpPoints || 0, "", "trophy", "Live"],
+    ["Roadmap Weeks", roadmapWeeks.length, "", "map", "Modules"],
+    ["Duration", roadmap.estimatedDurationWeeks || 0, "w", "trophy", "Estimated"],
   ];
 
   return appLayout(`<section class="proper-dashboard premium-dashboard">
@@ -2561,7 +2507,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
       <div>
         <span class="ai-pill">AI STUDENT COMMAND CENTER</span>
         <h1>Welcome back, ${firstName}</h1>
-        <p>Your live learning cockpit is ready. Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.</p>
+        <p>${roadmapSummary}</p>
         <div class="hero-actions">
           <a class="btn primary beast-glow" href="#courses">Continue Learning</a>
           <a class="btn" href="#tests">Start Test</a>
@@ -2580,7 +2526,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
     <div class="dashboard-command-deck">
       <a class="command-card primary" href="#roadmap">
         <span>${icon("map")}</span>
-        <div><strong>Next Milestone</strong><small>Open roadmap path</small></div>
+        <div><strong>${roadmapTitle}</strong><small>${nextMilestone}</small></div>
         <b>${progressValue}%</b>
       </a>
       <a class="command-card" href="#tests">
@@ -2799,6 +2745,7 @@ handleLogin = async function configuredHandleLogin(event) {
   setFormBusy(form, false);
   if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
   saveAuthSession(result);
+  if (await resumePendingRoadmapGeneration()) return;
   setRoute("dashboard");
 };
 

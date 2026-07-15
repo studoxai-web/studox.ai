@@ -1246,7 +1246,17 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   let dsa = {};
 
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
-    [profile, roadmap, userResults, userProjects, userCertificates, dsa] = await Promise.all([
+    const user = await User.findById(userId).select("activeRoadmapId").lean();
+    if (user?.activeRoadmapId) {
+      roadmap = await Roadmap.findById(user.activeRoadmapId).lean();
+    }
+    if (!roadmap) {
+      roadmap = await Roadmap.findOne({ userId, status: "active" }).sort({ createdAt: -1 }).lean();
+    }
+    if (!roadmap) {
+      roadmap = await Roadmap.findOne({ userId }).sort({ createdAt: -1 }).lean();
+    }
+    [profile, userResults, userProjects, userCertificates, dsa] = await Promise.all([
       StudentProfile.findOne({ user: userId }).lean(),
       Roadmap.findOne(roadmapOwnerQuery(userId)).sort({ createdAt: -1 }).lean(),
       TestResult.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean(),
