@@ -58,8 +58,14 @@ const Roadmap = model(
   "Roadmap",
   new Schema(
     {
+      user: { type: Schema.Types.ObjectId, ref: "User" },
       userId: { type: Schema.Types.ObjectId, ref: "User" },
       title: String,
+      currentLevel: String,
+      overallProgress: Number,
+      timeToGoalWeeks: Number,
+      skillsLearned: Number,
+      nextMilestone: String,
       careerGoal: String,
       summary: String,
       estimatedDurationWeeks: Number,
@@ -68,6 +74,15 @@ const Roadmap = model(
       generatedBy: String,
       version: Number,
       generatedAt: Date,
+      modules: [
+        {
+          title: String,
+          status: { type: String, enum: ["completed", "in-progress", "upcoming"], default: "upcoming" },
+          progress: Number,
+          description: String,
+          skills: [String],
+        },
+      ],
       weeks: [
         {
           weekId: String,

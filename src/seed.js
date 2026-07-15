@@ -96,8 +96,14 @@ async function seed() {
   });
 
   await Roadmap.create({
+    user: user._id,
     userId: user._id,
     title: "Full Stack Developer Roadmap",
+    currentLevel: "Intermediate",
+    overallProgress: 72,
+    timeToGoalWeeks: 12,
+    skillsLearned: 36,
+    nextMilestone: "React application basics",
     careerGoal: "Full Stack Developer",
     summary: "A practical roadmap for building production-ready MERN applications with projects, testing and deployment basics.",
     estimatedDurationWeeks: 12,
@@ -106,6 +112,12 @@ async function seed() {
     generatedBy: "seed",
     version: 1,
     generatedAt: new Date(),
+    modules: [
+      { title: "Frontend Foundations", status: "completed", progress: 100, description: "HTML, CSS, JavaScript, Git and browser fundamentals.", skills: ["HTML", "CSS", "Git", "JavaScript"] },
+      { title: "React Application Basics", status: "in-progress", progress: 68, description: "Components, hooks, routing, forms and API-driven UI patterns.", skills: ["React", "Hooks", "Routing"] },
+      { title: "Node, Express and MongoDB", status: "upcoming", progress: 24, description: "APIs, authentication, MongoDB models and backend validation.", skills: ["Node.js", "Express", "MongoDB"] },
+      { title: "Projects and Deployment", status: "upcoming", progress: 0, description: "Ship portfolio-ready apps with deployment and documentation.", skills: ["Deployment", "Projects", "CI"] },
+    ],
     weeks: [
       {
         weekId: "week_1",
