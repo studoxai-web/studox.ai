@@ -572,95 +572,24 @@ function roadmapPreview(roadmap) {
     <button class="btn primary" type="button" data-action="choose-roadmap" ${pendingRoadmapSelection ? "disabled" : ""}>${pendingRoadmapSelection ? "Saving..." : "Choose Roadmap"}</button>
   </article>`;
 }
+
 const assessmentQuestions = [
-  {
-    id: "goal",
-    key: "goal",
-    label: "Career Goal",
-    title: "What do you want to become?",
-    question: "What do you want to become?",
-    hint: "Choose the main career direction for your roadmap.",
-    description: "Choose the main career direction for your roadmap.",
-    type: "radio",
-    options: ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Not sure yet"]
-  },
-  {
-    id: "level",
-    key: "level",
-    label: "Current Level",
-    title: "What is your current level?",
-    question: "What is your current level?",
-    hint: "This helps Studox.ai set the right difficulty.",
-    description: "This helps Studox.ai set the right difficulty.",
-    type: "radio",
-    options: ["Beginner", "Basic coding knowledge", "Intermediate", "Advanced"]
-  },
-  {
-    id: "timeline",
-    key: "timeline",
-    label: "Target Timeline",
-    title: "How fast do you want results?",
-    question: "How fast do you want results?",
-    hint: "We will create a realistic learning speed.",
-    description: "We will create a realistic learning speed.",
-    type: "radio",
-    options: ["1 month", "3 months", "6 months", "12 months"]
-  },
-  {
-    id: "hours",
-    key: "hours",
-    label: "Weekly Time",
-    title: "How many hours can you study weekly?",
-    question: "How many hours can you study weekly?",
-    hint: "Pick a schedule you can actually follow.",
-    description: "Pick a schedule you can actually follow.",
-    type: "radio",
-    options: ["3-5 hours", "6-8 hours", "9-12 hours", "15+ hours"]
-  },
-  {
-    id: "focus",
-    key: "focus",
-    label: "Main Focus",
-    title: "What should the roadmap focus on most?",
-    question: "What should the roadmap focus on most?",
-    hint: "Your roadmap will prioritize this area.",
-    description: "Your roadmap will prioritize this area.",
-    type: "radio",
-    options: ["Job ready skills", "Internship preparation", "Projects", "DSA and coding", "Interview preparation"]
-  },
-  {
-    id: "projects",
-    key: "projects",
-    label: "Project Experience",
-    title: "How many projects have you built?",
-    question: "How many projects have you built?",
-    hint: "This helps us decide your project difficulty.",
-    description: "This helps us decide your project difficulty.",
-    type: "radio",
-    options: ["0 projects", "1-2 projects", "3-5 projects", "5+ projects"]
-  },
-  {
-    id: "learningStyle",
-    key: "learningStyle",
-    label: "Learning Style",
-    title: "How do you learn best?",
-    question: "How do you learn best?",
-    hint: "We will shape your weekly plan around this.",
-    description: "We will shape your weekly plan around this.",
-    type: "radio",
-    options: ["Video lessons", "Practice tasks", "Projects", "Reading notes", "Mixed learning"]
-  },
-  {
-    id: "extra",
-    key: "extra",
-    label: "Extra Context",
-    title: "Anything else Studox.ai should know?",
-    question: "Anything else Studox.ai should know?",
-    hint: "Example: college year, weak topics, target company, current skills.",
-    description: "Example: college year, weak topics, target company, current skills.",
-    type: "textarea",
-    placeholder: "Write your current skills, target, weak topics, or dream role..."
-  }
+  { id: "q1", section: "Career Identity", title: "Career Identity", prompt: "Which career path are you most interested in pursuing?", options: ["Software Development", "AI / Data", "Cybersecurity", "Design & Creative"] },
+  { id: "q2", section: "Career Identity", title: "Career Identity", prompt: "What is your primary reason for learning this field?", options: ["Get a Job / Internship", "Build My Own Startup / Business", "Freelancing / Earn Money", "Learn for Personal Growth"] },
+  { id: "q3", section: "Career Identity", title: "Career Identity", prompt: "When do you want to achieve this goal?", options: ["Within 6 Months", "Within 1 Year", "More than 1 Year", "No Fixed Timeline"] },
+  { id: "q4", section: "Career Identity", title: "Career Identity", prompt: "How confident are you about this career choice?", options: ["Very Confident", "Somewhat Confident", "Just Exploring", "Completely Unsure"] },
+  { id: "q5", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How many hours can you realistically study each week?", options: ["Less than 5 Hours", "5-10 Hours", "10-20 Hours", "More than 20 Hours"] },
+  { id: "q6", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What device will you mainly use?", options: ["Laptop/Desktop", "Tablet", "Mobile Phone", "Shared Computer"] },
+  { id: "q7", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "What is your learning budget?", options: ["Free Resources Only", "Up to Rs. 2,000", "Up to Rs. 10,000", "No Budget Limit"] },
+  { id: "q8", section: "Constraints & Availability", title: "Constraints & Availability", prompt: "How comfortable are you with English technical content?", options: ["Very Comfortable", "Comfortable", "Need Simple Explanations", "Prefer Regional Language"] },
+  { id: "q9", section: "Experience", title: "Experience", prompt: "Have you built any projects before?", options: ["Yes, Many", "Yes, A Few", "Only Small Practice Projects", "Never"] },
+  { id: "q10", section: "Experience", title: "Experience", prompt: "Have you completed any online courses?", options: ["Several", "A Few", "Started but Didn't Finish", "Never"] },
+  { id: "q11", section: "Experience", title: "Experience", prompt: "Which statement best describes your practical experience?", options: ["I build complete projects independently.", "I need guidance but can complete projects.", "I understand concepts but rarely build projects.", "I'm just starting."] },
+  { id: "q12", section: "Learning Style", title: "Learning Style", prompt: "How do you learn fastest?", options: ["Building Projects", "Watching Videos", "Reading Documentation", "Classroom Teaching"] },
+  { id: "q13", section: "Learning Style", title: "Learning Style", prompt: "Which resource do you trust most?", options: ["Official Documentation", "YouTube", "AI Assistants", "Online Courses"] },
+  { id: "q14", section: "Motivation", title: "Motivation", prompt: "What usually stops your learning progress?", options: ["Lack of Time", "Lack of Motivation", "Confusion", "Distractions"] },
+  { id: "q15", section: "Motivation", title: "Motivation", prompt: "What motivates you the most?", options: ["Career Growth", "Money", "Building Products", "Learning New Things"] },
+  { id: "q16", section: "Portfolio & Additional Context", title: "Portfolio & Additional Context", prompt: "Is there anything else you'd like the AI to know before creating your personalized roadmap?", type: "textarea" },
 ];
 
 function currentAssessmentValue(question = assessmentQuestions[assessmentStep]) {
@@ -2073,7 +2002,6 @@ bindPage = function functionalBindPage() {
     });
   });
   bindFunctionalActions();
-
 };
 
 function bindFunctionalActions() {
@@ -2081,9 +2009,6 @@ function bindFunctionalActions() {
     const result = await api(`/courses/${button.dataset.courseId}/continue`, { method: "POST", body: "{}" });
     toast(result?.message || "Progress updated.");
     await render();
-    document.querySelectorAll("[data-action='choose-roadmap-signup']").forEach((button) => {
-  button.addEventListener("click", handleChooseRoadmapSignup);
-});
   }));
   document.querySelectorAll("[data-action='bookmark-course']").forEach((button) => button.addEventListener("click", () => toast("Course bookmarked locally.")));
   document.querySelectorAll("[data-action='share-course']").forEach((button) => button.addEventListener("click", () => toast("Course share link ready.")));
@@ -2140,72 +2065,41 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='admin-delete']").forEach((button) => button.addEventListener("click", handleAdminDelete));
 }
 
-function assessmentTimelineWeeks(value = "") {
-  if (value.includes("1 month")) return 4;
-  if (value.includes("3 months")) return 12;
-  if (value.includes("6 months")) return 24;
-  if (value.includes("12 months")) return 48;
-  return 12;
-}
-
-function assessmentWeeklyHours(value = "") {
-  if (value.includes("3-5")) return 4;
-  if (value.includes("6-8")) return 7;
-  if (value.includes("9-12")) return 10;
-  if (value.includes("15")) return 15;
-  return 7;
-}
-
-function assessmentFieldFromGoal(goal = "") {
-  const text = String(goal).toLowerCase();
-  if (text.includes("ai") || text.includes("ml")) return "Artificial Intelligence";
-  if (text.includes("data")) return "Data Science";
-  if (text.includes("cyber")) return "Cybersecurity";
-  if (text.includes("design")) return "Design";
-  return "Computer Science";
-}
-
-function assessmentInputPayload() {
-  const profile = state.profile || {};
-  const goal = assessmentAnswers.goal || "Full Stack Developer";
-  const field = profile.field || profile.branch || assessmentFieldFromGoal(goal);
-
+function assessmentInputPayload(data) {
+  const profile = functionalState.profile || {};
+  const goal = data.q1 || profile.goal || currentUser.goal || "Full Stack Developer";
+  const field = data.q2 || profile.field || profile.branch || "Computer Science";
   return {
-    goal,
-    targetRole: goal,
-    field,
-    level: assessmentAnswers.level || "Beginner",
-    targetTimelineWeeks: assessmentTimelineWeeks(assessmentAnswers.timeline || "3 months"),
-    weeklyAvailabilityHours: assessmentWeeklyHours(assessmentAnswers.hours || "6-8 hours"),
-    preferredLearningStyle: assessmentAnswers.learningStyle || "Mixed learning",
-    focusArea: assessmentAnswers.focus || "Job ready skills",
-    projectExperience: assessmentAnswers.projects || "0 projects",
-    extraContext: assessmentAnswers.extra || "",
+    careerGoal: goal,
+    currentLevel: String(data.q4 || profile.level || currentUser.level || "beginner").toLowerCase(),
+    targetTimelineWeeks: Number(data.q5) || 12,
+    weeklyAvailabilityHours: Number(data.q6) || 10,
+    learningStyle: data.q12 || "project-based",
+    preferredLanguage: data.q13 || "English",
     background: {
+      educationLevel: data.q3,
       fieldOfStudy: field,
-      currentLevel: assessmentAnswers.level || "Beginner",
-      currentSkills: [assessmentAnswers.focus || "Job ready skills"],
-      learningGoal: goal
-    }
+      workExperience: data.q9 || "none",
+      motivation: data.q14 || "",
+      additionalContext: data.q16 || "",
+    },
+    skills: {
+      known: data.q10 ? [data.q10] : profile.skills || [],
+      weak: data.q11 ? [data.q11] : [],
+      target: [goal, field, data.q15].filter(Boolean),
+    },
+    constraints: {
+      budget: data.q8 || "free",
+      deviceAccess: data.q7 || "laptop",
+      internetAccess: "stable",
+    },
+    preferences: {
+      includeProjects: true,
+      includePracticeTasks: true,
+      includeFreeResources: true,
+      includeInterviewPrep: true,
+    },
   };
-}
-function handleChooseRoadmapSignup(event) {
-  const card = event.target.closest("[data-action='choose-roadmap-signup']");
-  if (!card) return;
-
-  const index = Number(card.dataset.roadmapIndex || 0);
-  const roadmap = functionalState.generatedRoadmaps[index];
-
-  if (roadmap) {
-    localStorage.setItem("studox-pending-roadmap", JSON.stringify({
-      selectedAt: new Date().toISOString(),
-      roadmap,
-      assessment: assessmentInputPayload()
-    }));
-  }
-
-  toast("Roadmap selected. Create your account to save it.");
-  navigate("signup");
 }
 
 function handleAssessmentOptionChange(event) {
@@ -2213,7 +2107,7 @@ function handleAssessmentOptionChange(event) {
   const other = form?.querySelector(`[data-assessment-other="${event.currentTarget.name}"]`);
   if (other) other.style.display = event.currentTarget.value === "Other" ? "" : "none";
   syncAssessmentAnswer(form);
-  if (event.currentTarget.value !== "Other" && assessmentStep < assessmentQuestions.length - 1) {
+  if (event.currentTarget.value !== "Other" && assessmentStep < 13) {
     assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
     app.innerHTML = assessmentQuestionScreen();
     bindPage();

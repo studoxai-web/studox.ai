@@ -1350,7 +1350,7 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
   res.json(roadmaps);
 });
 
-app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
+app.post("/api/roadmaps/generate", authOptional, async (req, res) => {
   try {
     const input = { ...req.body, userId: req.user.id };
     const errors = roadmapInputErrors(input);
