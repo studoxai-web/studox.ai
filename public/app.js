@@ -590,45 +590,44 @@ function assessmentQuestionScreen() {
             ${selectedValue ? `<div class="assessment-selected-note"><b>Selected</b><span>${selectedValue}</span></div>` : ""}
             <div class="assessment-options ${question.type === "textarea" ? "single" : ""}">
               ${question.type === "textarea"
-                ? `<textarea class="assessment-textarea" name="${question.id}" data-assessment-field="${question.id}" placeholder="${question.placeholder || "Share anything useful for your roadmap..."}" required>${answer.value || ""}</textarea>`
-                : question.options.concat("Other").map((option) => `<label class="assessment-option"><input type="radio" name="${question.id}" value="${option}" ${answer.value === option ? "checked" : ""} required /><span class="option-copy">${option}</span><b class="option-status">${answer.value === option ? "Selected" : "Select"}</b></label>`).join("")}
-              ${question.type !== "textarea" ? `<input class="assessment-other" name="${question.id}_other" data-assessment-other="${question.id}" placeholder="Please specify your answer" value="${answer.other || ""}" style="${answer.value === "Other" ? "" : "display:none"}" />` : ""}
+                ? `<textarea class="assessment-textarea" name="${question.id}" data-assessment-field="${question.id}" placeholder="${question.placeholder || "Share anything useful for your roadmap..."}" ${question.required === false ? "" : "required"}>${answer.value || ""}</textarea>`
+                : question.options.map((option) => `<label class="assessment-option"><input type="radio" name="${question.id}" value="${option}" ${answer.value === option ? "checked" : ""} ${question.required === false ? "" : "required"} /><span class="option-copy">${option}</span><b class="option-status">${answer.value === option ? "Selected" : "Select"}</b></label>`).join("")}
+              
             </div>
             <div class="assessment-actions">
               <button class="btn" type="button" data-action="assessment-prev" ${assessmentStep === 0 ? "disabled" : ""}>Previous</button>
-              ${assessmentStep < assessmentQuestions.length - 1
-                ? `<button class="btn primary" type="button" data-action="assessment-next">Next question</button>`
-                : `<button class="btn primary glow" type="submit">${pendingRoadmapGeneration ? "Generating roadmaps..." : "Generate 3 Roadmaps"}</button>`}
+              ${assessmentStep >= 4
+                ? `${assessmentStep < assessmentQuestions.length - 1 ? `<button class="btn" type="button" data-action="assessment-next">Answer optional</button>` : ""}<button class="btn primary glow" type="submit">${pendingRoadmapGeneration ? "Generating roadmap..." : "Generate Roadmap"}</button>`
+                : `<button class="btn primary" type="button" data-action="assessment-next">Next question</button>`}
             </div>
           </form>
         </div>
-        ${pendingRoadmapGeneration ? `<div class="assessment-loading"><span class="loader"></span><div><strong>Creating your three roadmap tracks</strong><p>Studox.ai is structuring fast-track, balanced and project-heavy options from your answers.</p></div></div>` : ""}
+        ${pendingRoadmapGeneration ? `<div class="assessment-loading"><span class="loader"></span><div><strong>Creating your roadmap</strong><p>Studox.ai is structuring the right roadmap from your required answers and optional details.</p></div></div>` : ""}
       `}
     </section>
   </main>`;
 }
 
 function assessmentResultScreen(roadmaps) {
-  const trackNames = ["Fast Track", "Balanced Plan", "Project Heavy"];
   return `<div class="assessment-results premium-results">
     <div class="assessment-result-head">
       <span class="eyebrow">Roadmap generated</span>
-      <h1>Choose your roadmap track</h1>
-      <p>Pick the path that matches your speed. Signup opens immediately and your selected roadmap stays ready for your account.</p>
+      <h1>${roadmaps.length === 1 ? "Your roadmap is ready" : "Choose your roadmap track"}</h1>
+      <p>${roadmaps.length === 1 ? "Based on your career goal, level, timeline and weekly time, Studox.ai created the best-fit roadmap for you." : "Pick the path that matches your level. Locked options show future growth but cannot be selected yet."}</p>
     </div>
     <div class="assessment-answer-pills">
-      ${assessmentQuestions.slice(0, 6).map((question) => `<span><em>${question.label}</em><strong>${currentAssessmentValue(question) || "Not set"}</strong></span>`).join("")}
+      ${assessmentQuestions.slice(0, 4).map((question) => `<span><em>${question.label}</em><strong>${currentAssessmentValue(question) || "Not set"}</strong></span>`).join("")}
     </div>
-    <div class="assessment-roadmaps">
-      ${roadmaps.slice(0, 3).map((roadmap, index) => `<button class="assessment-roadmap-card" type="button" data-action="choose-roadmap-signup" data-roadmap-index="${index}">
-        <div class="roadmap-card-top"><span class="track-label">Track ${String(index + 1).padStart(2, "0")}</span><strong>${roadmap.estimatedDurationWeeks || 12} weeks</strong></div>
-        <span class="roadmap-track-name">${trackNames[index] || "Roadmap Track"}</span>
+    <div class="assessment-roadmaps count-${roadmaps.length}">
+      ${roadmaps.map((roadmap, index) => `<button class="assessment-roadmap-card ${roadmap.locked ? "locked" : ""} ${roadmap.recommended ? "recommended" : ""} ${roadmap.optional ? "optional" : ""}" type="button" ${roadmap.locked ? "disabled" : "data-action=\"choose-roadmap-signup\""} data-roadmap-index="${index}">
+        <div class="roadmap-card-top"><span class="track-label">${roadmap.trackLabel || `Track ${String(index + 1).padStart(2, "0")}`}</span><strong>${roadmap.estimatedDurationWeeks || 12} weeks</strong></div>
+        <span class="roadmap-track-name">${roadmap.locked ? "Locked" : roadmap.recommended ? "Recommended" : roadmap.optional ? "Optional" : "Roadmap"}</span>
         <h3>${roadmap.title || "Roadmap option"}</h3>
         <p>${roadmap.summary || "Personalized roadmap option for your selected career goal."}</p>
         <div class="roadmap-card-plan">
           ${roadmapCardSteps(roadmap).map((step, stepIndex) => `<div><span>${stepIndex + 1}</span><p>${step}</p></div>`).join("")}
         </div>
-        <small>Continue with this roadmap</small>
+        <small>${roadmap.locked ? roadmap.lockReason || "Complete earlier milestones to unlock." : "Continue with this roadmap"}</small>
       </button>`).join("")}
     </div>
     <div class="assessment-actions result-actions">
@@ -661,11 +660,12 @@ const assessmentQuestions = [
     section: "Goal clarity",
     title: "Which career goal should we build for?",
     question: "Which career goal should we build for?",
-    prompt: "Choose the role you want to move toward. If you are unsure, select Not sure yet and we will keep the roadmap flexible.",
-    hint: "Your goal decides the roadmap direction, tools and project type.",
+    prompt: "Choose one career direction. Your roadmap will stay focused on this field only.",
+    hint: "This locks the roadmap domain, tools, projects and first learning portion.",
     description: "Choose the main career direction for your roadmap.",
     type: "radio",
-    options: ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Not sure yet"]
+    required: true,
+    options: ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Web Development"]
   },
   {
     id: "level",
@@ -674,10 +674,11 @@ const assessmentQuestions = [
     section: "Skill level",
     title: "What is your current skill level?",
     question: "What is your current skill level?",
-    prompt: "Pick the option that feels closest to your current ability. The roadmap will start from there.",
-    hint: "This keeps the roadmap realistic instead of too easy or too advanced.",
+    prompt: "Your level decides how many roadmap options you see and which ones are selectable.",
+    hint: "Beginner gets one beginner roadmap. Intermediate gets beginner optional, intermediate recommended, and advanced locked.",
     description: "This helps Studox.ai set the right difficulty.",
     type: "radio",
+    required: true,
     options: ["Beginner", "Basic coding knowledge", "Intermediate", "Advanced"]
   },
   {
@@ -687,10 +688,11 @@ const assessmentQuestions = [
     section: "Target speed",
     title: "What timeline should we plan around?",
     question: "What timeline should we plan around?",
-    prompt: "Choose how quickly you want to see visible progress. We will keep the plan achievable.",
-    hint: "The timeline controls weekly depth, revision and project load.",
+    prompt: "Pick your target timeline. Studox.ai will compare it with the recommended timeline for your field and level.",
+    hint: "Timeline controls roadmap duration and whether the plan becomes normal or intensive.",
     description: "We will create a realistic learning speed.",
     type: "radio",
+    required: true,
     options: ["1 month", "3 months", "6 months", "12 months"]
   },
   {
@@ -700,96 +702,112 @@ const assessmentQuestions = [
     section: "Study capacity",
     title: "How many hours can you study each week?",
     question: "How many hours can you study each week?",
-    prompt: "Select a weekly commitment you can actually follow with classes, work or exams.",
-    hint: "Your weekly time decides task size and practice intensity.",
+    prompt: "Select your weekly commitment. This decides workload and expected finish time.",
+    hint: "Low weekly time means lighter tasks and longer finish. High weekly time means faster but more intensive work.",
     description: "Pick a schedule you can actually follow.",
     type: "radio",
+    required: true,
     options: ["3-5 hours", "6-8 hours", "9-12 hours", "15+ hours"]
   },
   {
     id: "focus",
     key: "focus",
     label: "Main focus",
-    section: "Priority",
+    section: "Optional priority",
     title: "What should your roadmap prioritize?",
     question: "What should your roadmap prioritize?",
-    prompt: "Choose the outcome that matters most right now. The weekly plan will highlight this priority.",
-    hint: "This affects projects, practice tasks and interview preparation.",
+    prompt: "Optional. Choose this only if you want the roadmap to lean toward a specific outcome.",
+    hint: "If skipped, Studox.ai will use a balanced default priority.",
     description: "Your roadmap will prioritize this area.",
     type: "radio",
+    required: false,
     options: ["Job-ready skills", "Internship preparation", "Portfolio projects", "DSA and coding", "Interview preparation"]
   },
   {
     id: "projects",
     key: "projects",
     label: "Projects built",
-    section: "Portfolio base",
+    section: "Optional portfolio base",
     title: "How much project experience do you have?",
     question: "How much project experience do you have?",
-    prompt: "Tell us your current project level so the roadmap can choose the right build difficulty.",
-    hint: "Project experience helps set portfolio expectations.",
+    prompt: "Optional. This helps tune project difficulty, but the roadmap can generate without it.",
+    hint: "If skipped, beginner-friendly project planning will be used.",
     description: "This helps us decide your project difficulty.",
     type: "radio",
+    required: false,
     options: ["0 projects", "1-2 projects", "3-5 projects", "5+ projects"]
   },
   {
     id: "learningStyle",
     key: "learningStyle",
     label: "Learning style",
-    section: "Learning style",
+    section: "Optional learning style",
     title: "How do you learn best?",
     question: "How do you learn best?",
-    prompt: "Choose the format that helps you stay consistent and understand faster.",
-    hint: "This shapes the balance between videos, reading, tasks and projects.",
+    prompt: "Optional. Pick this if you want the roadmap format adjusted to your style.",
+    hint: "If skipped, mixed learning will be used.",
     description: "We will shape your weekly plan around this.",
     type: "radio",
+    required: false,
     options: ["Video lessons", "Practice tasks", "Projects", "Reading notes", "Mixed learning"]
   },
   {
     id: "extra",
     key: "extra",
     label: "Extra context",
-    section: "Personal details",
+    section: "Optional personal details",
     title: "Anything else we should consider?",
     question: "Anything else we should consider?",
-    prompt: "Add your college year, weak topics, target company, current skills or any constraint that matters.",
-    hint: "Extra context makes the final roadmap more personal.",
+    prompt: "Optional. Add weak topics, target company, college year, or current skills if useful.",
+    hint: "If skipped, the roadmap will still generate from your main four answers.",
     description: "Example: college year, weak topics, target company, current skills.",
     type: "textarea",
+    required: false,
     placeholder: "Example: I know HTML/CSS, weak in DSA, want an internship in 3 months..."
   }
 ];
 
 function currentAssessmentValue(question = assessmentQuestions[assessmentStep]) {
   const answer = assessmentAnswers[question.id] || {};
-  return answer.value === "Other" ? answer.other : answer.value;
+  return answer.value || "";
 }
 
 function syncAssessmentAnswer(form, question = assessmentQuestions[assessmentStep]) {
   if (question.type === "textarea") {
-    const textarea = form.querySelector(`[name="${question.id}"]`);
+    const textarea = form?.querySelector(`[name="${question.id}"]`);
     assessmentAnswers[question.id] = { value: textarea?.value.trim() || "" };
     return;
   }
-  const checked = form.querySelector(`input[name="${question.id}"]:checked`);
-  const other = form.querySelector(`[name="${question.id}_other"]`);
-  assessmentAnswers[question.id] = {
-    value: checked?.value || "",
-    other: other?.value.trim() || "",
-  };
+  const checked = form?.querySelector(`input[name="${question.id}"]:checked`);
+  assessmentAnswers[question.id] = { value: checked?.value || "" };
 }
 
 function validateAssessmentStep(form, question = assessmentQuestions[assessmentStep]) {
   syncAssessmentAnswer(form, question);
   const answer = assessmentAnswers[question.id] || {};
-  if (!answer.value) {
-    toast("Please answer this question.");
+  if (question.required !== false && !answer.value) {
+    toast("Please answer this required question.");
     return false;
   }
-  if (answer.value === "Other" && !answer.other) {
-    toast("Please specify your answer.");
+  return true;
+}
+
+function validateRequiredAssessmentAnswers(form) {
+  const currentQuestion = assessmentQuestions[assessmentStep];
+  if (currentQuestion) syncAssessmentAnswer(form, currentQuestion);
+
+  const missingQuestion = assessmentQuestions.slice(0, 4).find((question) => {
+    const answer = assessmentAnswers[question.id] || {};
+    return question.required !== false && !answer.value;
+  });
+
+  if (missingQuestion) {
+    assessmentStep = Math.max(0, assessmentQuestions.findIndex((question) => question.id === missingQuestion.id));
+    toast(`Please answer ${missingQuestion.label.toLowerCase()} first.`);
+    renderAssessmentScreen();
     return false;
   }
+
   return true;
 }
 
@@ -2198,7 +2216,7 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='assessment-next']").forEach((button) => button.addEventListener("click", handleAssessmentNext));
   document.querySelectorAll("[data-action='assessment-prev']").forEach((button) => button.addEventListener("click", handleAssessmentPrev));
   document.querySelectorAll("[data-form='roadmap-assessment'] input[type='radio']").forEach((input) => input.addEventListener("change", handleAssessmentOptionChange));
-  document.querySelectorAll("[data-assessment-field], [data-assessment-other]").forEach((input) => input.addEventListener("input", () => syncAssessmentAnswer(document.querySelector("[data-form='roadmap-assessment']"))));
+  document.querySelectorAll("[data-assessment-field]").forEach((input) => input.addEventListener("input", () => syncAssessmentAnswer(document.querySelector("[data-form='roadmap-assessment']"))));
   document.querySelectorAll("[data-action='preview-roadmap']").forEach((card) => card.addEventListener("click", handleRoadmapPreview));
   document.querySelectorAll("[data-action='choose-roadmap']").forEach((button) => button.addEventListener("click", handleChooseRoadmap));
   document.querySelectorAll("[data-action='choose-roadmap-signup']").forEach((button) => button.addEventListener("click", handleChooseRoadmapSignup));
@@ -2231,7 +2249,7 @@ function assessmentFieldFromGoal(goal = "") {
 }
 
 function assessmentInputPayload(data = assessmentFormData()) {
-  const profile = state.profile || {};
+  const profile = functionalState.profile || functionalState.dashboard?.profile || {};
   const goal = data.goal || "Full Stack Developer";
   const level = data.level || "Beginner";
   const focus = data.focus || "Job ready skills";
@@ -2270,45 +2288,194 @@ function assessmentInputPayload(data = assessmentFormData()) {
   };
 }
 
-function buildFallbackRoadmaps(data = assessmentFormData()) {
-  const goal = data.goal || "Full Stack Developer";
-  const level = data.level || "Beginner";
-  const focus = data.focus || "Job ready skills";
-  const totalWeeks = assessmentTimelineWeeks(data.timeline || "3 months");
-  const tracks = [
-    ["Fast Track", "Sprint", 0.65, "Core concepts", "Daily practice", "Resume-ready mini project"],
-    ["Balanced", "Master Plan", 1, "Foundation modules", "Weekly projects", "Mock interview prep"],
-    ["Project Heavy", "Portfolio Track", 1.2, "Build-first learning", "Capstone project", "Deployment and showcase"]
-  ];
+const manualRoadmapDomains = {
+  "Full Stack Developer": {
+    short: "Full Stack",
+    foundations: ["Web foundations", "JavaScript fundamentals", "Frontend structure"],
+    intermediate: ["React apps", "Node.js APIs", "MongoDB data models"],
+    advanced: ["System design basics", "Authentication and scaling", "Production deployment"],
+    projects: ["Portfolio website", "Full stack dashboard", "Production-ready capstone"]
+  },
+  "AI/ML Engineer": {
+    short: "AI/ML",
+    foundations: ["Python fundamentals", "Math for ML", "Data handling"],
+    intermediate: ["Machine learning models", "Data preprocessing", "Model evaluation"],
+    advanced: ["Deep learning basics", "MLOps workflow", "AI portfolio project"],
+    projects: ["Prediction model", "Computer vision mini project", "Model deployment demo"]
+  },
+  "Data Analyst": {
+    short: "Data Analyst",
+    foundations: ["Excel analytics", "SQL fundamentals", "Data cleaning"],
+    intermediate: ["Python analysis", "Statistics basics", "Dashboard building"],
+    advanced: ["Business case studies", "Advanced SQL", "BI portfolio"],
+    projects: ["Sales dashboard", "Customer analysis", "Business insights report"]
+  },
+  "Cybersecurity": {
+    short: "Cybersecurity",
+    foundations: ["Networking basics", "Linux essentials", "Security fundamentals"],
+    intermediate: ["Web security", "Threat analysis", "Hands-on labs"],
+    advanced: ["Ethical hacking workflow", "Incident response", "Security portfolio"],
+    projects: ["Network audit", "Web vulnerability report", "Security lab documentation"]
+  },
+  "UI/UX Designer": {
+    short: "UI/UX",
+    foundations: ["Design principles", "Figma basics", "User research"],
+    intermediate: ["Wireframes", "Design systems", "Usability testing"],
+    advanced: ["Product case studies", "Prototype polish", "Portfolio storytelling"],
+    projects: ["Mobile app redesign", "SaaS dashboard design", "UX case study"]
+  },
+  "Web Development": {
+    short: "Web Dev",
+    foundations: ["HTML and CSS", "Responsive layouts", "JavaScript basics"],
+    intermediate: ["Modern frontend", "API integration", "Web project workflow"],
+    advanced: ["Performance", "Accessibility", "Deployment"],
+    projects: ["Landing page", "Interactive web app", "Responsive portfolio"]
+  }
+};
 
-  return tracks.map(([badge, suffix, factor, first, second, third], index) => ({
-    badge,
-    title: `${goal} ${suffix}`,
-    careerGoal: goal,
-    summary: `${badge} roadmap for ${level.toLowerCase()} learners focused on ${focus.toLowerCase()}.`,
-    estimatedDurationWeeks: Math.max(4, Math.round(totalWeeks * factor)),
-    difficulty: String(level).toLowerCase(),
-    weeks: [first, second, third].map((title, weekIndex) => ({
-      weekNumber: weekIndex + 1,
-      title,
-      description: `Step ${weekIndex + 1} for ${goal}.`,
-      estimatedHours: Math.max(4, assessmentWeeklyHours(data.hours || "6-8 hours")),
-      tasks: [],
-      resources: []
-    })),
-    localPreview: true,
-    rank: index + 1
-  }));
+const advancedDurationWeeksByGoal = {
+  "Full Stack Developer": 24,
+  "AI/ML Engineer": 36,
+  "Data Analyst": 20,
+  "Cybersecurity": 36,
+  "UI/UX Designer": 16,
+  "Web Development": 20
+};
+
+const recommendedTimelineByGoal = {
+  "Full Stack Developer": { beginner: "6 months", intermediate: "3 months", advanced: "6 months" },
+  "AI/ML Engineer": { beginner: "12 months", intermediate: "6 months", advanced: "9 months" },
+  "Data Analyst": { beginner: "6 months", intermediate: "3 months", advanced: "5 months" },
+  "Cybersecurity": { beginner: "12 months", intermediate: "6 months", advanced: "9 months" },
+  "UI/UX Designer": { beginner: "6 months", intermediate: "3 months", advanced: "4 months" },
+  "Web Development": { beginner: "6 months", intermediate: "3 months", advanced: "5 months" }
+};
+
+function normalizedAssessmentLevel(level = "Beginner") {
+  const clean = String(level).toLowerCase();
+  if (clean.includes("advanced")) return "advanced";
+  if (clean.includes("intermediate") || clean.includes("basic")) return "intermediate";
+  return "beginner";
 }
 
-async function requestRoadmapOptions(payload, data) {
-  const fallback = { roadmaps: buildFallbackRoadmaps(data), fallback: true };
-  const timeout = new Promise((resolve) => window.setTimeout(() => resolve(fallback), 6500));
-  const result = await Promise.race([
-    api("/roadmaps/generate", { method: "POST", body: JSON.stringify(payload) }),
-    timeout
-  ]);
-  return result?.roadmaps?.length ? result : fallback;
+function timelineMonths(label = "3 months") {
+  if (String(label).includes("12")) return 12;
+  if (String(label).includes("6")) return 6;
+  if (String(label).includes("1")) return 1;
+  return 3;
+}
+
+function weeklyLoadDetails(hours = "6-8 hours") {
+  if (String(hours).includes("3-5")) return { label: "Light", multiplier: 1.25, tasks: 2, note: "lighter weekly tasks with extra revision buffer" };
+  if (String(hours).includes("15")) return { label: "Intensive", multiplier: 0.72, tasks: 5, note: "faster progress with a higher weekly workload" };
+  if (String(hours).includes("9-12")) return { label: "Focused", multiplier: 0.88, tasks: 4, note: "focused weekly practice and project work" };
+  return { label: "Balanced", multiplier: 1, tasks: 3, note: "balanced weekly lessons, practice and projects" };
+}
+
+function recommendedTimelineFor(goal, levelKey) {
+  return recommendedTimelineByGoal[goal]?.[levelKey] || recommendedTimelineByGoal[goal]?.beginner || "3 months";
+}
+
+function adjustedWeeks(data, levelKey) {
+  const goal = data.goal || "Full Stack Developer";
+  if (levelKey === "advanced") return advancedDurationWeeksByGoal[goal] || 24;
+
+  const chosenWeeks = assessmentTimelineWeeks(data.timeline || recommendedTimelineFor(goal, levelKey));
+  const load = weeklyLoadDetails(data.hours || "6-8 hours");
+  return Math.max(4, Math.round(chosenWeeks * load.multiplier));
+}
+
+function roadmapStagesFor(domain, cardLevel, focus, projects) {
+  const foundation = domain.foundations || [];
+  const middle = cardLevel === "beginner" ? domain.foundations : domain.intermediate;
+  const final = cardLevel === "advanced" ? domain.advanced : domain.projects;
+  const optionalFocus = focus || "Job-ready skills";
+  const projectBase = projects || "0 projects";
+  return [
+    foundation[0] || "Foundation setup",
+    middle[1] || middle[0] || "Guided practice",
+    final[2] || final[0] || "Portfolio project",
+    `${optionalFocus} and ${projectBase} level polish`
+  ];
+}
+
+function createManualRoadmapCard(data, card = {}) {
+  const goal = data.goal || "Full Stack Developer";
+  const levelKey = card.levelKey || normalizedAssessmentLevel(data.level);
+  const domain = manualRoadmapDomains[goal] || manualRoadmapDomains["Full Stack Developer"];
+  const load = weeklyLoadDetails(data.hours || "6-8 hours");
+  const recommendedTimeline = recommendedTimelineFor(goal, levelKey);
+  const chosenTimeline = levelKey === "advanced" ? recommendedTimeline : data.timeline || recommendedTimeline;
+  const weeks = adjustedWeeks({ ...data, goal }, levelKey);
+  const focus = data.focus || "Job-ready skills";
+  const learningStyle = data.learningStyle || "Mixed learning";
+  const stages = roadmapStagesFor(domain, levelKey, focus, data.projects);
+  const levelLabel = levelKey.charAt(0).toUpperCase() + levelKey.slice(1);
+  const intensity = levelKey === "advanced" ? "fixed advanced duration" : chosenTimeline === recommendedTimeline ? "recommended pace" : "custom pace";
+
+  return {
+    title: `${goal} ${levelLabel} Roadmap`,
+    careerGoal: goal,
+    summary: `${levelLabel} ${domain.short} plan with ${load.label.toLowerCase()} workload. Estimated finish: ${weeks} weeks at ${data.hours || "6-8 hours"}/week (${intensity}).`,
+    estimatedDurationWeeks: weeks,
+    difficulty: levelKey,
+    status: card.locked ? "locked" : "draft",
+    generatedBy: "manual",
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    recommendedTimeline,
+    selectedTimeline: chosenTimeline,
+    weeklyLoad: load.label,
+    locked: Boolean(card.locked),
+    optional: Boolean(card.optional),
+    recommended: Boolean(card.recommended),
+    lockReason: card.locked ? "Advanced roadmap unlocks after completing intermediate milestones." : "",
+    trackLabel: card.label || levelLabel,
+    weeks: stages.map((title, index) => ({
+      weekId: `manual_${levelKey}_${index + 1}`,
+      weekNumber: index + 1,
+      title,
+      description: `${title} for ${goal} using ${learningStyle.toLowerCase()} and ${load.note}.`,
+      estimatedHours: Math.max(4, assessmentWeeklyHours(data.hours || "6-8 hours")),
+      tasks: Array.from({ length: Math.min(load.tasks, 3) }, (_, taskIndex) => ({
+        taskId: `task_${index + 1}_${taskIndex + 1}`,
+        title: `${title} task ${taskIndex + 1}`,
+        description: `Complete practical work for ${title.toLowerCase()} in the ${goal} track.`,
+        type: taskIndex === 2 ? "project" : "learning",
+        estimatedTimeMinutes: 60
+      })),
+      resources: [{
+        resourceId: `resource_${index + 1}`,
+        title: `${domain.short} learning resource`,
+        url: "https://developer.mozilla.org/",
+        type: "documentation"
+      }]
+    })),
+    localPreview: true
+  };
+}
+
+function buildManualRoadmaps(data = assessmentFormData()) {
+  const levelKey = normalizedAssessmentLevel(data.level || "Beginner");
+  if (levelKey === "beginner") {
+    return [createManualRoadmapCard(data, { levelKey: "beginner", label: "Beginner", recommended: true })];
+  }
+  if (levelKey === "advanced") {
+    return [createManualRoadmapCard(data, { levelKey: "advanced", label: "Advanced", recommended: true })];
+  }
+  return [
+    createManualRoadmapCard(data, { levelKey: "beginner", label: "Beginner Refresh", optional: true }),
+    createManualRoadmapCard(data, { levelKey: "intermediate", label: "Intermediate", recommended: true }),
+    createManualRoadmapCard(data, { levelKey: "advanced", label: "Advanced", locked: true })
+  ];
+}
+
+function buildFallbackRoadmaps(data = assessmentFormData()) {
+  return buildManualRoadmaps(data);
+}
+
+async function requestRoadmapOptions(_payload, data) {
+  return { roadmaps: buildManualRoadmaps(data), manual: true };
 }
 function handleChooseRoadmapSignup(event) {
   const card = event.target.closest("[data-action='choose-roadmap-signup']");
@@ -2331,10 +2498,8 @@ function handleChooseRoadmapSignup(event) {
 
 function handleAssessmentOptionChange(event) {
   const form = event.currentTarget.closest("[data-form='roadmap-assessment']");
-  const other = form?.querySelector(`[data-assessment-other="${event.currentTarget.name}"]`);
-  if (other) other.style.display = event.currentTarget.value === "Other" ? "" : "none";
   syncAssessmentAnswer(form);
-  if (event.currentTarget.value !== "Other" && assessmentStep < assessmentQuestions.length - 1) {
+  if (assessmentStep < assessmentQuestions.length - 1) {
     assessmentStep = Math.min(assessmentQuestions.length - 1, assessmentStep + 1);
     renderAssessmentScreen();
   }
@@ -2398,7 +2563,7 @@ async function handleChooseRoadmap(event) {
 async function handleRoadmapAssessmentSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  if (!validateAssessmentStep(form)) return;
+  if (!validateRequiredAssessmentAnswers(form)) return;
   const data = assessmentFormData();
   await generateRoadmapsFromAssessment(data, form);
 }
@@ -2409,14 +2574,22 @@ async function generateRoadmapsFromAssessment(data, form = null) {
   functionalState.generatedRoadmaps = [];
   renderAssessmentScreen();
 
-  const result = await requestRoadmapOptions(assessmentInputPayload(data), data);
-  pendingRoadmapGeneration = false;
-  functionalState.generatedRoadmaps = (result?.roadmaps || buildFallbackRoadmaps(data)).slice(0, 3);
-  functionalState.previewRoadmapIndex = 0;
-  clearPendingAssessment();
-  toast(result?.fallback ? "Starter roadmap options are ready." : "Roadmap options received.");
-  renderAssessmentScreen();
-  return true;
+  try {
+    const result = await requestRoadmapOptions(null, data);
+    functionalState.generatedRoadmaps = (result?.roadmaps || buildFallbackRoadmaps(data)).slice(0, 3);
+    functionalState.previewRoadmapIndex = 0;
+    clearPendingAssessment();
+    toast(result?.manual ? "Your roadmap is ready." : result?.fallback ? "Starter roadmap options are ready." : "Roadmap options received.");
+    return true;
+  } catch (error) {
+    console.error("Roadmap generation failed", error);
+    functionalState.generatedRoadmaps = buildFallbackRoadmaps(data).slice(0, 3);
+    toast("Your roadmap is ready.");
+    return true;
+  } finally {
+    pendingRoadmapGeneration = false;
+    renderAssessmentScreen();
+  }
 }
 
 async function resumePendingRoadmapGeneration() {

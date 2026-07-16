@@ -7393,3 +7393,47 @@ html[data-theme="dark"] .mentor-suggestion i {
     justify-content: center;
   }
 }
+/* Manual roadmap result states */
+.premium-results .assessment-roadmaps.count-1 {
+  grid-template-columns: minmax(0, 520px);
+  justify-content: center;
+}
+
+.premium-results .assessment-roadmap-card.recommended {
+  border-color: rgba(15, 118, 110, 0.38);
+  box-shadow: 0 28px 72px rgba(15, 118, 110, 0.16);
+}
+
+.premium-results .assessment-roadmap-card.optional {
+  border-style: dashed;
+}
+
+.premium-results .assessment-roadmap-card.locked {
+  cursor: not-allowed;
+  opacity: 0.76;
+  filter: grayscale(0.18);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.premium-results .assessment-roadmap-card.locked:hover {
+  transform: none;
+  box-shadow: 0 24px 62px rgba(15, 23, 42, 0.12);
+}
+
+.premium-results .assessment-roadmap-card.locked .roadmap-track-name {
+  color: #64748b;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.premium-results .assessment-roadmap-card.recommended .roadmap-track-name {
+  color: #065f46;
+  background: #ecfdf5;
+  border-color: #99f6e4;
+}
+
+.premium-results .assessment-roadmap-card.optional .roadmap-track-name {
+  color: #92400e;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
