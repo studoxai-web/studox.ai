@@ -12,8 +12,10 @@ const User = model(
     {
       name: { type: String, required: true, trim: true },
       email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+      firebaseUid: { type: String, unique: true, sparse: true, trim: true },
       phone: { type: String, trim: true },
-      password: { type: String, required: true },
+      password: String,
+      photoURL: String,
       role: { type: String, enum: ["student", "admin"], default: "student" },
       plan: { type: String, enum: ["free", "pro", "elite"], default: "free" },
       activeRoadmapId: { type: Schema.Types.ObjectId, ref: "Roadmap" },

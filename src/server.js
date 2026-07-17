@@ -1047,6 +1047,114 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/api/firebase/config", (_req, res) => {
+  res.json({
+    apiKey: process.env.FIREBASE_API_KEY || "",
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "",
+    projectId: process.env.FIREBASE_PROJECT_ID || "",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: process.env.FIREBASE_APP_ID || "",
+  });
+});
+
+app.post("/api/auth/firebase", async (req, res) => {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ message: "Firebase ID token is required." });
+
+    let firebase;
+    try {
+      firebase = require("./config/firebaseAdmin");
+    } catch (error) {
+      return res.status(503).json({ message: "Firebase Admin SDK is not installed.", error: error.message });
+    }
+
+    const firebaseApp = firebase.initializeFirebaseAdmin();
+    if (!firebaseApp) return res.status(503).json({ message: "Firebase Admin credentials are not configured." });
+
+    const decoded = await firebase.admin.auth().verifyIdToken(token);
+    const firebaseUid = decoded.uid;
+    const email = normalizeEmail(decoded.email);
+    const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
+    const photoURL = decoded.picture || "";
+
+    if (!firebaseUid) return res.status(400).json({ message: "Firebase token is missing uid." });
+    if (!email) return res.status(400).json({ message: "Firebase account email is required." });
+
+    let user;
+    if (mongoReady()) {
+      user = await User.findOne({ firebaseUid });
+      if (!user) {
+        user = await User.findOneAndUpdate(
+          { email },
+          { $set: { firebaseUid, name, photoURL } },
+          { new: true },
+        );
+      }
+      if (!user) {
+        user = await User.create({ firebaseUid, email, name, photoURL, role: "student", plan: "free" });
+      }
+
+      await StudentProfile.findOneAndUpdate(
+        { user: user._id },
+        {
+          $setOnInsert: {
+            user: user._id,
+            username: email.split("@")[0],
+            skills: [],
+            level: "Beginner",
+            xp: 0,
+            profileCompletion: 0,
+            streak: 0,
+          },
+        },
+        { upsert: true, new: true },
+      );
+      await UserSettings.findOneAndUpdate(
+        { user: user._id },
+        { $setOnInsert: { user: user._id } },
+        { upsert: true, new: true },
+      );
+    } else {
+      user = memory.users.find((item) => item.firebaseUid === firebaseUid);
+      if (!user) {
+        user = memory.users.find((item) => item.email === email);
+        if (user) {
+          user.firebaseUid = firebaseUid;
+          user.name = name || user.name;
+          user.photoURL = photoURL;
+        }
+      }
+      if (!user) {
+        user = { id: memoryId("user"), firebaseUid, name, email, photoURL, role: "student", plan: "free" };
+        memory.users.push(user);
+      }
+      const userId = user.id || user._id;
+      if (!memory.profiles.find((item) => String(item.user) === String(userId))) {
+        memory.profiles.push({
+          user: userId,
+          username: email.split("@")[0],
+          skills: [],
+          level: "Beginner",
+          xp: 0,
+          profileCompletion: 0,
+          streak: 0,
+        });
+      }
+      if (!memory.settings.find((item) => String(item.user) === String(userId))) {
+        memory.settings.push({ user: userId, theme: "system", accentColor: "#2563eb", language: "English" });
+      }
+      persistMemory();
+    }
+
+    res.json({ success: true, user: publicUser(user) });
+  } catch (error) {
+    res.status(401).json({ message: "Firebase authentication failed.", error: error.message });
+  }
+});
+
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { name, phone, password, field } = req.body;

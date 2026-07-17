@@ -10,6 +10,7 @@ Studox.ai is a single-page student learning platform with:
 
 - Landing page and assessment flow
 - Login/signup with JWT authentication
+- Firebase Authentication infrastructure is prepared, but not yet used for login/signup
 - AI roadmap generation
 - Dashboard and roadmap pages
 - Courses, tests, DSA, resume, projects, internships, hackathons, certificates, AI mentor, profile, settings, and admin screens
@@ -41,11 +42,13 @@ studox.ai/
   public/
     index.html
     app.js
+    firebase.js
   src/
     server.js
     seed.js
     config/
       db.js
+      firebaseAdmin.js
       mailer.js
     data/
       mockData.js
@@ -65,6 +68,28 @@ studox.ai/
   .env
   .env.example
 ```
+
+## 2A. Firebase Auth Migration Status
+
+Firebase is currently in Phase 2 backend-sync mode.
+
+Current active authentication still uses:
+
+```text
+Login/Signup
+-> /api/auth/login or /api/auth/signup
+-> custom JWT
+-> authRequired()/authOptional()
+```
+
+Prepared Firebase infrastructure:
+
+- `public/firebase.js` initializes the Firebase Web SDK from environment-backed config exposed by `/api/firebase/config`.
+- `src/config/firebaseAdmin.js` initializes Firebase Admin from backend environment variables.
+- `src/server.js` exposes `/api/firebase/config` for public Firebase Web SDK config only.
+- `src/server.js` exposes `POST /api/auth/firebase` to verify a Firebase ID token and find/create the matching Studox `User`, `StudentProfile`, and `UserSettings`.
+
+Important: Firebase is not yet used by the frontend signup/login screens, route guards, legacy JWT middleware, or pending-roadmap save flow. Those migrations are planned for later phases.
 
 ## 3. Frontend Architecture
 
