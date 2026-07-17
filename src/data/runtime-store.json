@@ -125,6 +125,15 @@
       "password": "$2a$10$ve6J1dO1LQAdFa.cGfs3G.S6UbYRXOxmOxd3DgSfqJDi.drP55IaO",
       "role": "student",
       "plan": "free"
+    },
+    {
+      "id": "user_1784277471510_86cf70",
+      "name": "jaysh",
+      "email": "ss@gmail.com",
+      "phone": "",
+      "password": "$2a$10$iUjOnpo8drS0cBGYGyJLkuoZSzSrlhLcu0lOAIxjMkdUnXNwbyUca",
+      "role": "student",
+      "plan": "free"
     }
   ],
   "profiles": [
@@ -151,7 +160,7 @@
         }
       ],
       "level": "Intermediate",
-      "xp": 12880,
+      "xp": 12920,
       "profileCompletion": 86,
       "streak": 18
     },
@@ -336,6 +345,16 @@
       "xp": 0,
       "profileCompletion": 0,
       "streak": 0
+    },
+    {
+      "user": "user_1784277471510_86cf70",
+      "username": "ss",
+      "field": "Business Analytics",
+      "skills": [],
+      "level": "Beginner",
+      "xp": 0,
+      "profileCompletion": 0,
+      "streak": 0
     }
   ],
   "roadmaps": [
@@ -346,7 +365,7 @@
       "title": "Full Stack Developer Roadmap",
       "careerGoal": "Full Stack Developer",
       "currentLevel": "Beginner",
-      "overallProgress": 1,
+      "overallProgress": 2,
       "timeToGoalWeeks": 20,
       "estimatedDurationWeeks": 20,
       "skillsLearned": 0,
@@ -359,7 +378,7 @@
         {
           "title": "Web Foundations",
           "status": "in-progress",
-          "progress": 8,
+          "progress": 16,
           "description": "Master HTML, CSS, JavaScript, Git and browser fundamentals.",
           "skills": [
             "HTML",
@@ -436,7 +455,7 @@
         }
       ],
       "createdAt": "2026-07-17T02:36:42.572Z",
-      "updatedAt": "2026-07-17T03:04:12.022Z"
+      "updatedAt": "2026-07-17T08:36:22.683Z"
     },
     {
       "id": "roadmap_full_stack",
@@ -967,7 +986,7 @@
       "category": "Web Development",
       "instructor": "Nisha Thomas",
       "students": 12400,
-      "progress": 68,
+      "progress": 72,
       "tags": [
         "React",
         "Node",
@@ -1017,8 +1036,8 @@
       "order": 3,
       "lessons": 14,
       "status": "in-progress",
-      "progress": 74,
-      "updatedAt": "2026-07-17T03:04:12.022Z"
+      "progress": 86,
+      "updatedAt": "2026-07-17T08:36:22.681Z"
     },
     {
       "id": "module_4",
@@ -1738,6 +1757,12 @@
     },
     {
       "user": "user_1784264500561_a7cdf2",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1784277471510_86cf70",
       "theme": "system",
       "accentColor": "#2563eb",
       "language": "English"

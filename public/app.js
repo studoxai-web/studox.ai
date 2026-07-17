@@ -365,7 +365,7 @@ function studoxLandingPage() {
         <a href="#how-it-works">How It Works</a>
         <a href="#features">Features</a>
         <a href="#roadmap">Roadmap</a>
-        <a href="#courses">Resources</a>
+        <a href="#courses">Courses</a>
         <a href="#about">About Us</a>
       </div>
       <div class="nav-actions">
@@ -385,7 +385,7 @@ function studoxLandingPage() {
         </p>
         <div class="hero-actions">
           <button class="btn primary" type="button" data-action="start-assessment">Build My AI Roadmap</button>
-          <a class="btn ghost" href="#how-it-works">${icon("test")} See How It Works</a>
+          <a class="btn ghost watch-btn" href="#how-it-works"><span>${icon("test")}</span> See How It Works</a>
         </div>
         <div class="hero-trust">
           <div class="trust-checks"><span>Free to start</span><span>No credit card</span><span>Cancel anytime</span></div>
@@ -409,14 +409,14 @@ function studoxLandingPage() {
             <div class="dash-sidebar">
               ${["Home", "Roadmap", "Courses", "Practice", "Tests", "AI Mentor", "Bookmarks", "Profile"].map((item, index) => `<div class="dash-sidebar-item ${index === 0 ? "active" : ""}">${item}</div>`).join("")}
             </div>
-            <div class="dash-main">
+            <div class="dash-main hero-how-preview">
               <div class="preview-title"><h3>See How It Works</h3><p>From assessment to your personalized roadmap in 3 simple steps</p></div>
               <div class="preview-steps">
                 ${[
                   ["1", "Take Assessment", "Answer 8 quick questions about your goals, skills and interests.", "test", "blue"],
                   ["2", "AI Analyzes", "Our AI analyzes your answers and identifies the best career path for you.", "bot", "purple"],
                   ["3", "Get Your Roadmap", "Receive a personalized learning roadmap with courses, projects and daily goals.", "trophy", "green"],
-                ].map(([num, title, text, iconName, tone], index) => `<div class="preview-step ${tone}"><span class="step-num">${num}</span><div class="step-big-icon">${icon(iconName)}</div><strong>${title}</strong><p>${text}</p></div>${index < 2 ? `<span class="step-arrow">-&gt;</span>` : ""}`).join("")}
+                ].map(([num, title, text, iconName, tone]) => `<div class="preview-step ${tone}"><span class="step-num">${num}</span><div class="step-big-icon">${icon(iconName)}</div><strong>${title}</strong><p>${text}</p></div>`).join("")}
               </div>
               <div class="roadmap-preview-line">
                 <div class="roadmap-heading"><strong>Roadmap Preview</strong><span>Example: Full Stack Developer</span></div>
@@ -441,14 +441,14 @@ function studoxLandingPage() {
     </section>
 
     <section class="section feature-section" id="features">
+      <div class="section-title center"><div><h2>Everything you need to reach your goals</h2></div></div>
       <div class="feature-strip">
         ${[
-          ["Ask Anything", "24/7 AI mentor to clear your doubts.", "bot"],
-          ["Personalized Roadmap", "Get a tailored roadmap for your goals.", "map"],
-          ["Smart Practice", "DSA, quizzes, MCQs and more.", "code"],
-          ["Real World Projects", "Build. Learn. Showcase. Stand out.", "briefcase"],
-          ["Career Guidance", "Internships, resumes and job referrals.", "trophy"],
-        ].map(([title, text, iconName]) => `<div class="strip-item"><div class="mini-icon">${icon(iconName)}</div><h3>${title}</h3><p>${text}</p></div>`).join("")}
+          ["Personalized Roadmap", "AI creates a roadmap tailored to your career goals.", "map", "blue"],
+          ["Curated Courses", "Best courses handpicked for your roadmap.", "book", "green"],
+          ["Track Progress", "Track your learning and stay consistent every day.", "chart", "amber"],
+          ["Stay on Track", "Smart reminders and insights to keep you motivated.", "trophy", "purple"],
+        ].map(([title, text, iconName, tone]) => `<div class="strip-item"><div class="mini-icon ${tone}">${icon(iconName)}</div><h3>${title}</h3><p>${text}</p></div>`).join("")}
       </div>
     </section>
 
@@ -456,72 +456,47 @@ function studoxLandingPage() {
       <div class="section-title center"><div><h2>How Studox.ai Works</h2><p>Your journey from confused to career ready in 4 simple steps.</p></div></div>
       <div class="steps-row">
         ${[
-          ["1. Take Assessment", "Tell us about yourself and your goals.", "blue-bg"],
-          ["2. AI Creates Roadmap", "Our AI builds a personalized learning plan for you.", "blue-bg"],
-          ["3. Learn & Practice", "Learn daily, practice consistently, track progress.", "green-bg"],
-          ["4. Build & Grow", "Build projects, get guidance and land opportunities.", "amber-bg"],
-        ].map(([title, text, color], index) => `<div class="step-item"><div class="step-icon ${color}">${index + 1}</div><div class="step-arrow">-&gt;</div><h4>${title}</h4><p>${text}</p></div>`).join("")}
+          ["Take Assessment", "Answer a few questions about yourself and your goals.", "test", "blue-bg"],
+          ["AI Creates Roadmap", "Our AI builds a personalized learning roadmap for you.", "bot", "green-bg"],
+          ["Learn & Practice", "Follow your roadmap, learn daily, practice and build skills.", "book", "amber-bg"],
+          ["Achieve Your Goal", "Build projects, gain confidence and land your dream career.", "trophy", "purple-bg"],
+        ].map(([title, text, iconName, color], index) => `<div class="step-item"><span class="step-count">${index + 1}</span><div class="step-icon ${color}">${icon(iconName)}</div><div class="step-arrow">-&gt;</div><h4>${title}</h4><p>${text}</p></div>`).join("")}
       </div>
     </section>
 
     <section class="section platform-section" id="roadmap">
-      <div class="platform-grid">
-        <div class="platform-left">
-          <div class="roadmap-preview-card">
-            <div class="rp-header"><div class="rp-brand"><div class="rp-brand-dot"></div><span>Studox.ai</span></div></div>
-            <div class="rp-content">
-              <div class="rp-title"><h4>Roadmap</h4><div class="rp-completion"><strong>Frontend Developer Roadmap</strong><span>12-16 weeks target</span><div class="rp-bar"><div class="rp-fill" style="width:55%"></div></div><span class="rp-pct">55%</span></div></div>
-              <div class="rp-modules">
-                ${["HTML, CSS & JavaScript", "Responsive Web Design", "React.js Basics", "Advanced React", "State Management"].map((item, index) => `<div class="rp-module ${index < 2 ? "done" : index === 2 ? "active" : ""}"><span class="rp-dot ${index < 2 ? "green" : index === 2 ? "blue" : "gray"}"></span><div><strong>${item}</strong><span>${index < 2 ? "Completed" : index === 2 ? "In Progress" : "Locked"}</span></div></div>`).join("")}
-              </div>
+      <div class="section-title center"><div><h2>Your Personalized Roadmap Preview</h2><p>A glimpse of what your roadmap looks like</p></div></div>
+      <div class="platform-roadmap-preview">
+        <aside class="roadmap-timeline">
+          ${[
+            ["Week 1", "HTML, CSS & JavaScript Basics", "Completed", "done"],
+            ["Week 2", "Responsive Web Design", "Completed", "done"],
+            ["Week 3", "JavaScript Fundamentals", "In Progress", "active"],
+            ["Week 4", "React Basics", "Upcoming", ""],
+            ["Week 5", "Projects & Practice", "Upcoming", ""],
+          ].map(([week, title, status, state]) => `<div class="timeline-week ${state}"><span></span><div><strong>${week}</strong><p>${title}</p></div><small>${status}</small></div>`).join("")}
+        </aside>
+        <div class="roadmap-preview-card detailed-roadmap-card">
+          <div class="rp-content">
+            <div class="rp-title"><h4>Week 3: JavaScript Fundamentals</h4><span class="rp-pct">60%</span></div>
+            <div class="rp-bar"><div class="rp-fill" style="width:60%"></div></div>
+            <div class="roadmap-detail-grid">
+              <article>
+                <h5>Topics</h5>
+                ${["Variables & Data Types", "Functions & Scope", "DOM Manipulation", "Events Handling", "Mini Project"].map((item) => `<p><span>✓</span>${item}</p>`).join("")}
+              </article>
+              <article>
+                <h5>Resources</h5>
+                ${[["Video Lecture", "15 min"], ["Documentation", "20 min"], ["Practice Problems", "10 problems"]].map(([item, meta]) => `<p><span>${icon("book")}</span>${item}<small>${meta}</small></p>`).join("")}
+              </article>
+              <article>
+                <h5>Tasks <small>4 / 8 completed</small></h5>
+                ${["Read Notes", "Watch Video", "Practice Problems", "Mini Project"].map((item, index) => `<label><input type="checkbox" ${index < 2 ? "checked" : ""} disabled />${item}</label>`).join("")}
+                <button class="btn primary" type="button">Continue Learning</button>
+              </article>
             </div>
           </div>
         </div>
-        <div class="platform-right">
-          <div class="platform-badge">ALL-IN-ONE LEARNING PLATFORM</div>
-          <h2>Everything you need to learn, build and grow.</h2>
-          <ul class="platform-list">
-            <li>Personalized roadmap based on your goals</li>
-            <li>Daily goals and smart reminders</li>
-            <li>Practice DSA, quizzes and tests</li>
-            <li>Build real world projects</li>
-            <li>AI mentor for doubts and guidance</li>
-            <li>Track your progress and stay motivated</li>
-          </ul>
-          <a class="btn primary" href="#features">Explore Features</a>
-        </div>
-      </div>
-    </section>
-
-    <section class="section landing-insights" id="resources">
-      <div class="section-title center"><div><h2>Built for daily student progress</h2><p>Courses, tests, achievements and AI guidance stay connected in one premium workspace.</p></div></div>
-      <div class="landing-insight-grid">
-        <article class="landing-resource-card wide">
-          <div class="panel-head"><h3>Popular Learning Tracks</h3><a href="#courses">View all</a></div>
-          <div class="landing-course-row">
-            ${[
-              ["Full Stack Developer", "React, Node, MongoDB", 75, "code"],
-              ["DSA Mastery", "Arrays, Trees, DP", 62, "test"],
-              ["AI Career Builder", "Resume, projects, interviews", 68, "bot"],
-            ].map(([title, text, value, iconName]) => `<a href="#courses" class="landing-course-mini"><span>${icon(iconName)}</span><div><strong>${title}</strong><small>${text}</small>${progress("", value)}</div><b>${value}%</b></a>`).join("")}
-          </div>
-        </article>
-        <article class="landing-resource-card">
-          <div class="panel-head"><h3>Upcoming Tests</h3><a href="#tests">Start</a></div>
-          <div class="landing-test-list">
-            ${[
-              ["DSA Weekly Contest", "Today - 45 min"],
-              ["Aptitude Sprint", "Tomorrow - 30 min"],
-              ["Web Dev Quiz", "Friday - 25 min"],
-            ].map(([title, text]) => `<a href="#tests"><span>${icon("test")}</span><div><strong>${title}</strong><small>${text}</small></div></a>`).join("")}
-          </div>
-        </article>
-        <article class="landing-resource-card achievement-card">
-          <span>${icon("trophy")}</span>
-          <h3>Keep it up</h3>
-          <p>Students use Studox.ai to plan roadmaps, improve scores and build portfolio proof.</p>
-          <a class="btn primary" href="#signup">Create your plan</a>
-        </article>
       </div>
     </section>
 
@@ -529,23 +504,15 @@ function studoxLandingPage() {
       <div class="cta-inner">
         <div class="cta-icon">${icon("trophy")}</div>
         <div class="cta-text"><h2>Ready to take control of your learning?</h2><p>Join students who are already building their future with Studox.ai.</p></div>
-        <div class="cta-action"><a class="btn cta-btn" href="#signup">Get Started Free</a><span class="cta-note">No credit card required</span></div>
+        <div class="cta-action"><button class="btn cta-btn" type="button" data-action="start-assessment">Build My AI Roadmap</button><span class="cta-note">Free to start. No credit card required.</span></div>
       </div>
     </section>
 
-    <footer class="landing-footer">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          ${brand()}
-          <p class="footer-tagline">Studox.ai helps students learn smarter, practice consistently, build real projects and prepare for careers with AI guidance.</p>
-          <div class="footer-socials"><a href="#landing">X</a><a href="#landing">in</a><a href="#landing">GH</a></div>
-        </div>
-        <div class="footer-col"><h4>Platform</h4><a href="#features">Features</a><a href="#roadmap">Roadmap</a><a href="#courses">Courses</a><a href="#tests">Tests</a></div>
-        <div class="footer-col"><h4>Career</h4><a href="#resume">Resume Builder</a><a href="#internships">Internships</a><a href="#hackathons">Hackathons</a><a href="#certificates">Certificates</a></div>
-        <div class="footer-col"><h4>Company</h4><a href="#about">About</a><a href="#mentor">AI Mentor</a><a href="#login">Login</a><a href="#signup">Signup</a></div>
-        <div class="footer-col"><h4>Stay updated</h4><p>Get learning tips, roadmap updates and career opportunities.</p><div class="footer-newsletter"><input placeholder="Email address" /><button class="btn primary footer-sub-btn" data-toast="Newsletter signup placeholder ready.">Join</button></div></div>
+    <footer class="landing-footer simple-landing-footer">
+      <p>Loved by students across India</p>
+      <div class="college-strip">
+        <span>NEED DISCUSSION BEFORE WRITING AND TESTING THERE</span>
       </div>
-      <div class="footer-bottom">Copyright 2026 Studox.ai. Learn. Practice. Build. Grow.</div>
     </footer>
   </main>`;
 }
