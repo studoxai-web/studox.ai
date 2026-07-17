@@ -7,6 +7,7 @@ let googleScriptPromise = null;
 const themeKey = "studox-theme";
 const mentorFreeChatLimit = 10;
 const mentorLimitTemporarilyDisabled = true;
+const pendingRoadmapKey = "studox-pending-roadmap";
 
 function getStoredTheme() {
   return localStorage.getItem(themeKey) || "light";
@@ -840,6 +841,19 @@ function clearPendingAssessment() {
   sessionStorage.removeItem(pendingAssessmentKey);
 }
 
+function getPendingRoadmap() {
+  try {
+    return JSON.parse(localStorage.getItem(pendingRoadmapKey) || "null");
+  } catch (_error) {
+    localStorage.removeItem(pendingRoadmapKey);
+    return null;
+  }
+}
+
+function clearPendingRoadmap() {
+  localStorage.removeItem(pendingRoadmapKey);
+}
+
 function restorePendingAssessment(pending) {
   if (!pending?.answers) return;
   Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
@@ -917,7 +931,6 @@ function signupForm() {
     <div class="field"><label>Full name</label><input name="name" value="Aarav Sharma" required /></div>
     <div class="field"><label>Email</label><input name="email" type="email" value="aarav@studox.ai" required /></div>
     <div class="field"><label>Phone</label><input name="phone" value="+91 98765 43210" required /></div>
-    <div class="field"><label>Goal</label><select name="goal"><option>Full Stack Developer</option><option>Data Scientist</option><option>Product Engineer</option><option>Cybersecurity Analyst</option></select></div>
     <div class="field"><label>Field</label><select name="field"><option>Computer Science</option><option>Information Technology</option><option>Electronics</option><option>Business Analytics</option></select></div>
     <button class="btn primary glow" type="submit">Next Step</button>
   </form>
@@ -1586,7 +1599,6 @@ async function handleSignup(event) {
       .join("")
       .slice(0, 2)
       .toUpperCase(),
-    goal: data.goal,
   };
   localStorage.setItem("studox-user", JSON.stringify(currentUser));
   if (result?.token) localStorage.setItem("studox-token", result.token);
@@ -1957,17 +1969,21 @@ routeMap.dashboard = function functionalDashboardPage() {
 
 routeMap.roadmap = function functionalRoadmapPage() {
   const roadmap = functionalState.roadmaps[0] || {};
-  const liveModules = (roadmap.modules || roadmap.weeks || []).map((item, index) => ({
+  const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
+  const liveModules = roadmapItems.map((item, index) => ({
     title: item.title,
     status: item.status === "in-progress" ? "active" : item.status || (index === 0 ? "active" : "locked"),
     progress: item.progress || 0,
-    desc: item.description || `${item.estimatedHours || 0} estimated hours`,
+    desc: item.description || "",
+    estimatedHours: item.estimatedHours || 0,
+    tasks: item.tasks || [],
     skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
     resources: item.resources || [],
   }));
   const completedModules = liveModules.filter((item) => item.status === "completed").length;
   const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
-  return appLayout(`<div class="page-head"><div><h1>My Learning Roadmap</h1><p>${roadmap.title || "Personalized roadmap"} - Continue course progress to unlock roadmap movement.</p></div><div class="toggle-group"><button class="active">Timeline View</button><button>Tree View</button></div></div>
+  const hasRoadmap = liveModules.length > 0;
+  return appLayout(`<div class="page-head"><div><h1>${roadmap.title || "My Learning Roadmap"}</h1><p>${hasRoadmap ? roadmap.summary || "Follow your saved roadmap week by week." : "Create your personalized roadmap to start learning."}</p></div><div class="toggle-group"><button class="active">Timeline View</button><button>Tree View</button></div></div>
     ${statCards([
       ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
@@ -1975,7 +1991,7 @@ routeMap.roadmap = function functionalRoadmapPage() {
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
       ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
-    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.status}</span></header>${progress("Module progress", item.progress)}<div class="skills-row">${item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("")}</div></div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized AI roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Continue learning from courses."}</p><a class="btn primary" href="#courses">Continue Course</a></aside></div>`, "roadmap");
+    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.estimatedHours ? `${item.estimatedHours}h` : item.status}</span></header>${progress("Module progress", item.progress)}<h4>Tasks</h4><div class="skills-row">${item.tasks.length ? item.tasks.map((task) => `<span class="chip">${task.title || task}</span>`).join("") : item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("") || `<span class="chip">No resources yet</span>`}</div></div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Create your roadmap to start."}</p><a class="btn primary" href="${hasRoadmap ? "#courses" : "#assessment"}" ${hasRoadmap ? "" : "data-action=\"start-assessment\""}>${hasRoadmap ? "Continue Course" : "Create Roadmap"}</a></aside></div>`, "roadmap");
 };
 
 routeMap.courses = function functionalCoursesPage() {
@@ -2485,7 +2501,7 @@ function handleChooseRoadmapSignup(event) {
   const roadmap = functionalState.generatedRoadmaps[index];
 
   if (roadmap) {
-    localStorage.setItem("studox-pending-roadmap", JSON.stringify({
+    localStorage.setItem(pendingRoadmapKey, JSON.stringify({
       selectedAt: new Date().toISOString(),
       roadmap,
       assessment: assessmentInputPayload(assessmentFormData())
@@ -2597,6 +2613,36 @@ async function resumePendingRoadmapGeneration() {
   if (!pending?.data) return false;
   restorePendingAssessment(pending);
   return await generateRoadmapsFromAssessment(pending.data);
+}
+
+async function savePendingRoadmapAfterAuth() {
+  const pending = getPendingRoadmap();
+  if (!pending?.roadmap) return false;
+
+  const result = await api("/roadmaps/select", {
+    method: "POST",
+    body: JSON.stringify({
+      roadmap: pending.roadmap,
+      assessment: pending.assessment || {},
+    }),
+  });
+
+  if (!result?.roadmap) {
+    toast(userFriendlyApiError(result?.message || "Roadmap save failed. Please try again."));
+    return false;
+  }
+
+  clearPendingRoadmap();
+  functionalState.roadmaps = [
+    result.roadmap,
+    ...(functionalState.roadmaps || []).filter((roadmap) => dataId(roadmap) !== dataId(result.roadmap)),
+  ];
+  functionalState.generatedRoadmaps = [];
+  functionalState.previewRoadmapIndex = 0;
+  functionalState.dashboard = null;
+  toast(result.message || "Roadmap saved successfully.");
+  setRoute("dashboard");
+  return true;
 }
 
 async function handleFunctionalTestSubmit(event) {
@@ -2837,14 +2883,19 @@ function miniCourseCard(course, index) {
 routeMap.dashboard = function properStudentDashboardPage() {
   const data = functionalState.dashboard || {};
   const roadmap = data.roadmap || {};
+  const hasActiveRoadmap = Boolean(data.hasActiveRoadmap);
   const roadmapWeeks = roadmap.weeks || roadmap.modules || [];
-  const roadmapTitle = roadmap.title || "Roadmap";
-  const roadmapSummary = roadmap.summary || "Track roadmap momentum, tests, DSA, projects, internships and mentor actions from one animated workspace.";
-  const nextMilestone = roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path";
+  const roadmapTitle = hasActiveRoadmap ? roadmap.title || "Roadmap" : "No roadmap selected yet";
+  const roadmapSummary = hasActiveRoadmap
+    ? roadmap.summary || "Your selected roadmap is ready. Continue from the next milestone."
+    : "Create your personalized roadmap from the assessment to unlock your dashboard plan.";
+  const nextMilestone = hasActiveRoadmap ? roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path" : "Create your roadmap";
+  const primaryCtaLabel = hasActiveRoadmap ? "Continue Roadmap" : "Create Roadmap";
+  const primaryCtaHref = hasActiveRoadmap ? "#roadmap" : "#assessment";
   const liveCourses = data.recommendedCourses || [];
   const liveTests = data.upcomingTests || [];
   const activity = data.recentActivity || [];
-  const progressValue = Math.max(0, Math.min(100, Number(data.overallProgress || 0)));
+  const progressValue = hasActiveRoadmap ? Math.max(0, Math.min(100, Number(data.overallProgress || 0))) : 0;
   const firstName = currentUser.name.split(" ")[0] || "Student";
   const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2)));
   const readinessScore = Math.min(100, Math.round(progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
@@ -2852,8 +2903,8 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
-    ["Roadmap Weeks", roadmapWeeks.length, "", "map", "Modules"],
-    ["Duration", roadmap.estimatedDurationWeeks || 0, "w", "trophy", "Estimated"],
+    ["Roadmap Weeks", hasActiveRoadmap ? roadmapWeeks.length : 0, "", "map", "Modules"],
+    ["Duration", hasActiveRoadmap ? roadmap.estimatedDurationWeeks || 0 : 0, "w", "trophy", "Estimated"],
   ];
 
   return appLayout(`<section class="proper-dashboard premium-dashboard">
@@ -2864,7 +2915,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
         <h1>Welcome back, ${firstName}</h1>
         <p>${roadmapSummary}</p>
         <div class="hero-actions">
-          <a class="btn primary beast-glow" href="#courses">Continue Learning</a>
+          <a class="btn primary beast-glow" href="${primaryCtaHref}" ${hasActiveRoadmap ? "" : "data-action=\"start-assessment\""}>${primaryCtaLabel}</a>
           <a class="btn" href="#tests">Start Test</a>
           <a class="btn" href="#dsa">Solve DSA</a>
         </div>
@@ -2879,7 +2930,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
     </div>
 
     <div class="dashboard-command-deck">
-      <a class="command-card primary" href="#roadmap">
+      <a class="command-card primary" href="${primaryCtaHref}" ${hasActiveRoadmap ? "" : "data-action=\"start-assessment\""}>
         <span>${icon("map")}</span>
         <div><strong>${roadmapTitle}</strong><small>${nextMilestone}</small></div>
         <b>${progressValue}%</b>
@@ -3025,10 +3076,7 @@ signupForm = function configuredSignupForm() {
       <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></div>
       <div class="field"><label>Phone</label><input name="phone" autocomplete="tel" placeholder="+91 98765 43210" required /></div>
     </div>
-    <div class="two-column">
-      <div class="field"><label>Goal</label><input name="goal" list="goalOptions" placeholder="Example: Full Stack Developer" required /><datalist id="goalOptions"><option value="Full Stack Developer"></option><option value="Frontend Developer"></option><option value="Backend Developer"></option><option value="Data Scientist"></option><option value="AI Engineer"></option><option value="Product Engineer"></option><option value="Cybersecurity Analyst"></option></datalist></div>
-      <div class="field"><label>Field</label><input name="field" list="fieldOptions" placeholder="Example: Computer Science" required /><datalist id="fieldOptions"><option value="Computer Science"></option><option value="Information Technology"></option><option value="Electronics"></option><option value="Business Analytics"></option><option value="Design"></option><option value="Commerce"></option></datalist></div>
-    </div>
+    <div class="field"><label>Field</label><input name="field" list="fieldOptions" placeholder="Example: Computer Science" required /><datalist id="fieldOptions"><option value="Computer Science"></option><option value="Information Technology"></option><option value="Electronics"></option><option value="Business Analytics"></option><option value="Design"></option><option value="Commerce"></option></datalist></div>
     <div class="two-column">
       <div class="field password-field"><label>Password</label><input name="password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
       <div class="field password-field"><label>Confirm password</label><input name="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat password" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
@@ -3106,6 +3154,7 @@ handleLogin = async function configuredHandleLogin(event) {
   setFormBusy(form, false);
   if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
   saveAuthSession(result);
+  if (await savePendingRoadmapAfterAuth()) return;
   if (await resumePendingRoadmapGeneration()) return;
   setRoute("dashboard");
 };
@@ -3125,12 +3174,12 @@ handleSignup = async function configuredHandleSignup(event) {
     email: data.email,
     phone: data.phone,
     password: data.password,
-    goal: data.goal,
     field: data.field,
   });
   setFormBusy(form, false);
   if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
-  saveAuthSession(result, data.goal);
+  saveAuthSession(result);
+  if (await savePendingRoadmapAfterAuth()) return;
   setRoute("dashboard");
 };
 

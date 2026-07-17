@@ -89,6 +89,42 @@
       "phone": "9620980250",
       "password": "$2a$10$tPoACVrU6kzn8lRNVjaYLucakh54MHvhCU2tl.Uz.ydMP3rdV/KsS",
       "role": "student"
+    },
+    {
+      "id": "user_1784258135201_f034f2",
+      "name": "jysh322",
+      "email": "sahujysh2192@gmail.com",
+      "phone": "",
+      "password": "$2a$10$06k1UsoUh53e1aZCYRyLNOYfmDF/Wy8ujcqJ8OnAp88ilMKuSh.7y",
+      "role": "student",
+      "plan": "free"
+    },
+    {
+      "id": "user_1784259242765_924365",
+      "name": "fdsafdsak",
+      "email": "fdslk@gmail.com",
+      "phone": "",
+      "password": "$2a$10$rgVbKtaFDZcV5bcfGJN4U.M.iuCyTG9MByES6zboPhQ1KrO3jn3vG",
+      "role": "student",
+      "plan": "free"
+    },
+    {
+      "id": "user_1784264423250_5be9c7",
+      "name": "rfbgda",
+      "email": "fbdfbda@gmail.com",
+      "phone": "",
+      "password": "$2a$10$6x.6sw0gC6EWikSjyKYjyuJrwyfi86XwVTdb6.bh4kkWGO6/ILKdy",
+      "role": "student",
+      "plan": "free"
+    },
+    {
+      "id": "user_1784264500561_a7cdf2",
+      "name": "jass",
+      "email": "fewdsafd@gmail.com",
+      "phone": "",
+      "password": "$2a$10$ve6J1dO1LQAdFa.cGfs3G.S6UbYRXOxmOxd3DgSfqJDi.drP55IaO",
+      "role": "student",
+      "plan": "free"
     }
   ],
   "profiles": [
@@ -115,7 +151,7 @@
         }
       ],
       "level": "Intermediate",
-      "xp": 12840,
+      "xp": 12880,
       "profileCompletion": 86,
       "streak": 18
     },
@@ -258,9 +294,150 @@
       "xp": 250,
       "profileCompletion": 42,
       "streak": 1
+    },
+    {
+      "user": "user_1784258135201_f034f2",
+      "username": "sahujysh2192",
+      "goal": "Data Scientist",
+      "field": "Design",
+      "skills": [],
+      "level": "Beginner",
+      "xp": 0,
+      "profileCompletion": 0,
+      "streak": 0
+    },
+    {
+      "user": "user_1784259242765_924365",
+      "username": "fdslk",
+      "goal": "Backend Developer",
+      "field": "Computer Science",
+      "skills": [],
+      "level": "Beginner",
+      "xp": 0,
+      "profileCompletion": 0,
+      "streak": 0
+    },
+    {
+      "user": "user_1784264423250_5be9c7",
+      "username": "fbdfbda",
+      "field": "Computer Science",
+      "skills": [],
+      "level": "Beginner",
+      "xp": 0,
+      "profileCompletion": 0,
+      "streak": 0
+    },
+    {
+      "user": "user_1784264500561_a7cdf2",
+      "username": "fewdsafd",
+      "field": "Information Technology",
+      "skills": [],
+      "level": "Beginner",
+      "xp": 0,
+      "profileCompletion": 0,
+      "streak": 0
     }
   ],
   "roadmaps": [
+    {
+      "id": "roadmap_1784255802572_9c32b8",
+      "user": "user_demo",
+      "userId": "user_demo",
+      "title": "Full Stack Developer Roadmap",
+      "careerGoal": "Full Stack Developer",
+      "currentLevel": "Beginner",
+      "overallProgress": 1,
+      "timeToGoalWeeks": 20,
+      "estimatedDurationWeeks": 20,
+      "skillsLearned": 0,
+      "nextMilestone": "Web Foundations",
+      "status": "active",
+      "generatedBy": "studox",
+      "version": 1,
+      "generatedAt": "2026-07-17T02:36:42.572Z",
+      "modules": [
+        {
+          "title": "Web Foundations",
+          "status": "in-progress",
+          "progress": 8,
+          "description": "Master HTML, CSS, JavaScript, Git and browser fundamentals.",
+          "skills": [
+            "HTML",
+            "CSS",
+            "JavaScript",
+            "Git"
+          ]
+        },
+        {
+          "title": "Frontend Development",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Build React apps with routing, forms, API calls and polished UI.",
+          "skills": [
+            "React",
+            "Routing",
+            "UI Systems"
+          ]
+        },
+        {
+          "title": "Backend Development",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Create Node.js and Express APIs with validation and error handling.",
+          "skills": [
+            "Node.js",
+            "Express",
+            "REST APIs"
+          ]
+        },
+        {
+          "title": "Databases",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Design MongoDB schemas, relations, indexes and useful queries.",
+          "skills": [
+            "MongoDB",
+            "Mongoose",
+            "Data Modeling"
+          ]
+        },
+        {
+          "title": "Authentication & Security",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Add JWT login, password hashing, roles and protected routes.",
+          "skills": [
+            "JWT",
+            "Auth",
+            "Security"
+          ]
+        },
+        {
+          "title": "Projects & Deployment",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Build, deploy and document portfolio-ready full stack projects.",
+          "skills": [
+            "Projects",
+            "Deployment",
+            "Portfolio"
+          ]
+        },
+        {
+          "title": "Career Readiness",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Prepare resume, GitHub, interview stories and internship applications.",
+          "skills": [
+            "Resume",
+            "Interview",
+            "Internships"
+          ]
+        }
+      ],
+      "createdAt": "2026-07-17T02:36:42.572Z",
+      "updatedAt": "2026-07-17T03:04:12.022Z"
+    },
     {
       "id": "roadmap_full_stack",
       "title": "Full Stack Developer Roadmap",
@@ -605,6 +782,179 @@
           "skills": []
         }
       ]
+    },
+    {
+      "id": "roadmap_1784258135201_efca97",
+      "user": "user_1784258135201_f034f2",
+      "userId": "user_1784258135201_f034f2",
+      "title": "Data Scientist Roadmap",
+      "careerGoal": "Data Scientist",
+      "currentLevel": "Beginner",
+      "overallProgress": 0,
+      "timeToGoalWeeks": 24,
+      "estimatedDurationWeeks": 24,
+      "skillsLearned": 0,
+      "nextMilestone": "Python Foundations",
+      "status": "active",
+      "generatedBy": "studox",
+      "version": 1,
+      "generatedAt": "2026-07-17T03:15:35.201Z",
+      "modules": [
+        {
+          "title": "Python Foundations",
+          "status": "in-progress",
+          "progress": 0,
+          "description": "Learn Python syntax, functions, files, Git and notebooks.",
+          "skills": [
+            "Python",
+            "Git",
+            "Jupyter"
+          ]
+        },
+        {
+          "title": "Math & Statistics",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Build probability, statistics, linear algebra and experiment basics.",
+          "skills": [
+            "Statistics",
+            "Probability",
+            "Linear Algebra"
+          ]
+        },
+        {
+          "title": "Data Analysis",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Use NumPy, Pandas, SQL and visualization for real datasets.",
+          "skills": [
+            "NumPy",
+            "Pandas",
+            "SQL",
+            "Visualization"
+          ]
+        },
+        {
+          "title": "Machine Learning",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Train, evaluate and tune supervised and unsupervised models.",
+          "skills": [
+            "Scikit-learn",
+            "Model Evaluation",
+            "Feature Engineering"
+          ]
+        },
+        {
+          "title": "AI Projects",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Build portfolio projects with datasets, notebooks, APIs and dashboards.",
+          "skills": [
+            "Projects",
+            "APIs",
+            "Dashboards"
+          ]
+        },
+        {
+          "title": "Career Readiness",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Prepare resume, case studies, interview stories and applications.",
+          "skills": [
+            "Resume",
+            "Interview",
+            "Portfolio"
+          ]
+        }
+      ],
+      "createdAt": "2026-07-17T03:15:35.201Z"
+    },
+    {
+      "id": "roadmap_1784259242765_c7b17b",
+      "user": "user_1784259242765_924365",
+      "userId": "user_1784259242765_924365",
+      "title": "Backend Developer Roadmap",
+      "careerGoal": "Backend Developer",
+      "currentLevel": "Beginner",
+      "overallProgress": 0,
+      "timeToGoalWeeks": 18,
+      "estimatedDurationWeeks": 18,
+      "skillsLearned": 0,
+      "nextMilestone": "Programming Foundations",
+      "status": "active",
+      "generatedBy": "studox",
+      "version": 1,
+      "generatedAt": "2026-07-17T03:34:02.765Z",
+      "modules": [
+        {
+          "title": "Programming Foundations",
+          "status": "in-progress",
+          "progress": 0,
+          "description": "Strengthen JavaScript, Git, terminal and problem solving.",
+          "skills": [
+            "JavaScript",
+            "Git",
+            "CLI"
+          ]
+        },
+        {
+          "title": "Node.js & Express",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Build REST APIs, middleware, validation and error handling.",
+          "skills": [
+            "Node.js",
+            "Express",
+            "REST"
+          ]
+        },
+        {
+          "title": "Databases",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Model data with MongoDB/SQL, indexes, relations and migrations.",
+          "skills": [
+            "MongoDB",
+            "SQL",
+            "Data Modeling"
+          ]
+        },
+        {
+          "title": "Authentication & Security",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Implement JWT, password hashing, permissions and rate limits.",
+          "skills": [
+            "JWT",
+            "Auth",
+            "Security"
+          ]
+        },
+        {
+          "title": "Testing & Deployment",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Add API tests, logs, monitoring and deploy production services.",
+          "skills": [
+            "Testing",
+            "Deployment",
+            "Monitoring"
+          ]
+        },
+        {
+          "title": "Backend Interviews",
+          "status": "upcoming",
+          "progress": 0,
+          "description": "Practice DSA, system design basics and API design questions.",
+          "skills": [
+            "DSA",
+            "System Design",
+            "Interview"
+          ]
+        }
+      ],
+      "createdAt": "2026-07-17T03:34:02.765Z"
     }
   ],
   "courses": [
@@ -617,7 +967,7 @@
       "category": "Web Development",
       "instructor": "Nisha Thomas",
       "students": 12400,
-      "progress": 64,
+      "progress": 68,
       "tags": [
         "React",
         "Node",
@@ -667,7 +1017,8 @@
       "order": 3,
       "lessons": 14,
       "status": "in-progress",
-      "progress": 62
+      "progress": 74,
+      "updatedAt": "2026-07-17T03:04:12.022Z"
     },
     {
       "id": "module_4",
@@ -1366,6 +1717,30 @@
       "accentColor": "#2563eb",
       "language": "English",
       "updatedAt": "2026-07-06T17:21:59.747Z"
+    },
+    {
+      "user": "user_1784258135201_f034f2",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1784259242765_924365",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1784264423250_5be9c7",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
+    },
+    {
+      "user": "user_1784264500561_a7cdf2",
+      "theme": "system",
+      "accentColor": "#2563eb",
+      "language": "English"
     }
   ],
   "admins": [

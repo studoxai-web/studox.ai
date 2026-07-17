@@ -1,6 +1,6 @@
 # Studox.ai Architecture Guide
 
-Last updated: July 15, 2026
+Last updated: July 17, 2026
 
 This document explains how the current Studox.ai project works so a new developer can join without guessing the system design. It is documentation only and does not change runtime behavior.
 
@@ -340,6 +340,59 @@ archived
 
 ## 8. Roadmap Generation Architecture
 
+### Current MVP Direction: Manual First, AI Later
+
+As of July 17, 2026, the launch MVP direction has changed.
+
+The old AI-first generation flow below is **not deleted** because it may return later. For the first MVP, it is treated as paused/dropped from the immediate launch path.
+
+Current MVP flow:
+
+```text
+Assessment submit
+  -> frontend builds manual roadmap options
+  -> user chooses one option
+  -> selected roadmap is stored temporarily
+  -> signup/login
+  -> selected roadmap is saved through POST /api/roadmaps/select
+  -> dashboard loads active roadmap
+```
+
+Important frontend functions:
+
+```js
+buildManualRoadmaps()
+createManualRoadmapCard()
+requestRoadmapOptions()
+assessmentResultScreen()
+handleChooseRoadmapSignup()
+handleChooseRoadmap()
+savePendingRoadmapAfterAuth()
+```
+
+Current `requestRoadmapOptions()` does **not** call `/api/roadmaps/generate`. It returns manually built roadmap options from the assessment answers.
+
+Current `/api/roadmaps/select` does **not** call AI for MVP. It saves the selected manual roadmap directly, assigns the authenticated `userId`, sets `status: "active"`, archives the previous active roadmap when present, and updates `User.activeRoadmapId`.
+
+The manual roadmap options are built around:
+
+```text
+career goal
+current level
+timeline
+weekly study hours
+optional focus
+optional project experience
+optional learning style
+optional extra context
+```
+
+For the MVP, this avoids AI quota failures and makes the first user journey more reliable.
+
+### Paused Previous Design: Two-Stage AI Flow
+
+The following AI-first design was the previous intended architecture. It is kept here for future reference, but it is not the current frontend launch flow.
+
 The roadmap feature uses a two-stage AI flow to avoid Gemini token limits.
 
 ### Stage 1: Generate Lightweight Options
@@ -391,6 +444,8 @@ Returns:
 
 These are preview options only. They are not saved yet.
 
+MVP status: paused for launch. Backend support still exists, but the current frontend does not call this endpoint during assessment generation.
+
 ### Stage 2: Select and Complete Roadmap
 
 Frontend:
@@ -419,6 +474,8 @@ User.activeRoadmapId = roadmap._id
 user.save()
 ```
 
+MVP status: paused. The old version of `/api/roadmaps/select` called `generateCompleteRoadmap()` to expand the selected lightweight roadmap. The current MVP version saves the selected manual roadmap directly and does not call AI.
+
 The backend:
 
 1. Receives the selected lightweight roadmap.
@@ -439,9 +496,58 @@ Response:
 }
 ```
 
+MVP status: active as direct-save only. `/api/roadmaps/select` is still the save path for the chosen roadmap, but the selected roadmap currently comes from manual frontend generation rather than `/api/roadmaps/generate`, and selection does not trigger AI completion.
+
 ## 9. Assessment to Dashboard Flow
 
-Current intended user flow:
+### Current MVP User Flow
+
+```text
+Landing
+  -> Start Assessment
+  -> Answer required questions
+  -> Optional answers may be skipped
+  -> Generate Roadmap
+  -> Frontend manually creates roadmap option(s)
+  -> Choose roadmap
+  -> Signup/Login if needed
+  -> Save selected roadmap
+  -> Dashboard
+  -> Dashboard loads active roadmap
+```
+
+Assessment currently has four required questions:
+
+```text
+career goal
+current level
+timeline
+weekly time
+```
+
+Optional questions:
+
+```text
+main focus
+projects built
+learning style
+extra context
+```
+
+The current frontend can return:
+
+```text
+one beginner roadmap
+one advanced roadmap
+or three tracks for intermediate users:
+  beginner refresh
+  intermediate recommended
+  advanced locked
+```
+
+### Paused Previous Intended User Flow
+
+The older AI-first flow below is kept for context, but it is not the current MVP flow.
 
 ```text
 Landing
@@ -467,6 +573,12 @@ Assessment complete
   -> Show 3 roadmap options
 ```
 
+MVP note: the current pulled frontend stores the selected pending roadmap in `localStorage["studox-pending-roadmap"]`. This differs from the earlier `sessionStorage["studox-pending-assessment"]` design. If we keep this behavior, future work should make the save-after-signup path explicit and reliable.
+
+Phase 2 update: save-after-signup/login is now explicit. After successful authentication, `savePendingRoadmapAfterAuth()` reads `localStorage["studox-pending-roadmap"]`, calls `POST /api/roadmaps/select`, clears the pending roadmap only after a successful save, and redirects to Dashboard.
+
+Signup does not collect career goal and does not create a roadmap in the MVP. `POST /api/auth/signup` creates only the user, student profile, and user settings. Career goal comes from Assessment -> selected roadmap and is written to the student profile when `POST /api/roadmaps/select` saves the roadmap. The only endpoint that should create a user roadmap is `POST /api/roadmaps/select`.
+
 ## 10. Dashboard and Roadmap Display
 
 Dashboard data is loaded from:
@@ -481,6 +593,24 @@ The backend loads roadmap data in this order:
 2. newest active roadmap with `{ userId, status: "active" }`
 3. latest roadmap with `{ userId }`
 
+Phase 3 update: dashboard stats now include:
+
+```js
+hasActiveRoadmap
+```
+
+If `hasActiveRoadmap` is `false`, `/api/dashboard/stats` returns `roadmap: {}` and does not fabricate a roadmap from profile data. The dashboard uses this flag to show either:
+
+```text
+Continue Roadmap -> #roadmap
+```
+
+or:
+
+```text
+Create Roadmap -> Assessment
+```
+
 The dashboard uses:
 
 ```js
@@ -493,7 +623,23 @@ The roadmap page loads:
 GET /api/roadmaps
 ```
 
-The frontend maps AI `weeks` into the existing timeline UI.
+Phase 4 update: `/api/roadmaps` now returns saved roadmaps only. It does not fabricate a roadmap when none exists.
+
+The endpoint prioritizes roadmaps in this order:
+
+1. `User.activeRoadmapId`
+2. newest active roadmap with `{ userId, status: "active" }`
+3. latest roadmap with `{ userId }`
+
+If no roadmap exists, it returns:
+
+```json
+[]
+```
+
+Every returned roadmap is normalized before reaching the frontend.
+
+The frontend maps saved `weeks` into the existing timeline UI.
 
 Mapping:
 
@@ -650,18 +796,20 @@ When changing the roadmap payload or AI prompt, update these documents too.
 - Many frontend pages are rendered by functions in `public/app.js`.
 - Backend is mostly one file: `src/server.js`.
 - Models are centralized in `src/models/index.js`.
-- Roadmap generation is intentionally two-stage to avoid AI token limits.
+- Current MVP roadmap option generation is manual on the frontend for launch reliability.
+- The previous two-stage AI roadmap generation design is paused, not removed.
 - New AI roadmaps use `userId`, not old `user`.
 - The active roadmap should be read through `User.activeRoadmapId`.
 - MongoDB can fail gracefully into memory mode, but real saved user data needs MongoDB.
+- For launch, Roadmap, Courses, Dashboard, AI Mentor, Profile, and Settings stay available on web. Other sidebar features are routed to an app-coming-soon modal.
 
 ### Avoid doing accidentally
 
 - Do not rewrite routing unless necessary.
 - Do not replace `routeMap`, `setRoute`, `getRoute`, or `render` casually.
-- Do not move roadmap generation back to generating three full roadmaps at once.
-- Do not save lightweight roadmap options from `/api/roadmaps/generate`.
-- Do not use `localStorage` for pending assessment data; current flow uses `sessionStorage`.
+- Do not silently re-enable `/api/roadmaps/generate` from the frontend without updating this architecture file and the contracts.
+- Do not move roadmap generation back to generating three full AI roadmaps at once unless the token/quota plan is solved.
+- The earlier rule was to avoid `localStorage` for pending assessment data. Current pulled MVP code uses `localStorage["studox-pending-roadmap"]`; if this changes, document it here.
 - Do not query new Roadmaps using `{ user: userId }`; use `{ userId }`.
 
 ## 16. How to Run Locally
@@ -720,8 +868,9 @@ Implemented:
 - Login/signup
 - JWT auth
 - Assessment UI
-- Login-after-assessment resume flow
-- AI roadmap generation, two-stage
+- Short MVP assessment with required and optional questions
+- Manual frontend roadmap option generation for MVP
+- App-coming-soon gating for unfinished sidebar routes
 - Roadmap selection and saving
 - Dashboard active roadmap loading
 - Roadmap page mapping AI weeks into timeline
@@ -731,6 +880,8 @@ Implemented:
 
 Partially implemented:
 
+- Save-after-signup/login flow from `localStorage["studox-pending-roadmap"]`
+- AI roadmap generation, two-stage backend support
 - Progress tracking for generated roadmaps
 - Full dashboard use of all roadmap task/resource details
 - Course-to-roadmap progress synchronization
@@ -738,7 +889,9 @@ Partially implemented:
 
 Known risks:
 
-- Gemini free tier quota can fail roadmap generation.
+- The current MVP frontend does not call `/api/roadmaps/generate`; if AI generation is reintroduced, Gemini/OpenAI quota can fail roadmap generation.
+- Architecture and contracts need another update if manual roadmap cards become the official long-term contract.
+- `localStorage["studox-pending-roadmap"]` is cleared only after successful `/api/roadmaps/select`; failed saves leave it available for retry.
 - Some older/demo code may still exist in `public/app.js`.
 - Contracts may need updates whenever the two-stage flow changes.
 - In-memory fallback is useful for demo but should not be treated as production persistence.

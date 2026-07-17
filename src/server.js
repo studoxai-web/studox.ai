@@ -975,7 +975,7 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { name, phone, password, goal, field } = req.body;
+    const { name, phone, password, field } = req.body;
     const email = normalizeEmail(req.body.email);
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Name, email and password are required." });
@@ -1000,7 +1000,6 @@ app.post("/api/auth/signup", async (req, res) => {
       await StudentProfile.create({
         user: user._id,
         username: email.split("@")[0],
-        goal,
         field,
         skills: [],
         level: "Beginner",
@@ -1009,9 +1008,6 @@ app.post("/api/auth/signup", async (req, res) => {
         streak: 0,
       });
       await UserSettings.create({ user: user._id });
-      const roadmap = buildPersonalRoadmap(goal, field, user._id);
-      delete roadmap.id;
-      await Roadmap.create(roadmap);
     } else {
       const exists = memory.users.find((item) => item.email === email);
       if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
@@ -1020,7 +1016,6 @@ app.post("/api/auth/signup", async (req, res) => {
       memory.profiles.push({
         user: user.id,
         username: email.split("@")[0],
-        goal,
         field,
         skills: [],
         level: "Beginner",
@@ -1029,25 +1024,24 @@ app.post("/api/auth/signup", async (req, res) => {
         streak: 0,
       });
       memory.settings.push({ user: user.id, theme: "system", accentColor: "#2563eb", language: "English" });
-      memory.roadmaps.push(buildPersonalRoadmap(goal, field, user.id));
       persistMemory();
     }
 
     let welcomeEmailSent = false;
     let emailWarning = "";
     try {
-      await sendWelcomeEmail({ to: email, name, goal: goal || "your learning goal" });
+      await sendWelcomeEmail({ to: email, name, goal: "your learning goal" });
       welcomeEmailSent = true;
     } catch (error) {
       emailWarning = error.code === "EMAIL_NOT_CONFIGURED"
         ? "Signup email is not configured. Please contact admin."
-        : "We could not send welcome email right now. Account and roadmap were created.";
+        : "We could not send welcome email right now. Account was created.";
       console.warn(emailWarning);
       console.warn(error.message);
     }
 
     res.status(201).json({
-      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created. Roadmap generated.",
+      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created.",
       token: signToken(user),
       user: publicUser(user),
       welcomeEmailSent,
@@ -1244,14 +1238,17 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   let userProjects = [];
   let userCertificates = [];
   let dsa = {};
+  let hasActiveRoadmap = false;
 
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
     const user = await User.findById(userId).select("activeRoadmapId").lean();
     if (user?.activeRoadmapId) {
       roadmap = await Roadmap.findById(user.activeRoadmapId).lean();
+      hasActiveRoadmap = Boolean(roadmap);
     }
     if (!roadmap) {
       roadmap = await Roadmap.findOne({ userId, status: "active" }).sort({ createdAt: -1 }).lean();
+      hasActiveRoadmap = Boolean(roadmap);
     }
     if (!roadmap) {
       roadmap = await Roadmap.findOne({ userId }).sort({ createdAt: -1 }).lean();
@@ -1266,6 +1263,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   } else {
     profile = memory.profiles.find((item) => String(item.user) === String(userId)) || {};
     roadmap = memory.roadmaps.find((item) => String(item.user || item.userId) === String(userId)) || {};
+    hasActiveRoadmap = Boolean(roadmap?.title);
     userResults = byUser(memory.testResults, userId);
     userProjects = byUser(memory.projects, userId);
     userCertificates = byUser(memory.certificates, userId);
@@ -1277,18 +1275,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   userResults = Array.isArray(userResults) ? userResults : [];
   userProjects = Array.isArray(userProjects) ? userProjects : [];
   userCertificates = Array.isArray(userCertificates) ? userCertificates : [];
-  if (!roadmap.title && profile.goal) {
-    const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", userId);
-    if (mongoReady() && mongoose.isValidObjectId(userId)) {
-      const created = await Roadmap.create({ ...generated, id: undefined });
-      roadmap = created.toObject();
-    } else {
-      memory.roadmaps.unshift(generated);
-      roadmap = generated;
-      persistMemory();
-    }
-  }
-  roadmap = normalizeRoadmapShape(roadmap);
+  roadmap = hasActiveRoadmap ? normalizeRoadmapShape(roadmap) : {};
   dsa = dsa || {};
   const appliedInternships = (memory.internships || []).filter((item) => (item.applicants || []).includes(userId));
   const registeredHackathons = (memory.hackathons || []).filter((item) => (item.registrations || []).includes(userId));
@@ -1298,6 +1285,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   const courses = await listResource("courses");
   const tests = await listResource("tests");
   res.json({
+    hasActiveRoadmap,
     overallProgress,
     testsCompleted: userResults.length,
     skillsMastered: skills.size,
@@ -1338,28 +1326,25 @@ function buildActivity(userId) {
 
 app.get("/api/roadmaps", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    let roadmaps = await Roadmap.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
-    if (!roadmaps.length) {
-      const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
-      if (profile?.goal) {
-        const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", req.user.id);
-        const created = await Roadmap.create({ ...generated, id: undefined });
-        roadmaps = [created.toObject()];
-      }
+    const user = await User.findById(req.user.id).select("activeRoadmapId").lean();
+    let activeRoadmap = null;
+    if (user?.activeRoadmapId) {
+      activeRoadmap = await Roadmap.findById(user.activeRoadmapId).lean();
     }
-    return res.json(roadmaps.map(normalizeRoadmapShape));
+    if (!activeRoadmap) {
+      activeRoadmap = await Roadmap.findOne({ userId: req.user.id, status: "active" }).sort({ createdAt: -1 }).lean();
+    }
+    const roadmaps = await Roadmap.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
+    const orderedRoadmaps = activeRoadmap
+      ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap._id) !== String(activeRoadmap._id))]
+      : roadmaps;
+    if (!orderedRoadmaps.length) return res.json([]);
+    return res.json(orderedRoadmaps.map(normalizeRoadmapShape));
   }
   let roadmaps = byUser(memory.roadmaps || [], req.user.id);
-  if (!roadmaps.length) {
-    const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
-    if (profile?.goal) {
-      const generated = buildPersonalRoadmap(profile.goal, profile.field || profile.branch || "", req.user.id);
-      memory.roadmaps.unshift(generated);
-      persistMemory();
-      roadmaps = [generated];
-    }
-  }
-  res.json(roadmaps);
+  const activeRoadmap = roadmaps.find((roadmap) => roadmap.status === "active") || roadmaps[0];
+  roadmaps = activeRoadmap ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap.id || roadmap._id) !== String(activeRoadmap.id || activeRoadmap._id))] : [];
+  res.json(roadmaps.map(normalizeRoadmapShape));
 });
 
 app.post("/api/roadmaps/generate", authOptional, async (req, res) => {
@@ -1409,28 +1394,18 @@ app.post("/api/roadmaps/select", authRequired, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    const input = {
-      ...(req.body.assessment || {}),
-      userId: req.user.id,
-      careerGoal: selectedRoadmap.careerGoal,
-      targetTimelineWeeks: selectedRoadmap.estimatedDurationWeeks,
-    };
-    const aiResult = await generateCompleteRoadmap(input, selectedRoadmap);
-    let completedRoadmap;
-    try {
-      completedRoadmap = extractJsonObject(aiResult.reply);
-    } catch (_error) {
-      return res.status(502).json({ message: "AI returned invalid complete roadmap JSON." });
-    }
-
-    completedRoadmap = {
-      ...completedRoadmap,
+    const { localPreview, locked, optional, recommended, lockReason, trackLabel, selectedAt, ...roadmapPayload } = selectedRoadmap;
+    const completedRoadmap = {
+      ...roadmapPayload,
       userId: req.user.id,
       status: "active",
+      generatedBy: selectedRoadmap.generatedBy || "manual",
+      version: selectedRoadmap.version || 1,
+      generatedAt: selectedRoadmap.generatedAt || new Date(),
     };
     const fullErrors = roadmapOutputErrors(completedRoadmap, 0);
     if (fullErrors.length) {
-      return res.status(502).json({ message: "AI returned invalid complete roadmap data.", errors: fullErrors });
+      return res.status(400).json({ message: "Invalid roadmap data.", errors: fullErrors });
     }
 
     if (user.activeRoadmapId) {
@@ -1441,6 +1416,11 @@ app.post("/api/roadmaps/select", authRequired, async (req, res) => {
 
     user.activeRoadmapId = roadmap._id;
     await user.save();
+    await StudentProfile.findOneAndUpdate(
+      { user: req.user.id },
+      { goal: completedRoadmap.careerGoal },
+      { upsert: true, new: true },
+    );
 
     res.status(201).json({
       message: "Roadmap selected successfully.",
