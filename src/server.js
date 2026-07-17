@@ -3,6 +3,7 @@ require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
 const dns = require("dns").promises;
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -42,6 +43,12 @@ const storePath = path.join(__dirname, "data", "runtime-store.json");
 const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
 const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
 const mentorLimitTemporarilyDisabled = true;
+const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
+const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+const paymentPlans = {
+  pro: { name: "Pro", amount: 35300 },
+  elite: { name: "Elite", amount: 70700 },
+};
 const memory = loadMemoryStore();
 ensureDemoAccount();
 
@@ -191,6 +198,73 @@ function normalizeRoadmapShape(roadmap = {}) {
   };
 }
 
+
+async function activateUserPlan(userId, plan) {
+  let user;
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    user = await User.findByIdAndUpdate(userId, { plan }, { new: true }).lean();
+  } else {
+    user = memory.users.find((item) => String(item.id || item._id) === String(userId));
+    if (user) {
+      user.plan = plan;
+      persistMemory();
+    }
+  }
+  return user;
+}
+
+function razorpayConfigured() {
+  return Boolean(razorpayKeyId && razorpayKeySecret);
+}
+
+function razorpayAuthHeader() {
+  return `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString("base64")}`;
+}
+
+async function createRazorpayOrder({ plan, userId }) {
+  if (!razorpayConfigured()) {
+    const error = new Error("Razorpay keys are not configured.");
+    error.status = 503;
+    throw error;
+  }
+
+  const selectedPlan = paymentPlans[plan];
+  if (!selectedPlan) {
+    const error = new Error("Please choose a valid premium plan.");
+    error.status = 400;
+    throw error;
+  }
+
+  const receipt = `studox_${plan}_${Date.now()}`.slice(0, 40);
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      Authorization: razorpayAuthHeader(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: selectedPlan.amount,
+      currency: "INR",
+      receipt,
+      notes: { plan, userId: String(userId), product: "Studox.ai Premium" },
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const description = data?.error?.description || "Could not create Razorpay order.";
+    const message = /authentication failed/i.test(description) ? "Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the server." : description;
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function verifyRazorpaySignature({ orderId, paymentId, signature }) {
+  const expected = crypto.createHmac("sha256", razorpayKeySecret).update(`${orderId}|${paymentId}`).digest("hex");
+  return expected === signature;
+}
 function isPremiumPlan(plan) {
   return ["pro", "elite"].includes(String(plan || "").toLowerCase());
 }
@@ -1098,36 +1172,68 @@ app.get("/api/billing/plan", authRequired, async (req, res) => {
   });
 });
 
-app.post("/api/billing/upgrade", authRequired, async (req, res) => {
+app.post("/api/payments/create-order", authRequired, async (req, res) => {
   const plan = String(req.body.plan || "").toLowerCase();
   if (!["pro", "elite"].includes(plan)) {
     return res.status(400).json({ message: "Please choose a valid premium plan." });
   }
 
-  let user;
-  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    user = await User.findByIdAndUpdate(req.user.id, { plan }, { new: true }).lean();
-  } else {
-    user = memory.users.find((item) => String(item.id || item._id) === String(req.user.id));
-    if (user) {
-      user.plan = plan;
-      persistMemory();
-    }
+  try {
+    const order = await createRazorpayOrder({ plan, userId: req.user.id });
+    const selectedPlan = paymentPlans[plan];
+    res.json({
+      keyId: razorpayKeyId,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      plan,
+      planName: selectedPlan.name,
+      prefill: { name: req.user.name || "Studox Student", email: req.user.email || "" },
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || "Could not create payment order." });
   }
+});
 
+app.post("/api/payments/verify", authRequired, async (req, res) => {
+  const plan = String(req.body.plan || "").toLowerCase();
+  const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body;
+
+  if (!["pro", "elite"].includes(plan)) return res.status(400).json({ message: "Please choose a valid premium plan." });
+  if (!orderId || !paymentId || !signature) return res.status(400).json({ message: "Payment verification details are missing." });
+  if (!razorpayConfigured()) return res.status(503).json({ message: "Razorpay keys are not configured." });
+  if (!verifyRazorpaySignature({ orderId, paymentId, signature })) return res.status(400).json({ message: "Payment verification failed." });
+
+  const user = await activateUserPlan(req.user.id, plan);
   if (!user) return res.status(404).json({ message: "User not found." });
 
   res.json({
-    message: `${plan === "elite" ? "Elite" : "Pro"} plan activated. AI Mentor is unlocked.`,
+    message: `${plan === "elite" ? "Elite" : "Pro"} plan activated. Payment verified successfully.`,
     plan,
     user: publicUser(user),
-    subscription: {
-      status: "active",
-      startedAt: new Date().toISOString(),
-    },
+    payment: { provider: "razorpay", orderId, paymentId, status: "captured", verifiedAt: new Date().toISOString() },
+    subscription: { status: "active", startedAt: new Date().toISOString() },
   });
 });
 
+app.post("/api/billing/upgrade", authRequired, async (req, res) => {
+  if (process.env.NODE_ENV === "production") return res.status(403).json({ message: "Use verified payment checkout to upgrade plans." });
+
+  const plan = String(req.body.plan || "").toLowerCase();
+  if (!["pro", "elite"].includes(plan)) {
+    return res.status(400).json({ message: "Please choose a valid premium plan." });
+  }
+
+  const user = await activateUserPlan(req.user.id, plan);
+  if (!user) return res.status(404).json({ message: "User not found." });
+
+  res.json({
+    message: `${plan === "elite" ? "Elite" : "Pro"} plan activated in local demo mode.`,
+    plan,
+    user: publicUser(user),
+    subscription: { status: "active", startedAt: new Date().toISOString() },
+  });
+});
 app.post("/api/auth/forgot-password", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: "Email is required." });

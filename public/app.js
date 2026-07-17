@@ -904,8 +904,14 @@ function signupForm() {
   <div class="secure-note">${icon("lock")} Your data is encrypted and used only to personalize your Studox.ai journey.</div>`;
 }
 
+function premiumPlanBadge() {
+  const plan = getCurrentPlan();
+  if (!isPremiumPlan(plan)) return "";
+  return `<span class="premium-name-badge">${icon("star")} ${plan === "elite" ? "Elite" : "Premium"}</span>`;
+}
 function appLayout(content, route) {
   const dark = isDarkTheme() || route === "profile" || route === "settings";
+  const premium = isPremiumPlan(getCurrentPlan());
   return `<div class="${dark ? "dark-page" : ""} view app-view" data-current-theme="${isDarkTheme() ? "dark" : "light"}">
     <div class="mobile-backdrop" data-mobile-close></div>
     <div class="dashboard-layout ${dark ? "dark-shell" : ""}">
@@ -919,11 +925,11 @@ function appLayout(content, route) {
             })
             .join("")}
         </nav>
-        <div class="side-footer">
+        ${premium ? "" : `<div class="side-footer">
           <strong>Pro learning plan</strong>
           <p>AI roadmap, mentor support, weekly reports and career readiness tracking.</p>
           <a class="btn primary" href="#pricing" data-action="open-upgrade">Upgrade</a>
-        </div>
+        </div>`}
       </aside>
       <main class="main">
         ${topbar(dark)}
@@ -942,7 +948,7 @@ function topbar(dark) {
     <div class="user-menu">
       <button class="user-pill" data-user-toggle>
         <span class="avatar">${currentUser.avatar}</span>
-        <span><strong>${currentUser.name}</strong><br /><small>${currentUser.goal}</small></span>
+        <span><strong class="user-name-line">${currentUser.name} ${premiumPlanBadge()}</strong><br /><small>${currentUser.goal}</small></span>
       </button>
       <div class="dropdown" id="userDropdown">
         <a href="#profile">${icon("user")} Profile</a>
@@ -1276,7 +1282,7 @@ function pricingPage() {
     <nav class="pricing-nav">
       ${brand()}
       <div class="pricing-links"><a href="#dashboard">Dashboard</a><a href="#courses">Courses</a><a href="#mentor">AI Mentor</a><a class="active" href="#pricing">Pricing</a></div>
-      <div class="pricing-user"><span class="avatar">${currentUser.avatar}</span><strong>${currentUser.name.split(" ")[0]}</strong></div>
+      <div class="pricing-user"><span class="avatar">${currentUser.avatar}</span><strong>${currentUser.name.split(" ")[0]}</strong>${premiumPlanBadge()}</div>
     </nav>
     <section class="pricing-hero">
       <div class="pricing-visual">
@@ -1303,14 +1309,14 @@ function pricingPage() {
         <h2>Pro</h2>
         <div class="plan-price">Rs. 299<span>/month</span></div>
         <ul><li>Unlimited AI mentor access</li><li>All premium courses</li><li>Weekly tests and analytics</li><li>Resume review</li><li>Internship suggestions</li></ul>
-        <button class="btn primary glow" data-action="upgrade-plan" data-plan="pro">${isPro ? "Current Plan" : "Upgrade Now"}</button>
+        <button class="btn primary glow" data-action="checkout-plan" data-plan="pro">${isPro ? "Current Plan" : "Upgrade Now"}</button>
       </article>
       <article class="plan-card ${isElite ? "current" : ""}">
         <div class="plan-icon elite">${icon("trophy")}</div>
         <h2>Elite</h2>
         <div class="plan-price">Rs. 599<span>/month</span></div>
         <ul><li>Everything in Pro</li><li>1:1 career guidance</li><li>Advanced DSA practice</li><li>Hackathon updates</li><li>Priority support</li><li>Exclusive learning paths</li></ul>
-        <button class="btn ${isElite ? "" : "primary"}" data-action="upgrade-plan" data-plan="elite">${isElite ? "Current Plan" : "Go Elite"}</button>
+        <button class="btn ${isElite ? "" : "primary"}" data-action="checkout-plan" data-plan="elite">${isElite ? "Current Plan" : "Go Elite"}</button>
       </article>
     </section>
     <section class="why-upgrade"><h2>Why Upgrade?</h2><div>${benefitCards.map(([title, body, iconName]) => `<article>${icon(iconName)}<div><h3>${title}</h3><p>${body}</p></div></article>`).join("")}</div></section>
@@ -1318,6 +1324,71 @@ function pricingPage() {
   </main>`;
 }
 
+function paymentPlanDetails(plan = localStorage.getItem("studox-checkout-plan") || "pro") {
+  const normalized = String(plan || "pro").toLowerCase() === "elite" ? "elite" : "pro";
+  const plans = {
+    pro: {
+      id: "pro",
+      name: "Pro",
+      price: 299,
+      badge: "Most Popular",
+      description: "Premium courses, unlimited AI mentor access, weekly tests and analytics.",
+      features: ["Unlimited AI Mentor", "All premium courses", "Weekly tests", "Resume review"]
+    },
+    elite: {
+      id: "elite",
+      name: "Elite",
+      price: 599,
+      badge: "Career Focused",
+      description: "Everything in Pro plus 1:1 guidance, advanced DSA and priority support.",
+      features: ["Everything in Pro", "1:1 career guidance", "Advanced DSA", "Priority support"]
+    }
+  };
+  return plans[normalized];
+}
+
+function paymentGatewayPage() {
+  const checkout = paymentPlanDetails();
+  const tax = Math.round(checkout.price * 0.18);
+  const total = checkout.price + tax;
+  return `<main class="payment-page view">
+    <nav class="pricing-nav payment-nav">
+      ${brand()}
+      <div class="pricing-links"><a href="#pricing">Pricing</a><a href="#dashboard">Dashboard</a><a href="#courses">Courses</a></div>
+      <div class="pricing-user"><span class="avatar">${currentUser.avatar}</span><strong>${currentUser.name.split(" ")[0]}</strong>${premiumPlanBadge()}</div>
+    </nav>
+    <section class="payment-shell">
+      <div class="payment-hero">
+        <span class="eyebrow">Secure checkout</span>
+        <h1>Complete your ${checkout.name} upgrade</h1>
+        <p>Review your plan, choose a payment method and activate premium access for your Studox.ai account.</p>
+        <div class="payment-trust"><span>${icon("lock")} Bank-grade encryption</span><span>${icon("star")} Instant activation</span><span>${icon("user")} Student friendly billing</span></div>
+      </div>
+      <form class="payment-card" data-form="payment-checkout" data-plan="${checkout.id}">
+        <div class="payment-card-head"><div><span>${checkout.badge}</span><h2>${checkout.name} Plan</h2></div><strong>Rs. ${checkout.price}<small>/month</small></strong></div>
+        <div class="razorpay-only-box">
+          <span>${icon("lock")}</span>
+          <div>
+            <strong>Pay securely with Razorpay</strong>
+            <p>Razorpay will open its secure checkout where students can pay using UPI, cards, netbanking, wallets or supported payment apps.</p>
+          </div>
+        </div>
+        <div class="razorpay-secure-strip">
+          <span>${icon("star")} Official Razorpay Checkout</span>
+          <span>${icon("lock")} Server-side verification</span>
+        </div>
+        <button class="btn primary glow payment-pay-btn" type="submit">Pay Rs. ${total} and activate ${checkout.name}</button>
+        <p class="payment-note">Real Razorpay checkout opens after this step. Your plan activates only after payment verification.</p>
+      </form>
+      <aside class="payment-summary">
+        <div class="summary-plan"><span>${icon("trophy")}</span><div><h2>${checkout.name}</h2><p>${checkout.description}</p></div></div>
+        <div class="summary-features">${checkout.features.map((feature) => `<span>${icon("star")} ${feature}</span>`).join("")}</div>
+        <div class="summary-lines"><div><span>Monthly price</span><strong>Rs. ${checkout.price}</strong></div><div><span>GST estimate</span><strong>Rs. ${tax}</strong></div><div class="total"><span>Total today</span><strong>Rs. ${total}</strong></div></div>
+        <a class="btn ghost" href="#pricing">Change plan</a>
+      </aside>
+    </section>
+  </main>`;
+}
 function profilePage() {
   return appLayout(`<div class="page-head">
       <div><h1>Profile Settings</h1><p>Manage your public profile, education, skills, completion and security.</p></div>
@@ -1430,6 +1501,7 @@ const routeMap = {
   certificates: certificatesPage,
   mentor: mentorPage,
   pricing: pricingPage,
+  payment: paymentGatewayPage,
   profile: profilePage,
   settings: settingsPage,
   admin: adminPage,
@@ -3186,7 +3258,7 @@ function saveAuthSession(result, goal) {
   localStorage.setItem("studox-user", JSON.stringify(currentUser));
 }
 
-async function handlePlanUpgrade(event) {
+function handleCheckoutPlan(event) {
   event.preventDefault();
   const plan = event.currentTarget.dataset.plan;
   if (!plan) return;
@@ -3194,18 +3266,120 @@ async function handlePlanUpgrade(event) {
     toast(`${plan === "elite" ? "Elite" : "Pro"} is already active.`);
     return;
   }
-  const result = await api("/billing/upgrade", {
+  localStorage.setItem("studox-checkout-plan", plan);
+  setRoute("payment");
+}
+
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const existing = document.querySelector("script[data-razorpay-checkout]");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.dataset.razorpayCheckout = "true";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
+function openRazorpayCheckout(order, plan) {
+  return new Promise((resolve, reject) => {
+    if (!window.Razorpay) return reject(new Error("Razorpay checkout could not load."));
+    const checkout = new window.Razorpay({
+      key: order.keyId,
+      amount: order.amount,
+      currency: order.currency || "INR",
+      name: "Studox.ai",
+      description: `${order.planName || plan} monthly plan`,
+      order_id: order.orderId,
+      prefill: {
+        name: order.prefill?.name || currentUser.name || "Studox Student",
+        email: order.prefill?.email || currentUser.email || "",
+      },
+      theme: { color: "#4f46e5" },
+      handler: (response) => resolve(response),
+      modal: { ondismiss: () => reject(new Error("Payment cancelled.")) },
+    });
+    checkout.open();
+  });
+}
+async function handlePlanUpgrade(event) {
+  event.preventDefault();
+  const form = event.currentTarget.closest("[data-form='payment-checkout']") || event.currentTarget;
+  const plan = form?.dataset.plan || event.currentTarget.dataset.plan || localStorage.getItem("studox-checkout-plan");
+  if (!plan) return;
+  if (getCurrentPlan() === plan) {
+    toast(`${plan === "elite" ? "Elite" : "Pro"} is already active.`);
+    return;
+  }
+  if (form?.reportValidity && !form.reportValidity()) return;
+  const button = form?.querySelector?.("button[type='submit']") || event.currentTarget;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Opening secure payment...";
+
+  const checkoutLoaded = await loadRazorpayCheckout();
+  if (!checkoutLoaded) {
+    button.disabled = false;
+    button.textContent = originalText;
+    return toast("Razorpay checkout could not load. Please check internet connection.");
+  }
+
+  const order = await api("/payments/create-order", {
     method: "POST",
     body: JSON.stringify({ plan }),
   });
-  if (!result?.plan) return;
-  currentUser = { ...currentUser, ...(result.user || {}), plan: result.plan };
-  localStorage.setItem("studox-plan", result.plan);
-  localStorage.setItem("studox-user", JSON.stringify(currentUser));
-  toast(result.message || "Plan upgraded.");
-  await render();
+
+  if (!order?.orderId || !order?.keyId) {
+    button.disabled = false;
+    button.textContent = originalText;
+    return toast(order?.message || "Payment order could not be created.");
+  }
+
+  try {
+    const paymentResponse = await openRazorpayCheckout(order, plan);
+    button.textContent = "Verifying payment...";
+    const result = await api("/payments/verify", {
+      method: "POST",
+      body: JSON.stringify({ plan, ...paymentResponse }),
+    });
+    button.disabled = false;
+    button.textContent = originalText;
+    if (!result?.plan) return toast(result?.message || "Payment verification failed.");
+    currentUser = { ...currentUser, ...(result.user || {}), plan: result.plan };
+    localStorage.setItem("studox-plan", result.plan);
+    localStorage.setItem("studox-user", JSON.stringify(currentUser));
+    localStorage.removeItem("studox-checkout-plan");
+    showPremiumSuccessModal(result.plan);
+    window.setTimeout(() => setRoute("dashboard"), 1800);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = originalText;
+    toast(error.message || "Payment was not completed.");
+  }
 }
 
+function showPremiumSuccessModal(plan = getCurrentPlan()) {
+  document.querySelector(".premium-success-backdrop")?.remove();
+  const label = String(plan).toLowerCase() === "elite" ? "Elite" : "Premium";
+  document.body.insertAdjacentHTML("beforeend", `<div class="premium-success-backdrop">
+    <section class="premium-success-modal">
+      <div class="premium-success-icon">${icon("trophy")}</div>
+      <span>${label} activated</span>
+      <h2>Payment successful</h2>
+      <p>Your Studox.ai ${label} access is active now. Opening your upgraded dashboard...</p>
+      <div class="premium-success-loader"><i></i></div>
+    </section>
+  </div>`);
+  window.setTimeout(() => document.querySelector(".premium-success-backdrop")?.remove(), 1750);
+}
 function showAuthFeedback(node, message, isError) {
   if (!node) {
     toast(message);
@@ -3243,7 +3417,8 @@ bindPage = function configuredBindPage() {
   });
   document.querySelectorAll("[data-form='otp-request']").forEach((form) => form.addEventListener("submit", handleOtpRequest));
   document.querySelectorAll("[data-form='password-reset']").forEach((form) => form.addEventListener("submit", handlePasswordReset));
-  document.querySelectorAll("[data-action='upgrade-plan']").forEach((button) => button.addEventListener("click", handlePlanUpgrade));
+  document.querySelectorAll("[data-action='checkout-plan']").forEach((button) => button.addEventListener("click", handleCheckoutPlan));
+  document.querySelectorAll("[data-form='payment-checkout']").forEach((form) => form.addEventListener("submit", handlePlanUpgrade));
   document.querySelectorAll("[data-action='open-upgrade']").forEach((link) => {
     document.querySelectorAll("[data-mentor-suggestion]").forEach((button) => {
   button.addEventListener("click", () => {

@@ -2142,3 +2142,407 @@ html[data-theme="dark"] .landing .landing-footer input,
   color: #0f172a;
   letter-spacing: 0;
 }
+
+/* Desktop fit fix: keep the hero preview inside 100% browser zoom. */
+.landing .hero {
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.82fr);
+  align-items: center;
+  overflow: hidden;
+}
+
+.landing .hero-left {
+  min-width: 0;
+}
+
+.landing .hero h1 {
+  font-size: clamp(3rem, 4.7vw, 4.9rem);
+  white-space: normal;
+}
+
+.landing .hero-right {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.landing .dashboard-preview {
+  width: min(100%, 452px);
+  max-width: calc(100vw - 40px);
+  overflow: hidden;
+}
+
+.landing .dash-body {
+  grid-template-columns: 118px minmax(0, 1fr);
+}
+
+.landing .hero-how-preview {
+  min-width: 0;
+  padding: 26px 22px 22px;
+  overflow: hidden;
+}
+
+.landing .hero-how-preview .preview-title h3,
+.landing .hero-how-preview .preview-title p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.landing .hero-how-preview .preview-steps {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.landing .hero-how-preview .preview-step,
+.landing .hero-how-preview .preview-step.purple {
+  min-height: 180px;
+  padding: 22px 12px 16px;
+}
+
+.landing .hero-how-preview .preview-step.green {
+  grid-column: 1 / -1;
+  min-height: 150px;
+}
+
+.landing .hero-how-preview .step-big-icon {
+  width: 58px;
+  height: 58px;
+}
+
+.landing .hero-how-preview .preview-step p {
+  max-width: 100%;
+}
+
+@media (min-width: 1280px) {
+  .landing .dashboard-preview {
+    width: min(100%, 460px);
+  }
+}
+
+@media (max-width: 1200px) {
+  .landing .hero {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .landing .hero-right {
+    justify-content: center;
+  }
+
+  .landing .dashboard-preview {
+    width: min(100%, 620px);
+  }
+}
+
+/* Hero mockup no-clip correction. */
+.landing .hero {
+  grid-template-columns: minmax(0, 0.92fr) minmax(520px, 0.78fr);
+  gap: clamp(22px, 3vw, 44px);
+  padding-inline: clamp(28px, 5vw, 80px);
+}
+
+.landing .hero h1 {
+  max-width: 660px;
+  font-size: clamp(3rem, 4.45vw, 4.7rem);
+}
+
+.landing .dashboard-preview {
+  width: min(100%, 520px);
+  max-width: 520px;
+}
+
+.landing .dash-body {
+  grid-template-columns: 104px minmax(0, 1fr);
+}
+
+.landing .dash-sidebar {
+  padding-inline: 10px;
+}
+
+.landing .dash-sidebar-item {
+  padding-inline: 10px;
+  font-size: 0.68rem;
+}
+
+.landing .dash-main,
+.landing .hero-how-preview,
+.landing .hero-how-preview .preview-steps,
+.landing .hero-how-preview .preview-step {
+  min-width: 0;
+}
+
+.landing .hero-how-preview {
+  padding: 28px 18px 22px;
+}
+
+.landing .hero-how-preview .preview-title {
+  max-width: 100%;
+}
+
+.landing .hero-how-preview .preview-title h3 {
+  font-size: 1.22rem;
+}
+
+.landing .hero-how-preview .preview-title p {
+  max-width: 330px;
+  margin-inline: auto;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.landing .hero-how-preview .preview-steps {
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  overflow: visible;
+}
+
+.landing .hero-how-preview .preview-step,
+.landing .hero-how-preview .preview-step.purple {
+  width: 100%;
+  min-height: 170px;
+  padding: 20px 10px 14px;
+  overflow: hidden;
+}
+
+.landing .hero-how-preview .preview-step.green {
+  width: 100%;
+  min-height: 140px;
+  grid-column: 1 / -1;
+}
+
+.landing .hero-how-preview .step-num {
+  width: 30px;
+  height: 30px;
+  font-size: 0.76rem;
+}
+
+.landing .hero-how-preview .step-big-icon {
+  width: 52px;
+  height: 52px;
+  margin-top: 18px;
+}
+
+.landing .hero-how-preview .preview-step strong {
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.landing .hero-how-preview .preview-step p {
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 1320px) {
+  .landing .hero {
+    grid-template-columns: minmax(0, 0.9fr) minmax(500px, 0.8fr);
+    padding-inline: 56px;
+  }
+
+  .landing .dashboard-preview {
+    width: 500px;
+    max-width: 500px;
+  }
+
+  .landing .hero h1 {
+    font-size: clamp(3rem, 4.25vw, 4.35rem);
+  }
+}
+
+@media (max-width: 1200px) {
+  .landing .hero {
+    grid-template-columns: 1fr;
+    padding-inline: clamp(22px, 6vw, 70px);
+  }
+
+  .landing .dashboard-preview {
+    width: min(100%, 620px);
+    max-width: 620px;
+  }
+}
+
+/* Final hero containment: no horizontal or internal mockup clipping at 1366px. */
+.landing {
+  overflow-x: hidden;
+}
+
+.landing .landing-nav {
+  min-height: 72px;
+}
+
+.landing .hero {
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 480px);
+  gap: 24px;
+  padding: 72px 68px 46px;
+  align-items: center;
+}
+
+.landing .hero h1 {
+  max-width: 620px;
+  font-size: clamp(3rem, 4.15vw, 4.25rem);
+  line-height: 1.03;
+}
+
+.landing .hero-copy {
+  max-width: 620px;
+}
+
+.landing .hero-right {
+  width: 100%;
+  justify-content: flex-start;
+  overflow: visible;
+}
+
+.landing .dashboard-preview {
+  width: 480px;
+  max-width: 100%;
+  margin-inline: 0;
+  overflow: hidden;
+}
+
+.landing .dash-body {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.landing .dash-sidebar-item {
+  padding: 9px 8px;
+  font-size: 0.63rem;
+}
+
+.landing .dash-main,
+.landing .hero-how-preview {
+  overflow: hidden;
+}
+
+.landing .hero-how-preview {
+  gap: 18px;
+  padding: 24px 16px 18px;
+}
+
+.landing .hero-how-preview .preview-title h3 {
+  font-size: 1.14rem;
+}
+
+.landing .hero-how-preview .preview-title p {
+  max-width: 290px;
+  font-size: 0.68rem;
+}
+
+.landing .hero-how-preview .preview-steps {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.landing .hero-how-preview .preview-step,
+.landing .hero-how-preview .preview-step.purple {
+  min-height: 128px;
+  padding: 18px 8px 10px;
+  border-radius: 12px;
+}
+
+.landing .hero-how-preview .preview-step.green {
+  min-height: 116px;
+}
+
+.landing .hero-how-preview .step-big-icon {
+  width: 42px;
+  height: 42px;
+  margin: 12px auto 8px;
+}
+
+.landing .hero-how-preview .preview-step strong {
+  font-size: 0.7rem;
+}
+
+.landing .hero-how-preview .preview-step p {
+  font-size: 0.54rem;
+  line-height: 1.35;
+}
+
+.landing .hero-how-preview .roadmap-heading {
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.landing .hero-how-preview .roadmap-heading strong {
+  font-size: 0.78rem;
+}
+
+.landing .hero-how-preview .roadmap-heading span {
+  font-size: 0.54rem;
+}
+
+.landing .hero-how-preview .roadmap-track {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
+}
+
+.landing .hero-how-preview .roadmap-track::before {
+  display: none;
+}
+
+.landing .hero-how-preview .roadmap-node > span {
+  width: 42px;
+  height: 42px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.landing .hero-how-preview .roadmap-node > span .icon,
+.landing .hero-how-preview .roadmap-node > span .icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.landing .hero-how-preview .roadmap-node strong {
+  margin-top: 6px;
+  font-size: 0.56rem;
+}
+
+.landing .hero-how-preview .roadmap-node p,
+.landing .hero-how-preview .roadmap-node small {
+  font-size: 0.49rem;
+  line-height: 1.25;
+}
+
+.landing .hero-how-preview .preview-benefits {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.landing .hero-how-preview .preview-benefits strong {
+  font-size: 0.58rem;
+}
+
+.landing .hero-how-preview .preview-benefits span {
+  font-size: 0.5rem;
+}
+
+@media (max-width: 1320px) {
+  .landing .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 460px);
+    padding-inline: 58px;
+  }
+
+  .landing .dashboard-preview {
+    width: 460px;
+  }
+
+  .landing .hero h1 {
+    font-size: clamp(2.8rem, 4vw, 4.05rem);
+  }
+}
+
+@media (max-width: 1180px) {
+  .landing .hero {
+    grid-template-columns: 1fr;
+    padding-inline: clamp(22px, 6vw, 70px);
+  }
+
+  .landing .hero-right {
+    justify-content: center;
+  }
+
+  .landing .dashboard-preview {
+    width: min(100%, 560px);
+  }
+}
