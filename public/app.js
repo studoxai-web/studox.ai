@@ -52,6 +52,7 @@ let pendingRoadmapGeneration = false;
 let pendingRoadmapSelection = false;
 let assessmentStep = 0;
 const assessmentAnswers = {};
+const counsellingState = { step: "education", education: "", skills: "", messages: [], report: null, provider: "local", loading: false };
 const pendingAssessmentKey = "studox-pending-assessment";
 let firebaseAuthReady = false;
 let firebaseCurrentUser = null;
@@ -384,6 +385,14 @@ function handleAppComingSoonLinkClick(event) {
 }
 
 document.addEventListener("click", handleAppComingSoonLinkClick, true);
+function handleGlobalRoadmapStart(event) {
+  const trigger = event.target.closest?.("[data-action='start-assessment']");
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  beginRoadmapCounselling(event);
+}
+document.addEventListener("click", handleGlobalRoadmapStart, true);
 
 async function api(path, options = {}) {
   try {
@@ -464,7 +473,7 @@ function studoxLandingPage() {
           practice, real projects and career guidance all in one place.
         </p>
         <div class="hero-actions">
-          <button class="btn primary" type="button" data-action="start-assessment">Build My AI Roadmap</button>
+          <a class="btn primary" href="#counselling" data-action="start-assessment" onclick="window.startRoadmapCounselling?.(event)">Build My AI Roadmap</a>
           <a class="btn ghost watch-btn" href="#how-it-works"><span>${icon("test")}</span> See How It Works</a>
         </div>
         <div class="hero-trust">
@@ -584,7 +593,7 @@ function studoxLandingPage() {
       <div class="cta-inner">
         <div class="cta-icon">${icon("trophy")}</div>
         <div class="cta-text"><h2>Ready to take control of your learning?</h2><p>Join students who are already building their future with Studox.ai.</p></div>
-        <div class="cta-action"><button class="btn cta-btn" type="button" data-action="start-assessment">Build My AI Roadmap</button><span class="cta-note">Free to start. No credit card required.</span></div>
+        <div class="cta-action"><a class="btn cta-btn" href="#counselling" data-action="start-assessment" onclick="window.startRoadmapCounselling?.(event)">Build My AI Roadmap</a><span class="cta-note">Free to start. No credit card required.</span></div>
       </div>
     </section>
 
@@ -597,6 +606,317 @@ function studoxLandingPage() {
   </main>`;
 }
 
+
+function resetAssessmentFlow() {
+  assessmentStep = 0;
+  Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
+  functionalState.generatedRoadmaps = [];
+  functionalState.previewRoadmapIndex = 0;
+}
+
+function startCareerAssessment() {
+  resetAssessmentFlow();
+  applyCounsellingDefaultsToAssessment();
+  renderAssessmentScreen();
+}
+
+function ensureCounsellingStarted() {
+  if (counsellingState.messages.length) return;
+  counsellingState.step = "education";
+  counsellingState.education = "";
+  counsellingState.skills = "";
+  counsellingState.report = null;
+  counsellingState.provider = "local";
+  counsellingState.loading = false;
+  counsellingState.messages = [
+    { from: "ai", text: "Hey, I am Studox AI. Before the career assignment, let me understand your current education and skill direction." },
+    { from: "ai", text: "Aap abhi kya kar rahe ho? Example: BCA first year, B.Tech CSE, 12th, diploma, commerce, ya working." }
+  ];
+}
+
+function openCounsellingRoute() {
+  ensureCounsellingStarted();
+  if (window.location.hash !== "#counselling") {
+    window.history.pushState(null, "", "#counselling");
+  }
+  renderCounsellingScreen();
+}
+
+function beginRoadmapCounselling(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  counsellingState.messages = [];
+  ensureCounsellingStarted();
+  openCounsellingRoute();
+}
+
+function renderCounsellingScreen() {
+  app.innerHTML = counsellingScreen();
+  bindPage();
+  scrollAssessmentToTop();
+}
+
+function clampScore(value, fallback = 70) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function validAssessmentOption(questionId, value, fallback) {
+  const question = assessmentQuestions.find((item) => item.id === questionId);
+  return question?.options?.includes(value) ? value : fallback;
+}
+
+function buildClientCounsellingReport(payload = {}) {
+  const education = String(payload.education || "").trim();
+  const skills = String(payload.skills || "").trim();
+  const text = `${education} ${skills}`.toLowerCase();
+  let recommendedTrack = "Full Stack Developer";
+  if (text.includes("ui") || text.includes("ux") || text.includes("figma")) recommendedTrack = "UI/UX Designer";
+  else if (text.includes("cyber") || text.includes("security")) recommendedTrack = "Cybersecurity";
+  else if (text.includes("data") || text.includes("sql") || text.includes("analytics")) recommendedTrack = "Data Analyst";
+  else if ((text.includes("ai") || text.includes("ml")) && !text.includes("web")) recommendedTrack = "AI/ML Engineer";
+  else if (text.includes("web") || text.includes("react") || text.includes("frontend")) recommendedTrack = "Web Development";
+  const tracks = [recommendedTrack, "Full Stack Developer", "AI/ML Engineer", "Data Analyst"].filter((item, index, array) => array.indexOf(item) === index).slice(0, 4);
+  return {
+    profileTitle: `${education || "Student"} - ${recommendedTrack} fit`,
+    snapshot: [
+      education ? `Current status: ${education}` : "Current status: exploring career direction",
+      skills ? `Skill interest: ${skills}` : "Skill interest: not decided yet",
+      `Suggested next move: ${recommendedTrack} foundation plus one portfolio project.`
+    ],
+    recommendedTrack,
+    confidence: skills ? 86 : 68,
+    fitScores: tracks.map((track, index) => ({ track, score: Math.max(58, 92 - index * 9), reason: index === 0 ? "Best fit from your counselling answers." : "Useful secondary option after main foundation." })),
+    miniRoadmap: [
+      "Week 1: revise fundamentals and setup GitHub learning log.",
+      `Week 2: learn ${recommendedTrack} basics with daily practice.`,
+      "Week 3: build one small portfolio project.",
+      "Week 4: deploy, document and prepare interview talking points."
+    ],
+    warnings: skills ? [] : ["Skill direction is unclear, so assessment answers will refine this recommendation."],
+    assessmentDefaults: { goal: recommendedTrack, focus: "Portfolio projects", timeline: "3 months", hours: "6-8 hours" }
+  };
+}
+
+function normalizeCounsellingReportClient(report, payload = {}) {
+  const fallback = buildClientCounsellingReport(payload);
+  const source = report && typeof report === "object" ? report : fallback;
+  const defaults = source.assessmentDefaults && typeof source.assessmentDefaults === "object" ? source.assessmentDefaults : fallback.assessmentDefaults;
+  const normalized = {
+    profileTitle: String(source.profileTitle || fallback.profileTitle),
+    snapshot: Array.isArray(source.snapshot) && source.snapshot.length ? source.snapshot.map(String).slice(0, 4) : fallback.snapshot,
+    recommendedTrack: validAssessmentOption("goal", source.recommendedTrack, fallback.recommendedTrack),
+    confidence: clampScore(source.confidence, fallback.confidence),
+    fitScores: Array.isArray(source.fitScores) && source.fitScores.length ? source.fitScores : fallback.fitScores,
+    miniRoadmap: Array.isArray(source.miniRoadmap) && source.miniRoadmap.length ? source.miniRoadmap.map(String).slice(0, 5) : fallback.miniRoadmap,
+    warnings: Array.isArray(source.warnings) ? source.warnings.map(String).slice(0, 3) : fallback.warnings,
+    assessmentDefaults: {
+      goal: validAssessmentOption("goal", defaults.goal || source.recommendedTrack, fallback.assessmentDefaults.goal),
+      focus: validAssessmentOption("focus", defaults.focus, fallback.assessmentDefaults.focus),
+      timeline: validAssessmentOption("timeline", defaults.timeline, fallback.assessmentDefaults.timeline),
+      hours: validAssessmentOption("hours", defaults.hours, fallback.assessmentDefaults.hours)
+    }
+  };
+  normalized.fitScores = normalized.fitScores.map((item, index) => ({
+    track: validAssessmentOption("goal", item.track, index === 0 ? normalized.recommendedTrack : fallback.fitScores[index]?.track || "Full Stack Developer"),
+    score: clampScore(item.score, fallback.fitScores[index]?.score || 68),
+    reason: String(item.reason || "Career fit based on your counselling answers.")
+  })).sort((a, b) => b.score - a.score).slice(0, 4);
+  return normalized;
+}
+
+function getSavedCounsellingReport() {
+  try {
+    return JSON.parse(localStorage.getItem("studox-counselling-result") || "null");
+  } catch (_error) {
+    return null;
+  }
+}
+
+function saveCounsellingReport(report) {
+  if (!report) return;
+  localStorage.setItem("studox-counselling-result", JSON.stringify({ ...report, savedAt: new Date().toISOString() }));
+}
+
+function activeCounsellingReport() {
+  return counsellingState.report || getSavedCounsellingReport();
+}
+
+function applyCounsellingDefaultsToAssessment() {
+  const report = activeCounsellingReport();
+  const defaults = report?.assessmentDefaults || {};
+  if (!defaults.goal) return;
+  assessmentAnswers.goal = { value: validAssessmentOption("goal", defaults.goal, "Full Stack Developer") };
+  assessmentAnswers.focus = { value: validAssessmentOption("focus", defaults.focus, "Portfolio projects") };
+  assessmentAnswers.timeline = { value: validAssessmentOption("timeline", defaults.timeline, "3 months") };
+  assessmentAnswers.hours = { value: validAssessmentOption("hours", defaults.hours, "6-8 hours") };
+}
+
+function counsellingReportPanel(report) {
+  if (!report) return "";
+  const confidence = clampScore(report.confidence, 70);
+  const scores = (report.fitScores || []).slice(0, 4);
+  const roadmap = (report.miniRoadmap || []).slice(0, 5);
+  const warnings = report.warnings || [];
+  return `<section class="counselling-report-panel">
+    <div class="report-head">
+      <div><span>AI career snapshot</span><h3>${escapeHtml(report.profileTitle || "Career fit ready")}</h3></div>
+      <strong>${escapeHtml(report.recommendedTrack || "Recommended track")}</strong>
+    </div>
+    <div class="career-confidence" style="--score:${confidence}"><div><b>${confidence}%</b><span>Career clarity</span></div></div>
+    <div class="snapshot-list">${(report.snapshot || []).map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>
+    <div class="fit-score-list">
+      ${scores.map((item) => `<article><div><strong>${escapeHtml(item.track)}</strong><span>${escapeHtml(item.reason)}</span></div><b>${clampScore(item.score)}%</b><i style="--score:${clampScore(item.score)}"></i></article>`).join("")}
+    </div>
+    <div class="mini-roadmap-preview"><h4>4-week starter preview</h4>${roadmap.map((item, index) => `<p><b>${index + 1}</b>${escapeHtml(item)}</p>`).join("")}</div>
+    ${warnings.length ? `<div class="counselling-warning">${warnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
+  </section>`;
+}
+
+window.startRoadmapCounselling = function startRoadmapCounsellingFromWindow(event) {
+  event?.preventDefault?.();
+  beginRoadmapCounselling(event);
+};
+
+function counsellingScreen() {
+  const isSkillStep = counsellingState.step === "skills";
+  const isDone = counsellingState.step === "done";
+  const providerLabel = counsellingState.provider === "gemini" ? "Gemini live" : "Smart fallback";
+  return `<main class="landing view ai-counselling-view">
+    <nav class="landing-nav assessment-nav">
+      ${brand()}
+      <div class="nav-actions"><a href="#landing" class="btn ghost">Home</a><button class="btn primary" type="button" data-action="skip-counselling">Skip to assessment</button></div>
+    </nav>
+    <section class="counselling-shell">
+      <aside class="counselling-robot-panel">
+        <div class="counselling-robot active" aria-hidden="true">
+          <span class="robot-ear left"></span><span class="robot-ear right"></span>
+          <div class="robot-eye left"></div><div class="robot-eye right"></div>
+          <div class="robot-mouth"><i></i><i></i><i></i></div>
+          <div class="robot-body"><span></span><span></span></div>
+        </div>
+        <span class="eyebrow">AI counselling</span>
+        <h1>Let us understand you first</h1>
+        <p>Studox AI will ask a couple of counselling questions, suggest useful skills, and then send you to the career assignment.</p>
+        <div class="counselling-signal"><span></span><span></span><span></span><strong>${providerLabel}</strong></div>
+      </aside>
+      <section class="counselling-chat-card">
+        <div class="counselling-chat-head"><div><span>Studox AI Mentor</span><h2>Pre-roadmap counselling</h2></div><strong>${isDone ? "Ready" : isSkillStep ? "2/2" : "1/2"}</strong></div>
+        <div class="counselling-messages">
+          ${counsellingState.messages.map((item) => `<div class="counselling-message ${item.from}"><span>${item.from === "ai" ? icon("bot") : icon("user")}</span><p>${escapeHtml(item.text)}</p></div>`).join("")}
+        </div>
+        ${counsellingState.report ? counsellingReportPanel(counsellingState.report) : ""}
+        ${isDone ? `<div class="counselling-actions"><button class="btn primary glow" type="button" data-action="start-career-assessment">Continue to career assignment</button></div>` : `
+          <form class="counselling-input-row" data-form="${isSkillStep ? "counselling-skills" : "counselling-education"}">
+            <textarea name="answer" placeholder="${isSkillStep ? "Example: web development, AI/ML, Python, UI/UX, cybersecurity..." : "Example: I am doing BCA second year..."}" ${isSkillStep ? "" : "required"}></textarea>
+            <button class="btn primary" type="submit">Send</button>
+          </form>`}
+      </section>
+    </section>
+  </main>`;
+}
+
+function educationInsight(value = "") {
+  const text = value.toLowerCase();
+  if (text.includes("bca")) return "BCA is a solid tech degree for software, web development, data analytics and AI fundamentals. Agar tum practical projects aur internships pe focus karoge, placement readiness kaafi strong ho sakti hai.";
+  if (text.includes("b.tech") || text.includes("btech") || text.includes("cse") || text.includes("computer")) return "Computer science background roadmap ke liye strong base deta hai. Tum DSA, development, projects and system basics ko combine karke high-value profile build kar sakte ho.";
+  if (text.includes("12") || text.includes("school")) return "School stage se start karna advantage hai. Abhi foundation, coding basics, English communication and project habit build karoge to college mein kaafi ahead rahoge.";
+  if (text.includes("diploma")) return "Diploma background practical learning ke liye useful hota hai. Tum skills and portfolio projects par focus karke job-ready track bana sakte ho.";
+  return "Good. Tumhari current situation ko roadmap ke starting point ki tarah use karenge, so plan realistic aur career-focused rahega.";
+}
+
+function skillCounsellingFeedback(education = "", skills = "") {
+  const text = skills.toLowerCase();
+  const edu = education.toLowerCase();
+  const valuable = ["web", "javascript", "react", "node", "python", "java", "dsa", "data", "sql", "ai", "ml", "cyber", "security", "ui", "ux", "figma", "cloud"];
+  const matched = valuable.filter((skill) => text.includes(skill));
+  const bca = edu.includes("bca");
+
+  if (!text.trim()) {
+    return bca
+      ? "Agar skills decide nahi ki hain, BCA ke saath Web Development + DSA + SQL/Python best start rahega. Isse internship, projects aur placement dono ke liye strong base banega."
+      : "Agar skills decide nahi ki hain, main suggest karunga: Web Development foundation, DSA basics, GitHub projects and one specialization like AI/ML, Data Analytics, Cybersecurity or UI/UX.";
+  }
+
+  if (matched.length) {
+    return `Good choice. ${skills} valuable lag raha hai because it connects with tech careers and future projects. Main assessment mein tumhe focused roadmap choose karne mein help karunga.`;
+  }
+
+  return bca
+    ? `Honestly, ${skills} BCA-tech career ke liye strongest primary skill nahi lag raha. Main suggest karunga Web Development, Python, SQL, DSA, ya AI/ML basics par focus karo.`
+    : `Ye skill direction career roadmap ke liye thoda weak lag raha hai. Main suggest karunga ek tech-aligned skill choose karo: Web Development, Data Analytics, AI/ML, Cybersecurity, UI/UX, ya DSA.`;
+}
+
+async function requestCounsellingAdvice(step, payload, fallbackMessages) {
+  try {
+    const result = await api("/ai/counselling", {
+      method: "POST",
+      body: JSON.stringify({ step, ...payload })
+    });
+    const messages = Array.isArray(result?.messages) ? result.messages.filter(Boolean) : [];
+    if (messages.length) {
+      counsellingState.provider = result.provider || "gemini";
+      return {
+        ...result,
+        messages,
+        report: result.report ? normalizeCounsellingReportClient(result.report, payload) : null
+      };
+    }
+  } catch (error) {
+    console.warn("Gemini counselling request failed", error);
+  }
+  counsellingState.provider = "local";
+  return {
+    messages: fallbackMessages,
+    provider: "local",
+    model: "studox-local-counsellor",
+    fallback: true,
+    report: step === "skills" ? buildClientCounsellingReport(payload) : null
+  };
+}
+
+async function handleCounsellingEducation(event) {
+  event.preventDefault();
+  const answer = new FormData(event.currentTarget).get("answer")?.trim() || "";
+  if (!answer) return;
+  counsellingState.education = answer;
+  counsellingState.step = "skills";
+  counsellingState.messages.push({ from: "user", text: answer });
+  counsellingState.messages.push({ from: "ai", text: "Studox AI is thinking about your background..." });
+  renderCounsellingScreen();
+
+  const fallbackMessages = [
+    "Good, thanks for sharing.",
+    educationInsight(answer),
+    "Iske saath tumne koi skill sochi hai? Agar sochi hai to likho. Agar nahi sochi, blank chhod ke Send kar sakte ho, main suggest kar dunga."
+  ];
+  const result = await requestCounsellingAdvice("education", { education: answer }, fallbackMessages);
+  counsellingState.messages.pop();
+  result.messages.forEach((text) => counsellingState.messages.push({ from: "ai", text }));
+  renderCounsellingScreen();
+}
+
+async function handleCounsellingSkills(event) {
+  event.preventDefault();
+  const answer = new FormData(event.currentTarget).get("answer")?.trim() || "";
+  counsellingState.skills = answer;
+  counsellingState.step = "done";
+  counsellingState.messages.push({ from: "user", text: answer || "Abhi skills decide nahi ki hain." });
+  counsellingState.messages.push({ from: "ai", text: "Studox AI is checking if this skill direction fits your career..." });
+  renderCounsellingScreen();
+
+  const fallbackMessages = [
+    skillCounsellingFeedback(counsellingState.education, answer),
+    "Now I will send you to the career assignment. Wahan ke answers ke basis par focused AI roadmap generate hoga."
+  ];
+  const result = await requestCounsellingAdvice("skills", { education: counsellingState.education, skills: answer }, fallbackMessages);
+  counsellingState.messages.pop();
+  result.messages.forEach((text) => counsellingState.messages.push({ from: "ai", text }));
+  counsellingState.report = normalizeCounsellingReportClient(result.report, { education: counsellingState.education, skills: answer });
+  saveCounsellingReport(counsellingState.report);
+  renderCounsellingScreen();
+}
 function assessmentQuestionScreen() {
   const roadmaps = functionalState.generatedRoadmaps || [];
   const question = assessmentQuestions[assessmentStep];
@@ -1566,6 +1886,10 @@ function adminPage() {
 
 const routeMap = {
   landing: studoxLandingPage,
+  counselling: () => {
+    ensureCounsellingStarted();
+    return counsellingScreen();
+  },
   login: () => authPage("login"),
   signup: () => authPage("signup"),
   dashboard: () => "",
@@ -1646,6 +1970,9 @@ function bindPage() {
     form.addEventListener("submit", handleChat);
   });
 
+  document.querySelectorAll("[data-form='counselling-education']").forEach((form) => form.addEventListener("submit", handleCounsellingEducation));
+  document.querySelectorAll("[data-form='counselling-skills']").forEach((form) => form.addEventListener("submit", handleCounsellingSkills));
+  document.querySelectorAll("[data-action='skip-counselling'], [data-action='start-career-assessment']").forEach((button) => button.addEventListener("click", startCareerAssessment));
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -1916,10 +2243,64 @@ render = async function functionalRender() {
   app.innerHTML = routeMap[route]();
   bindPage();
   animateCounters();
+  if (route === "counselling") scrollAssessmentToTop();
 };
 
+
+function maybeShowJarvisWelcome(route) {
+  if (route !== "dashboard") return;
+  if (localStorage.getItem("studox-jarvis-welcome-pending") !== "true") return;
+  if (localStorage.getItem("studox-jarvis-welcome-seen") === "true") return;
+  window.setTimeout(showJarvisWelcome, 500);
+}
+
+function showJarvisWelcome() {
+  localStorage.setItem("studox-jarvis-welcome-seen", "true");
+  localStorage.removeItem("studox-jarvis-welcome-pending");
+  document.querySelector(".jarvis-welcome-backdrop")?.remove();
+  const firstName = (currentUser.name || "Student").split(" ")[0] || "Student";
+  const message = `Hey ${firstName}, welcome to Studox.ai. I am your AI mentor. Let us build your roadmap and upgrade your learning journey.`;
+  document.body.insertAdjacentHTML("beforeend", `<div class="jarvis-welcome-backdrop">
+    <section class="jarvis-welcome-modal">
+      <button class="jarvis-skip" type="button" data-jarvis-close>Skip</button>
+      <div class="jarvis-face" aria-hidden="true">
+        <span class="jarvis-antenna"></span>
+        <div class="jarvis-eye left"></div>
+        <div class="jarvis-eye right"></div>
+        <div class="jarvis-mouth"><i></i><i></i><i></i></div>
+        <div class="jarvis-orbit one"></div>
+        <div class="jarvis-orbit two"></div>
+      </div>
+      <span class="jarvis-pill">Studox AI online</span>
+      <h2>Hey ${firstName}, welcome to Studox.ai</h2>
+      <p>${message}</p>
+      <button class="btn primary glow" type="button" data-jarvis-close>Start learning</button>
+    </section>
+  </div>`);
+  speakJarvisMessage(message);
+  document.querySelectorAll("[data-jarvis-close]").forEach((button) => button.addEventListener("click", closeJarvisWelcome));
+}
+
+function speakJarvisMessage(message) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.rate = 0.92;
+  utterance.pitch = 0.78;
+  utterance.volume = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find((voice) => /male|david|mark|english/i.test(`${voice.name} ${voice.lang}`));
+  if (preferred) utterance.voice = preferred;
+  utterance.onend = () => document.querySelector(".jarvis-face")?.classList.add("done");
+  window.speechSynthesis.speak(utterance);
+}
+
+function closeJarvisWelcome() {
+  window.speechSynthesis?.cancel?.();
+  document.querySelector(".jarvis-welcome-backdrop")?.remove();
+}
 function loadingView(route) {
-  if (route === "landing" || route === "login" || route === "signup") {
+  if (route === "landing" || route === "login" || route === "signup" || route === "counselling") {
     return `<div class="skeleton-screen"><div class="skeleton hero-skeleton"></div><div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></div>`;
   }
   return appLayout(`<div class="skeleton-screen" style="padding:0"><div class="skeleton" style="height:180px"></div><div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></div>`, route);
@@ -2260,14 +2641,11 @@ bindPage = function functionalBindPage() {
   document.querySelectorAll("[data-form='signup']").forEach((form) => form.addEventListener("submit", handleSignup));
   document.querySelectorAll("[data-form='chat']").forEach((form) => form.addEventListener("submit", handleChat));
   document.querySelectorAll("[data-action='start-assessment']").forEach((button) => {
-    button.addEventListener("click", () => {
-      assessmentStep = 0;
-      Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
-      functionalState.generatedRoadmaps = [];
-      functionalState.previewRoadmapIndex = 0;
-      renderAssessmentScreen();
-    });
+    button.addEventListener("click", beginRoadmapCounselling);
   });
+  document.querySelectorAll("[data-form='counselling-education']").forEach((form) => form.addEventListener("submit", handleCounsellingEducation));
+  document.querySelectorAll("[data-form='counselling-skills']").forEach((form) => form.addEventListener("submit", handleCounsellingSkills));
+  document.querySelectorAll("[data-action='skip-counselling'], [data-action='start-career-assessment']").forEach((button) => button.addEventListener("click", startCareerAssessment));
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -3265,6 +3643,7 @@ render = async function configuredRender() {
   app.innerHTML = routeMap[route]();
   bindPage();
   animateCounters();
+  if (route === "counselling") scrollAssessmentToTop();
 };
 
 handleLogin = async function configuredHandleLogin(event) {

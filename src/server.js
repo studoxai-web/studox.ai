@@ -675,12 +675,12 @@ async function callOpenAiMentor(messages) {
 async function callGeminiMentor(messages) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY missing");
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const prompt = messages.map((item) => `${item.role.toUpperCase()}:\n${item.content}`).join("\n\n");
   const generate = async (text, maxOutputTokens = 6000) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text }] }],
         generationConfig: { temperature: 0.45, maxOutputTokens },
@@ -990,6 +990,158 @@ async function generateCompleteRoadmap(input, selectedRoadmap) {
   ]);
 }
 
+function localCounsellingMessages(step, payload = {}) {
+  const education = String(payload.education || "").trim();
+  const skills = String(payload.skills || "").trim();
+  const edu = education.toLowerCase();
+  const skillText = skills.toLowerCase();
+  const techSkills = ["web", "javascript", "react", "node", "python", "java", "dsa", "data", "sql", "ai", "ml", "cyber", "security", "ui", "ux", "figma", "cloud"];
+  const matchedSkill = techSkills.some((skill) => skillText.includes(skill));
+
+  if (step === "education") {
+    let insight = "Good. Tumhari current situation ko roadmap ke starting point ki tarah use karenge, so plan realistic aur career-focused rahega.";
+    if (edu.includes("bca")) insight = "BCA is a strong base for web development, data analytics, AI basics and software roles. Agar tum projects, GitHub aur internships pe focus karoge to profile kaafi job-ready ban sakti hai.";
+    else if (edu.includes("b.tech") || edu.includes("btech") || edu.includes("cse") || edu.includes("computer")) insight = "Computer science background tumhe DSA, development, projects aur system basics combine karne ka advantage deta hai.";
+    else if (edu.includes("12") || edu.includes("school")) insight = "School stage se start karna advantage hai. Abhi coding basics, communication aur project habit build karoge to college mein ahead rahoge.";
+    else if (edu.includes("diploma")) insight = "Diploma background practical learning ke liye useful hota hai. Skill plus portfolio projects tumhe job-ready track par le ja sakte hain.";
+    return [
+      "Good, thanks for sharing.",
+      insight,
+      "Iske saath tumne koi skill sochi hai? Agar sochi hai to likho. Agar nahi sochi, blank chhod sakte ho, main suggest kar dunga."
+    ];
+  }
+
+  if (!skills) {
+    return [
+      edu.includes("bca")
+        ? "Agar skills decide nahi ki hain, BCA ke saath Web Development + DSA + SQL/Python best start rahega. Isse internship, projects aur placement dono ke liye strong base banega."
+        : "Agar skills decide nahi ki hain, main suggest karunga: Web Development foundation, DSA basics, GitHub projects and one specialization like AI/ML, Data Analytics, Cybersecurity or UI/UX.",
+      "Now I will send you to the career assignment. Wahan ke answers ke basis par focused roadmap generate hoga."
+    ];
+  }
+
+  return [
+    matchedSkill
+      ? `Good choice. ${skills} valuable lag raha hai because it connects with tech careers and future projects. Main assessment mein tumhe focused roadmap choose karne mein help karunga.`
+      : `Honestly, ${skills} primary tech career ke liye strongest direction nahi lag raha. Main suggest karunga Web Development, Python, SQL, DSA, AI/ML, Cybersecurity, Data Analytics ya UI/UX mein se ek choose karo.`,
+    "Now I will send you to the career assignment. Wahan ke answers ke basis par focused roadmap generate hoga."
+  ];
+}
+
+function localCounsellingReport(payload = {}) {
+  const education = String(payload.education || "").trim();
+  const skills = String(payload.skills || "").trim();
+  const text = `${education} ${skills}`.toLowerCase();
+  const options = ["Full Stack Developer", "AI/ML Engineer", "Data Analyst", "Cybersecurity", "UI/UX Designer", "Web Development"];
+  let recommendedTrack = "Full Stack Developer";
+  if (text.includes("ui") || text.includes("ux") || text.includes("figma") || text.includes("design")) recommendedTrack = "UI/UX Designer";
+  else if (text.includes("cyber") || text.includes("security")) recommendedTrack = "Cybersecurity";
+  else if (text.includes("data") || text.includes("sql") || text.includes("analytics")) recommendedTrack = "Data Analyst";
+  else if ((text.includes("ai") || text.includes("ml") || text.includes("machine")) && !text.includes("web")) recommendedTrack = "AI/ML Engineer";
+  else if (text.includes("web") || text.includes("frontend") || text.includes("html") || text.includes("react")) recommendedTrack = "Web Development";
+
+  const scoreFor = (track) => {
+    if (track === recommendedTrack) return 92;
+    if (track === "Full Stack Developer" && ["Web Development", "AI/ML Engineer"].includes(recommendedTrack)) return 86;
+    if (track === "AI/ML Engineer" && text.includes("ai")) return 84;
+    if (track === "Web Development" && text.includes("web")) return 88;
+    if (track === "Data Analyst" && text.includes("sql")) return 78;
+    return 58 + Math.floor(Math.random() * 12);
+  };
+
+  const fitScores = options.map((track) => ({
+    track,
+    score: Math.min(96, scoreFor(track)),
+    reason: track === recommendedTrack ? "Best match based on your current background and skill interest." : "Possible secondary path after building the main foundation."
+  })).sort((a, b) => b.score - a.score).slice(0, 4);
+
+  return {
+    profileTitle: `${education || "Student"} - ${recommendedTrack} fit`,
+    snapshot: [
+      education ? `Current status: ${education}` : "Current status: still exploring",
+      skills ? `Skill direction: ${skills}` : "Skill direction: not decided yet",
+      `Best next move: start with ${recommendedTrack} fundamentals and one portfolio project.`
+    ],
+    recommendedTrack,
+    confidence: recommendedTrack === "Full Stack Developer" ? 78 : 86,
+    fitScores,
+    miniRoadmap: [
+      "Week 1: revise core basics and setup GitHub learning log.",
+      `Week 2: learn ${recommendedTrack} fundamentals with daily practice.`,
+      "Week 3: build one small portfolio project using real-world features.",
+      "Week 4: add deployment, documentation and interview talking points."
+    ],
+    warnings: skills ? [] : ["Skill direction is still unclear, so assessment answers will refine the roadmap."],
+    assessmentDefaults: {
+      goal: options.includes(recommendedTrack) ? recommendedTrack : "Full Stack Developer",
+      focus: "Portfolio projects",
+      timeline: "3 months",
+      hours: "6-8 hours"
+    }
+  };
+}
+
+function counsellingPrompt(step, payload = {}) {
+  const education = String(payload.education || "").trim();
+  const skills = String(payload.skills || "").trim();
+  return `You are Studox.ai's premium AI career counsellor for Indian college students.
+Reply in Hinglish, warm and practical. Keep it concise. Do not mention that you are rule-based.
+Return only JSON. No markdown, no code fences.
+
+Student education/current status: ${education || "not provided"}
+Student skill interest: ${skills || "not provided"}
+Current counselling step: ${step}
+
+Allowed career tracks: Full Stack Developer, AI/ML Engineer, Data Analyst, Cybersecurity, UI/UX Designer, Web Development.
+Allowed assessment focus values: Job-ready skills, Internship preparation, Portfolio projects, DSA and coding, Interview preparation.
+Allowed timelines: 1 month, 3 months, 6 months, 12 months.
+Allowed weekly hours: 3-5 hours, 6-8 hours, 9-12 hours, 15+ hours.
+
+If step is education, return exactly:
+{"messages":["acknowledgement", "education insight", "skill question"], "report": null}
+
+If step is skills, return exactly:
+{
+  "messages": ["skill fit feedback", "career assignment transition"],
+  "report": {
+    "profileTitle": "short title",
+    "snapshot": ["3 short facts about student"],
+    "recommendedTrack": "one allowed career track",
+    "confidence": number from 45 to 98,
+    "fitScores": [
+      {"track":"allowed career track", "score": number from 0 to 100, "reason":"short reason"}
+    ],
+    "miniRoadmap": ["Week 1 action", "Week 2 action", "Week 3 action", "Week 4 action"],
+    "warnings": ["optional caution if any"],
+    "assessmentDefaults": {"goal":"allowed career track", "focus":"allowed focus", "timeline":"allowed timeline", "hours":"allowed weekly hours"}
+  }
+}
+
+For fitScores, include the top 4 tracks only. The best fit must have the highest score.`;
+}
+
+async function generateCounsellingReply(step, payload = {}) {
+  const normalizedStep = step === "skills" ? "skills" : "education";
+  try {
+    const aiResult = await callConfiguredAi([
+      { role: "system", content: "Return only valid JSON messages for Studox.ai counselling." },
+      { role: "user", content: counsellingPrompt(normalizedStep, payload) },
+    ]);
+    const parsed = JSON.parse(aiResult.reply.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim());
+    const messages = Array.isArray(parsed.messages) ? parsed.messages.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    if (!messages.length) throw new Error("Gemini returned empty counselling messages.");
+    return { messages, report: parsed.report || null, provider: aiResult.provider, model: aiResult.model, fallback: false };
+  } catch (error) {
+    console.warn(`AI counselling fallback: ${error.message}`);
+    return {
+      messages: localCounsellingMessages(normalizedStep, payload),
+      report: normalizedStep === "skills" ? localCounsellingReport(payload) : null,
+      provider: "local",
+      model: "studox-local-counsellor",
+      fallback: true,
+    };
+  }
+}
 function memoryId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 }
@@ -1932,6 +2084,16 @@ app.post("/api/certificates/:id/share", authOptional, (req, res) => {
   res.json({ message: "Share card generated.", shareUrl: `${req.protocol}://${req.get("host")}/certificate/${req.params.id}` });
 });
 
+app.post("/api/ai/counselling", authOptional, async (req, res) => {
+  const step = String(req.body.step || "education").trim();
+  const education = String(req.body.education || "").trim();
+  const skills = String(req.body.skills || "").trim();
+  if (!["education", "skills"].includes(step)) return res.status(400).json({ message: "Invalid counselling step." });
+  if (step === "education" && !education) return res.status(400).json({ message: "Education/current status is required." });
+  if (education.length > 800 || skills.length > 800) return res.status(400).json({ message: "Counselling answer is too long." });
+  const result = await generateCounsellingReply(step, { education, skills });
+  res.json(result);
+});
 app.get("/api/ai-mentor/chat", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const chats = await AIMentorChat.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(25).lean();
