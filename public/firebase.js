@@ -1,5 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
 let firebaseApp = null;
 let firebaseAuth = null;
@@ -18,7 +25,7 @@ export async function initializeStudoxFirebase() {
   if (firebaseAuth) return firebaseAuth;
   const config = await loadFirebaseConfig();
   if (!hasRequiredFirebaseConfig(config)) {
-    console.info("Firebase Web SDK config is not set. Existing auth remains active.");
+    console.info("Firebase Web SDK config is not set.");
     return null;
   }
   firebaseApp = initializeApp(config);
@@ -30,4 +37,34 @@ export async function initializeStudoxFirebase() {
 
 export { firebaseApp, firebaseAuth };
 
-initializeStudoxFirebase();
+window.studoxFirebase = {
+  initialize: initializeStudoxFirebase,
+  get auth() {
+    return firebaseAuth;
+  },
+  async createUserWithEmailAndPassword(email, password) {
+    const auth = await initializeStudoxFirebase();
+    if (!auth) throw new Error("Firebase is not configured.");
+    return createUserWithEmailAndPassword(auth, email, password);
+  },
+  async signInWithEmailAndPassword(email, password) {
+    const auth = await initializeStudoxFirebase();
+    if (!auth) throw new Error("Firebase is not configured.");
+    return signInWithEmailAndPassword(auth, email, password);
+  },
+  updateProfile,
+  async signOut() {
+    const auth = await initializeStudoxFirebase();
+    if (auth) await signOut(auth);
+  },
+  async onAuthStateChanged(callback) {
+    const auth = await initializeStudoxFirebase();
+    if (!auth) {
+      callback(null);
+      return () => {};
+    }
+    return onAuthStateChanged(auth, callback);
+  },
+};
+
+window.studoxFirebaseReady = initializeStudoxFirebase();

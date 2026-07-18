@@ -9,8 +9,8 @@ This document explains how the current Studox.ai project works so a new develope
 Studox.ai is a single-page student learning platform with:
 
 - Landing page and assessment flow
-- Login/signup with JWT authentication
-- Firebase Authentication infrastructure is prepared, but not yet used for login/signup
+- Login/signup with Firebase Authentication
+- Legacy JWT authentication is still present as a compatibility fallback
 - AI roadmap generation
 - Dashboard and roadmap pages
 - Courses, tests, DSA, resume, projects, internships, hackathons, certificates, AI mentor, profile, settings, and admin screens
@@ -71,9 +71,9 @@ studox.ai/
 
 ## 2A. Firebase Auth Migration Status
 
-Firebase is currently in Phase 2 backend-sync mode.
+Firebase is currently in Phase 3 frontend-auth mode.
 
-Current active authentication still uses:
+Previous Phase 2 behavior, now replaced on the frontend:
 
 ```text
 Login/Signup
@@ -82,14 +82,29 @@ Login/Signup
 -> authRequired()/authOptional()
 ```
 
+Current active frontend authentication uses:
+
+```text
+Login/Signup
+-> Firebase Email/Password Auth
+-> Firebase ID token
+-> POST /api/auth/firebase
+-> Studox User sync
+-> savePendingRoadmapAfterAuth()
+-> Dashboard
+```
+
 Prepared Firebase infrastructure:
 
 - `public/firebase.js` initializes the Firebase Web SDK from environment-backed config exposed by `/api/firebase/config`.
 - `src/config/firebaseAdmin.js` initializes Firebase Admin from backend environment variables.
 - `src/server.js` exposes `/api/firebase/config` for public Firebase Web SDK config only.
 - `src/server.js` exposes `POST /api/auth/firebase` to verify a Firebase ID token and find/create the matching Studox `User`, `StudentProfile`, and `UserSettings`.
+- `public/app.js` now uses Firebase Email/Password methods for signup/login and then calls `/api/auth/firebase`.
+- `public/app.js` waits for Firebase auth-state restoration before protected route checks to avoid redirect flicker.
+- `authRequired()` and `authOptional()` still support legacy JWTs, but now also accept Firebase ID tokens and map them to the matching Studox user.
 
-Important: Firebase is not yet used by the frontend signup/login screens, route guards, legacy JWT middleware, or pending-roadmap save flow. Those migrations are planned for later phases.
+Important: Legacy backend signup/login endpoints still exist for compatibility, but the active frontend flow no longer calls them.
 
 ## 3. Frontend Architecture
 
@@ -170,12 +185,12 @@ This allows a user to complete the assessment before login, then resume roadmap 
 
 ## 4. Authentication Flow
 
-Authentication uses JWT stored in browser localStorage:
+Authentication now uses Firebase on the frontend. Studox still stores lightweight user display/session metadata in browser localStorage:
 
 ```text
-studox-token
 studox-user
 studox-plan
+studox-auth-provider
 ```
 
 Frontend auth check:
@@ -184,7 +199,7 @@ Frontend auth check:
 hasDemoSession()
 ```
 
-This currently checks whether `studox-token` exists.
+This currently checks the restored Firebase user first, with `studox-token` retained only as a legacy fallback.
 
 Backend auth middleware:
 
@@ -193,10 +208,12 @@ authRequired(req, res, next)
 authOptional(req, res, next)
 ```
 
-`authRequired` expects:
+`authRequired` accepts:
 
 ```text
-Authorization: Bearer <jwt>
+Authorization: Bearer <Firebase ID token>
+or
+Authorization: Bearer <legacy jwt>
 ```
 
 When valid, it populates:

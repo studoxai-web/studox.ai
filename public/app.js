@@ -53,6 +53,10 @@ let pendingRoadmapSelection = false;
 let assessmentStep = 0;
 const assessmentAnswers = {};
 const pendingAssessmentKey = "studox-pending-assessment";
+let firebaseAuthReady = false;
+let firebaseCurrentUser = null;
+let firebaseAuthReadyPromise = null;
+let firebaseSessionSyncPromise = null;
 
 if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
   localStorage.removeItem("demoSession");
@@ -61,7 +65,7 @@ if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("stu
 }
 
 function hasDemoSession() {
-  return Boolean(localStorage.getItem("studox-token"));
+  return Boolean(firebaseCurrentUser || localStorage.getItem("studox-token"));
 }
 
 function createDemoSession(user = currentUser) {
@@ -69,12 +73,84 @@ function createDemoSession(user = currentUser) {
 }
 
 function clearDemoSession() {
+  window.studoxFirebase?.signOut?.().catch(() => {});
+  firebaseCurrentUser = null;
+  firebaseSessionSyncPromise = null;
   localStorage.removeItem("demoSession");
   localStorage.removeItem("studox-token");
   localStorage.removeItem("studox-user");
   localStorage.removeItem("studox-plan");
+  localStorage.removeItem("studox-auth-provider");
   localStorage.removeItem("studox-return-route");
   currentUser = defaultUser;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function getFirebaseBridge() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (window.studoxFirebase) return window.studoxFirebase;
+    await delay(50);
+  }
+  return window.studoxFirebase || null;
+}
+
+async function getFirebaseIdToken(forceRefresh = false) {
+  const user = firebaseCurrentUser || window.studoxFirebase?.auth?.currentUser;
+  if (!user) return "";
+  return user.getIdToken(forceRefresh);
+}
+
+async function syncStudoxFirebaseSession(user) {
+  if (!user) return null;
+  if (firebaseSessionSyncPromise) return firebaseSessionSyncPromise;
+  firebaseSessionSyncPromise = (async () => {
+    const token = await user.getIdToken();
+    const result = await authRequest("/auth/firebase", null, token);
+    if (!result?.ok || !result.user) throw new Error(result?.message || "Firebase session sync failed.");
+    saveAuthSession(result);
+    return result;
+  })();
+  try {
+    return await firebaseSessionSyncPromise;
+  } finally {
+    firebaseSessionSyncPromise = null;
+  }
+}
+
+async function waitForFirebaseAuth() {
+  if (firebaseAuthReady) return firebaseCurrentUser;
+  if (firebaseAuthReadyPromise) return firebaseAuthReadyPromise;
+
+  firebaseAuthReadyPromise = (async () => {
+    const bridge = await getFirebaseBridge();
+    if (!bridge) {
+      firebaseAuthReady = true;
+      return null;
+    }
+    await window.studoxFirebaseReady?.catch?.(() => null);
+    return new Promise((resolve) => {
+      bridge.onAuthStateChanged(async (user) => {
+        firebaseCurrentUser = user || null;
+        if (user) {
+          try {
+            await syncStudoxFirebaseSession(user);
+          } catch (_error) {
+            firebaseCurrentUser = null;
+          }
+        }
+        firebaseAuthReady = true;
+        resolve(firebaseCurrentUser);
+      }).catch(() => {
+        firebaseAuthReady = true;
+        resolve(null);
+      });
+    });
+  })();
+
+  return firebaseAuthReadyPromise;
 }
 
 const icons = {
@@ -311,14 +387,18 @@ document.addEventListener("click", handleAppComingSoonLinkClick, true);
 
 async function api(path, options = {}) {
   try {
+    const headers = {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    };
+    const firebaseToken = await getFirebaseIdToken();
+    const legacyToken = localStorage.getItem("studox-token");
+    if (firebaseToken) headers.Authorization = `Bearer ${firebaseToken}`;
+    else if (legacyToken) headers.Authorization = `Bearer ${legacyToken}`;
+
     const res = await fetch(`${apiBase}${path}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: localStorage.getItem("studox-token")
-          ? `Bearer ${localStorage.getItem("studox-token")}`
-          : "",
-      },
       ...options,
+      headers,
     });
     return await res.json();
   } catch (error) {
@@ -1686,11 +1766,13 @@ async function handleChat(event) {
 
 async function mentorChatRequest(message) {
   try {
+    const firebaseToken = await getFirebaseIdToken();
+    const legacyToken = localStorage.getItem("studox-token");
     const res = await fetch(`${apiBase}/ai-mentor/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: localStorage.getItem("studox-token") ? `Bearer ${localStorage.getItem("studox-token")}` : "",
+        Authorization: firebaseToken ? `Bearer ${firebaseToken}` : legacyToken ? `Bearer ${legacyToken}` : "",
       },
       body: JSON.stringify({ message }),
     });
@@ -1757,7 +1839,8 @@ function formatMentorMessage(text = "") {
 }
 
 window.addEventListener("hashchange", render);
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+  await waitForFirebaseAuth();
   const route = getRoute();
   if (hasDemoSession()) {
     if (["landing", "login", "signup", "reset"].includes(route)) setRoute("dashboard");
@@ -1797,11 +1880,11 @@ const functionalState = {
 };
 
 api = async function functionalApi(path, options = {}) {
+  const firebaseToken = await getFirebaseIdToken();
+  const legacyToken = localStorage.getItem("studox-token");
   const headers = {
     "Content-Type": "application/json",
-    Authorization: localStorage.getItem("studox-token")
-      ? `Bearer ${localStorage.getItem("studox-token")}`
-      : "",
+    ...(firebaseToken ? { Authorization: `Bearer ${firebaseToken}` } : legacyToken ? { Authorization: `Bearer ${legacyToken}` } : {}),
     ...(options.headers || {}),
   };
   try {
@@ -3164,6 +3247,10 @@ function authResetPage() {
 }
 
 render = async function configuredRender() {
+  if (!firebaseAuthReady) {
+    app.innerHTML = loadingView(getRoute());
+    await waitForFirebaseAuth();
+  }
   const requestedRoute = routeMap[getRoute()] ? getRoute() : "landing";
   if (isAppComingSoonRoute(requestedRoute)) {
     showAppComingSoonModal(requestedRoute);
@@ -3189,13 +3276,23 @@ handleLogin = async function configuredHandleLogin(event) {
   const data = Object.fromEntries(new FormData(form));
   if (!data.email || !data.password) return showAuthFeedback(feedback, "Email and password are required.", true);
   setFormBusy(form, true);
-  const result = await authRequest("/auth/login", data);
-  setFormBusy(form, false);
-  if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
-  saveAuthSession(result);
-  if (await savePendingRoadmapAfterAuth()) return;
-  if (await resumePendingRoadmapGeneration()) return;
-  setRoute("dashboard");
+  try {
+    const firebase = await getFirebaseBridge();
+    if (!firebase) throw new Error("Firebase is not configured.");
+    const credential = await firebase.signInWithEmailAndPassword(data.email, data.password);
+    firebaseCurrentUser = credential.user;
+    const token = await credential.user.getIdToken();
+    const result = await authRequest("/auth/firebase", null, token);
+    if (!result?.ok || !result.user) throw new Error(result?.message || "Login failed.");
+    saveAuthSession(result);
+    if (await savePendingRoadmapAfterAuth()) return;
+    if (await resumePendingRoadmapGeneration()) return;
+    setRoute("dashboard");
+  } catch (error) {
+    return showAuthFeedback(feedback, error.message || "Login failed.", true);
+  } finally {
+    setFormBusy(form, false);
+  }
 };
 
 handleSignup = async function configuredHandleSignup(event) {
@@ -3208,26 +3305,34 @@ handleSignup = async function configuredHandleSignup(event) {
   if (data.password !== data.confirmPassword) return showAuthFeedback(feedback, "Password and confirm password do not match.", true);
   if (!data.terms) return showAuthFeedback(feedback, "Please accept the privacy settings to continue.", true);
   setFormBusy(form, true);
-  const result = await authRequest("/auth/signup", {
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    password: data.password,
-    field: data.field,
-  });
-  setFormBusy(form, false);
-  if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
-  saveAuthSession(result);
-  if (await savePendingRoadmapAfterAuth()) return;
-  setRoute("dashboard");
+  try {
+    const firebase = await getFirebaseBridge();
+    if (!firebase) throw new Error("Firebase is not configured.");
+    const credential = await firebase.createUserWithEmailAndPassword(data.email, data.password);
+    await firebase.updateProfile(credential.user, { displayName: data.name });
+    firebaseCurrentUser = credential.user;
+    const token = await credential.user.getIdToken(true);
+    const result = await authRequest("/auth/firebase", null, token);
+    if (!result?.ok || !result.user) throw new Error(result?.message || "Signup failed.");
+    saveAuthSession(result);
+    if (await savePendingRoadmapAfterAuth()) return;
+    setRoute("dashboard");
+  } catch (error) {
+    return showAuthFeedback(feedback, error.message || "Signup failed.", true);
+  } finally {
+    setFormBusy(form, false);
+  }
 };
 
-async function authRequest(path, payload) {
+async function authRequest(path, payload, bearerToken = "") {
   try {
     const res = await fetch(`${apiBase}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        "Content-Type": "application/json",
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
@@ -3239,7 +3344,9 @@ async function authRequest(path, payload) {
 
 function saveAuthSession(result, goal) {
   localStorage.removeItem("demoSession");
-  localStorage.setItem("studox-token", result.token);
+  if (result.token) localStorage.setItem("studox-token", result.token);
+  else localStorage.removeItem("studox-token");
+  localStorage.setItem("studox-auth-provider", result.token ? "jwt" : "firebase");
   const user = result.user || {};
   currentUser = {
     ...currentUser,

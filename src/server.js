@@ -129,7 +129,49 @@ function publicUser(user) {
   return safe;
 }
 
-function authOptional(req, _res, next) {
+async function resolveFirebaseAuthUser(token) {
+  let firebase;
+  try {
+    firebase = require("./config/firebaseAdmin");
+  } catch (_error) {
+    return null;
+  }
+
+  const firebaseApp = firebase.initializeFirebaseAdmin();
+  if (!firebaseApp) return null;
+
+  const decoded = await firebase.admin.auth().verifyIdToken(token);
+  const firebaseUid = decoded.uid;
+  const email = normalizeEmail(decoded.email);
+  if (!firebaseUid) return null;
+
+  let user = null;
+  if (mongoReady()) {
+    user = await User.findOne({ firebaseUid });
+    if (!user && email) {
+      user = await User.findOneAndUpdate({ email }, { $set: { firebaseUid } }, { new: true });
+    }
+  } else {
+    user = memory.users.find((item) => item.firebaseUid === firebaseUid);
+    if (!user && email) {
+      user = memory.users.find((item) => item.email === email);
+      if (user) {
+        user.firebaseUid = firebaseUid;
+        persistMemory();
+      }
+    }
+  }
+
+  if (!user) return null;
+  return {
+    id: String(user._id || user.id),
+    email: user.email,
+    role: user.role || "student",
+    firebaseUid,
+  };
+}
+
+async function authOptional(req, _res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) {
@@ -139,12 +181,16 @@ function authOptional(req, _res, next) {
   try {
     req.user = jwt.verify(token, jwtSecret);
   } catch (_error) {
-    req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
+    try {
+      req.user = (await resolveFirebaseAuthUser(token)) || { id: "user_demo", email: "aarav@studox.ai", role: "student" };
+    } catch (_firebaseError) {
+      req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
+    }
   }
   next();
 }
 
-function authRequired(req, res, next) {
+async function authRequired(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return res.status(401).json({ message: "Please login to continue." });
@@ -152,6 +198,15 @@ function authRequired(req, res, next) {
     req.user = jwt.verify(token, jwtSecret);
     return next();
   } catch (_error) {
+    try {
+      const firebaseUser = await resolveFirebaseAuthUser(token);
+      if (firebaseUser) {
+        req.user = firebaseUser;
+        return next();
+      }
+    } catch (_firebaseError) {
+      // Fall through to the existing expired-session response.
+    }
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 }
