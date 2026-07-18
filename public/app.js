@@ -978,7 +978,6 @@ function signupForm() {
     <div class="field"><label>Full name</label><input name="name" value="Aarav Sharma" required /></div>
     <div class="field"><label>Email</label><input name="email" type="email" value="aarav@studox.ai" required /></div>
     <div class="field"><label>Phone</label><input name="phone" value="+91 98765 43210" required /></div>
-    <div class="field"><label>Field</label><select name="field"><option>Computer Science</option><option>Information Technology</option><option>Electronics</option><option>Business Analytics</option></select></div>
     <button class="btn primary glow" type="submit">Next Step</button>
   </form>
   <div class="secure-note">${icon("lock")} Your data is encrypted and used only to personalize your Studox.ai journey.</div>`;
@@ -3198,7 +3197,6 @@ signupForm = function configuredSignupForm() {
       <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></div>
       <div class="field"><label>Phone</label><input name="phone" autocomplete="tel" placeholder="+91 98765 43210" required /></div>
     </div>
-    <div class="field"><label>Field</label><input name="field" list="fieldOptions" placeholder="Example: Computer Science" required /><datalist id="fieldOptions"><option value="Computer Science"></option><option value="Information Technology"></option><option value="Electronics"></option><option value="Business Analytics"></option><option value="Design"></option><option value="Commerce"></option></datalist></div>
     <div class="two-column">
       <div class="field password-field"><label>Password</label><input name="password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
       <div class="field password-field"><label>Confirm password</label><input name="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat password" required minlength="8" /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
