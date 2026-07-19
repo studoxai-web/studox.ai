@@ -211,6 +211,13 @@ async function authRequired(req, res, next) {
   }
 }
 
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ message: "Admin access is internal only." });
+  }
+  next();
+}
+
 function findMemoryUser(emailOrPhone) {
   return memory.users.find((user) => user.email === emailOrPhone || user.phone === emailOrPhone);
 }
@@ -2155,7 +2162,10 @@ app.patch("/api/notifications/:id/read", authOptional, async (req, res) => {
   res.json(await updateResource("notifications", req.params.id, { read: true }));
 });
 
-app.get("/api/admin/summary", authOptional, async (_req, res) => {
+app.get("/api/admin/summary", authRequired, requireAdmin, async (_req, res) => {
+  const activeAdmins = mongoReady()
+    ? await User.countDocuments({ role: "admin" })
+    : (memory.users || []).filter((user) => user.role === "admin").length;
   res.json({
     users: (await listResource("users")).length,
     courses: (await listResource("courses")).length,
@@ -2164,29 +2174,31 @@ app.get("/api/admin/summary", authOptional, async (_req, res) => {
     internships: (await listResource("internships")).length,
     hackathons: (await listResource("hackathons")).length,
     certificates: (await listResource("certificates")).length,
+    notifications: (await listResource("notifications")).length,
+    admins: activeAdmins,
     reports: memory.reports.length,
   });
 });
 
-app.get("/api/admin/:resource", authOptional, async (req, res) => {
+app.get("/api/admin/:resource", authRequired, requireAdmin, async (req, res) => {
   const data = await listResource(req.params.resource);
   if (!data) return res.status(404).json({ message: "Unknown admin resource." });
   res.json(data);
 });
 
-app.post("/api/admin/:resource", authOptional, async (req, res) => {
+app.post("/api/admin/:resource", authRequired, requireAdmin, async (req, res) => {
   const item = await createResource(req.params.resource, req.body);
   if (!item) return res.status(404).json({ message: "Unknown admin resource." });
   res.status(201).json(item);
 });
 
-app.put("/api/admin/:resource/:id", authOptional, async (req, res) => {
+app.put("/api/admin/:resource/:id", authRequired, requireAdmin, async (req, res) => {
   const item = await updateResource(req.params.resource, req.params.id, req.body);
   if (!item) return res.status(404).json({ message: "Resource item not found." });
   res.json(item);
 });
 
-app.delete("/api/admin/:resource/:id", authOptional, async (req, res) => {
+app.delete("/api/admin/:resource/:id", authRequired, requireAdmin, async (req, res) => {
   const item = await deleteResource(req.params.resource, req.params.id);
   if (!item) return res.status(404).json({ message: "Resource item not found." });
   res.json({ message: "Deleted.", item });

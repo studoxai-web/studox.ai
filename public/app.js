@@ -48,6 +48,10 @@ const defaultUser = {
 
 let currentUser = JSON.parse(localStorage.getItem("studox-user") || "null") || defaultUser;
 let adminResource = "users";
+let adminSearchTerm = "";
+let adminStatusFilter = "all";
+let adminPageIndex = 1;
+let adminSearchTimer = null;
 let pendingRoadmapGeneration = false;
 let pendingRoadmapSelection = false;
 let assessmentStep = 0;
@@ -202,9 +206,13 @@ const sideLinks = [
   ["settings", "Settings", "settings"],
   ["admin", "Admin Panel", "admin"],
 ];
-const webAvailableFeatureRoutes = new Set(["dashboard", "roadmap", "courses", "mentor", "profile", "settings"]);
+const webAvailableFeatureRoutes = new Set(["dashboard", "roadmap", "courses", "mentor", "profile", "settings", "admin"]);
 const appComingSoonRoutes = new Set(sideLinks.map(([key]) => key).filter((key) => !webAvailableFeatureRoutes.has(key)));
 const appComingSoonLabels = Object.fromEntries(sideLinks.map(([key, label]) => [key, label]));
+
+function isAdminUser() {
+  return currentUser?.role === "admin";
+}
 
 function isAppComingSoonRoute(route) {
   return appComingSoonRoutes.has(String(route || "").replace("#", ""));
@@ -1318,6 +1326,7 @@ function appLayout(content, route) {
         ${brand()}
         <nav class="side-nav">
           ${sideLinks
+            .filter(([key]) => key !== "admin" || isAdminUser())
             .map(([key, label, iconName]) => {
               const locked = isAppComingSoonRoute(key);
               return `<a class="side-link ${route === key ? "active" : ""} ${locked ? "locked" : ""}" href="#${key}" data-route="${key}" ${locked ? "data-app-locked=\"true\"" : ""}>${icon(iconName)}<span>${label}</span>${locked ? "<small>App</small>" : ""}</a>`;
@@ -2203,6 +2212,8 @@ const functionalState = {
   settings: null,
   adminSummary: null,
   adminRows: [],
+  adminActivity: {},
+  adminHealth: null,
 };
 
 api = async function functionalApi(path, options = {}) {
@@ -2371,7 +2382,22 @@ async function loadFunctionalData(route) {
     admin: async () => {
       functionalState.adminSummary = await api("/admin/summary");
       const resource = normalizeAdminResource(adminResource);
-      functionalState.adminRows = await api(`/admin/${resource}`) || [];
+      const [rows, users, courses, roadmaps, notifications, health] = await Promise.all([
+        api(`/admin/${resource}`),
+        api("/admin/users"),
+        api("/admin/courses"),
+        api("/admin/roadmaps"),
+        api("/admin/notifications"),
+        api("/health"),
+      ]);
+      functionalState.adminRows = rows || [];
+      functionalState.adminActivity = {
+        users: users || [],
+        courses: courses || [],
+        roadmaps: roadmaps || [],
+        notifications: notifications || [],
+      };
+      functionalState.adminHealth = health || null;
     },
   };
   if (loaders[route]) await loaders[route]();
@@ -2599,15 +2625,239 @@ routeMap.settings = function functionalSettingsPage() {
 
 routeMap.admin = function functionalAdminPage() {
   const summary = functionalState.adminSummary || {};
-  const resources = ["users", "courses", "roadmaps", "tests", "internships", "hackathons", "certificates", "mentor-prompts", "reports", "content"];
-  return appLayout(`<div class="page-head"><div><h1>Premium Admin Dashboard</h1><p>Admin rows ab API se aate hain. Add/Delete actions server state change karte hain.</p></div></div>${statCards([
-    ["Users", summary.users || 0, "", "user", "Live"],
-    ["Courses", summary.courses || 0, "", "book", "Live"],
-    ["Tests", summary.tests || 0, "", "test", "Live"],
-    ["Internships", summary.internships || 0, "", "briefcase", "Live"],
-    ["Reports", summary.reports || 0, "", "chart", "Live"],
-  ])}<div class="admin-layout"><aside class="panel"><h2>Manage</h2><div class="admin-nav" style="margin-top:14px">${resources.map((item) => `<button class="btn ${normalizeAdminResource(adminResource) === item ? "active" : ""}" data-admin="${item}">${item}</button>`).join("")}</div><form class="form-grid" data-form="admin-add" style="margin-top:16px"><h3>Add Item</h3><div class="field"><label>Title / name</label><input name="title" placeholder="New item" required /></div><button class="btn primary" type="submit">Add</button></form></aside><div class="panel"><div class="panel-head"><h2>${normalizeAdminResource(adminResource)}</h2></div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Owner</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${functionalState.adminRows.map((item) => `<tr><td>${item.title || item.name || item.role || item.company || item.email || "Untitled"}</td><td><span class="chip green">${item.status || item.role || "Live"}</span></td><td>${item.owner || item.instructor || "Studox Admin"}</td><td>${cleanDate(item.updatedAt || item.createdAt)}</td><td><button class="btn" data-action="admin-delete" data-admin-id="${dataId(item)}">Delete</button></td></tr>`).join("")}</tbody></table></div></div></div>`, "admin");
+  const resources = [
+    ["users", "Users"],
+    ["courses", "Courses"],
+    ["roadmaps", "Roadmaps"],
+    ["tests", "Tests"],
+    ["internships", "Internships"],
+    ["notifications", "Announcements"],
+    ["hackathons", "Hackathons"],
+    ["certificates", "Certificates"],
+    ["mentor-prompts", "Mentor Prompts"],
+    ["reports", "Reports"],
+    ["content", "Content"],
+  ];
+  const activeResource = normalizeAdminResource(adminResource);
+  const resourceIcons = {
+    users: "user",
+    courses: "book",
+    roadmaps: "map",
+    tests: "test",
+    internships: "briefcase",
+    notifications: "bell",
+    hackathons: "trophy",
+    certificates: "star",
+    "mentor-prompts": "bot",
+    reports: "chart",
+    content: "resume",
+  };
+  const activeLabel = resources.find(([key]) => key === activeResource)?.[1] || activeResource.replace(/-/g, " ");
+  const normalizedSearch = adminSearchTerm.trim().toLowerCase();
+  const filteredRows = functionalState.adminRows.filter((item) => {
+    const haystack = [item.title, item.name, item.email, item.role, item.company, item.status, item.category, item.level, item.type]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const status = String(item.status || item.role || "Live").toLowerCase();
+    const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
+    const matchesStatus = adminStatusFilter === "all" || status === adminStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const rowsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  if (adminPageIndex > totalPages) adminPageIndex = totalPages;
+  const pageRows = filteredRows.slice((adminPageIndex - 1) * rowsPerPage, adminPageIndex * rowsPerPage);
+  const activity = functionalState.adminActivity || {};
+  const activityGroups = [
+    ["Latest Users", activity.users || [], "user"],
+    ["Latest Courses", activity.courses || [], "book"],
+    ["Latest Roadmaps", activity.roadmaps || [], "map"],
+    ["Latest Announcements", activity.notifications || [], "bell"],
+  ];
+  const health = functionalState.adminHealth || {};
+  const overviewCards = [
+    ["Total Students", summary.users || 0, "user", "Real user records"],
+    ["Courses", summary.courses || 0, "book", "Published content"],
+    ["Roadmaps", summary.roadmaps || 0, "map", "Saved plans"],
+    ["Tests", summary.tests || 0, "test", "Assessments"],
+    ["Announcements", summary.notifications || 0, "bell", "Notification records"],
+    ["Active Admins", summary.admins || 0, "admin", summary.admins ? "Role-based count" : "No admins counted"],
+  ];
+  return appLayout(`<section class="admin-console">
+    <div class="admin-topline">
+      <div>
+        <span class="admin-kicker">${icon("admin")} Internal Admin</span>
+        <h1>Operations</h1>
+      </div>
+      <div class="admin-top-actions">
+        <a class="btn" href="#landing">Visit Website ${icon("arrow-right")}</a>
+        <a class="btn" href="#settings">${icon("settings")} Settings</a>
+      </div>
+    </div>
+
+    <div class="admin-stat-grid">
+      ${overviewCards.map(([label, value, iconName, note], index) => `<article class="admin-stat-card panel">
+        <span class="admin-stat-icon tone-${index + 1}">${icon(iconName)}</span>
+        <div><strong>${value}</strong><span>${label}</span></div>
+        <small>${note}</small>
+      </article>`).join("")}
+    </div>
+
+    <div class="admin-action-strip panel">
+      <span>Quick Actions</span>
+      ${[
+        ["courses", "Add Course", "book"],
+        ["roadmaps", "Add Roadmap", "map"],
+        ["tests", "Add Test", "test"],
+        ["notifications", "Create Announcement", "bell"],
+      ].map(([key, label, iconName]) => `<button class="admin-action-chip" data-admin="${key}">${icon(iconName)}${label}</button>`).join("")}
+    </div>
+
+    <div class="admin-layout admin-console-grid">
+      <aside class="panel admin-control-panel">
+        <div class="panel-head"><div><h2>Resources</h2><p class="muted">CRUD manager</p></div></div>
+        <div class="admin-nav">${resources.map(([item, label]) => `<button class="btn ${activeResource === item ? "active" : ""}" data-admin="${item}"><span>${icon(resourceIcons[item] || "admin")}</span>${label}</button>`).join("")}</div>
+        <form class="form-grid admin-add-card" data-form="admin-add">
+          <h3>${activeResource === "notifications" ? "Create Announcement" : "Quick Add"}</h3>
+          <p class="muted">${activeResource === "notifications" ? "Create draft or published announcements using generic admin CRUD." : `Creates a new ${activeLabel.toLowerCase()} item with the existing API.`}</p>
+          <div class="field"><label>Title / name</label><input name="title" placeholder="New item" required /></div>
+          ${activeResource === "notifications" ? `<div class="field"><label>Status</label><select name="status"><option>Draft</option><option>Published</option></select></div>` : ""}
+          <button class="btn primary" type="submit">${icon("plus")} ${activeResource === "notifications" ? "Create Announcement" : "Add Item"}</button>
+        </form>
+      </aside>
+
+      <section class="panel admin-table-panel">
+        <div class="panel-head">
+          <div><h2>Resource Manager</h2><p class="muted" data-admin-table-count>${activeLabel}: ${filteredRows.length}/${functionalState.adminRows.length} records loaded from backend.</p></div>
+          <div class="admin-table-meta" data-admin-table-meta><span class="chip green">Live data</span><span class="chip">Page ${adminPageIndex}/${totalPages}</span></div>
+        </div>
+        <div class="admin-toolbar">
+          <label class="admin-search">${icon("search")}<input data-admin-search value="${adminSearchTerm}" placeholder="Search ${activeLabel.toLowerCase()}..." /></label>
+          <select data-admin-filter>
+            ${["all", "live", "active", "draft", "published", "review", "admin", "student"].map((item) => `<option value="${item}" ${adminStatusFilter === item ? "selected" : ""}>${item === "all" ? "All status" : item}</option>`).join("")}
+          </select>
+        </div>
+        <div class="table-wrap admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Name</th><th>Status</th><th>Owner</th><th>Updated</th><th>Actions</th></tr></thead>
+            <tbody data-admin-table-body>${pageRows.length ? pageRows.map((item) => `<tr>
+              <td><strong>${item.title || item.name || item.role || item.company || item.email || "Untitled"}</strong><small>${item.email || item.category || item.level || item.type || "Studox resource"}</small></td>
+              <td><span class="chip ${String(item.status || item.role || "Live").toLowerCase().includes("admin") ? "purple" : "green"}">${item.status || item.role || "Live"}</span></td>
+              <td>${item.owner || item.instructor || item.company || "Studox Admin"}</td>
+              <td>${cleanDate(item.updatedAt || item.createdAt)}</td>
+              <td><div class="admin-row-actions"><button class="btn" data-action="admin-edit" data-admin-id="${dataId(item)}">Edit</button><button class="btn danger-light" data-action="admin-delete" data-admin-id="${dataId(item)}">Delete</button></div></td>
+            </tr>`).join("") : `<tr><td colspan="5">${emptyState("No records found", normalizedSearch || adminStatusFilter !== "all" ? "Try clearing search or filters." : "Use Quick Add to create the first item for this resource.")}</td></tr>`}</tbody>
+          </table>
+        </div>
+        <div class="admin-pagination" data-admin-pagination>
+          <button class="btn" data-action="admin-page" data-page="${Math.max(1, adminPageIndex - 1)}" ${adminPageIndex <= 1 ? "disabled" : ""}>Previous</button>
+          <span>Page ${adminPageIndex} of ${totalPages}</span>
+          <button class="btn" data-action="admin-page" data-page="${Math.min(totalPages, adminPageIndex + 1)}" ${adminPageIndex >= totalPages ? "disabled" : ""}>Next</button>
+        </div>
+      </section>
+
+      <aside class="admin-side-stack">
+        <section class="panel admin-activity-card">
+          <div class="panel-head"><h2>Recent Platform Activity</h2><span class="chip">Real records</span></div>
+          <div class="admin-activity-list">${activityGroups.map(([label, rows, iconName]) => {
+            const latest = rows[0];
+            return `<div><span>${icon(iconName)}</span><p><strong>${label}</strong><small>${latest ? `${latest.title || latest.name || latest.email || "Latest item"} - ${cleanDate(latest.createdAt || latest.updatedAt)}` : "No records yet"}</small></p></div>`;
+          }).join("")}</div>
+        </section>
+        <section class="panel admin-health-card">
+          <div class="panel-head"><h2>Basic Platform Status</h2><span class="chip amber">Honest</span></div>
+          ${[
+            ["Authentication", "Admin route requires backend role guard", "Verified"],
+            ["Database", health.database ? `Current mode: ${health.database}` : "Health endpoint unavailable", health.database ? "Verified" : "Pending"],
+            ["API Status", health.ok ? "Health endpoint responded" : "Backend integration pending", health.ok ? "Verified" : "Pending"],
+          ].map(([title, body, status]) => `<div class="admin-health-row"><span class="${status === "Pending" ? "pending" : ""}"></span><strong>${title}<small>${body}</small></strong><em>${status}</em></div>`).join("")}
+        </section>
+        <section class="panel admin-security-card">
+          <h2>${icon("lock")} Security</h2>
+          <p>Admin APIs require login and backend role verification.</p>
+          <code>req.user.role === "admin"</code>
+        </section>
+      </aside>
+    </div>
+  </section>`, "admin");
 };
+
+function getAdminTableState() {
+  const resources = [
+    ["users", "Users"],
+    ["courses", "Courses"],
+    ["roadmaps", "Roadmaps"],
+    ["tests", "Tests"],
+    ["internships", "Internships"],
+    ["notifications", "Announcements"],
+    ["hackathons", "Hackathons"],
+    ["certificates", "Certificates"],
+    ["mentor-prompts", "Mentor Prompts"],
+    ["reports", "Reports"],
+    ["content", "Content"],
+  ];
+  const activeResource = normalizeAdminResource(adminResource);
+  const activeLabel = resources.find(([key]) => key === activeResource)?.[1] || activeResource.replace(/-/g, " ");
+  const normalizedSearch = adminSearchTerm.trim().toLowerCase();
+  const filteredRows = functionalState.adminRows.filter((item) => {
+    const haystack = [item.title, item.name, item.email, item.role, item.company, item.status, item.category, item.level, item.type]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const status = String(item.status || item.role || "Live").toLowerCase();
+    const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
+    const matchesStatus = adminStatusFilter === "all" || status === adminStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const rowsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  if (adminPageIndex > totalPages) adminPageIndex = totalPages;
+  const pageRows = filteredRows.slice((adminPageIndex - 1) * rowsPerPage, adminPageIndex * rowsPerPage);
+  return { activeLabel, normalizedSearch, filteredRows, totalPages, pageRows };
+}
+
+function adminTableRowsHtml(pageRows, normalizedSearch) {
+  if (!pageRows.length) {
+    return `<tr><td colspan="5">${emptyState("No records found", normalizedSearch || adminStatusFilter !== "all" ? "Try clearing search or filters." : "Use Quick Add to create the first item for this resource.")}</td></tr>`;
+  }
+  return pageRows.map((item) => `<tr>
+    <td><strong>${item.title || item.name || item.role || item.company || item.email || "Untitled"}</strong><small>${item.email || item.category || item.level || item.type || "Studox resource"}</small></td>
+    <td><span class="chip ${String(item.status || item.role || "Live").toLowerCase().includes("admin") ? "purple" : "green"}">${item.status || item.role || "Live"}</span></td>
+    <td>${item.owner || item.instructor || item.company || "Studox Admin"}</td>
+    <td>${cleanDate(item.updatedAt || item.createdAt)}</td>
+    <td><div class="admin-row-actions"><button class="btn" data-action="admin-edit" data-admin-id="${dataId(item)}">Edit</button><button class="btn danger-light" data-action="admin-delete" data-admin-id="${dataId(item)}">Delete</button></div></td>
+  </tr>`).join("");
+}
+
+function adminPaginationHtml(totalPages) {
+  return `<button class="btn" data-action="admin-page" data-page="${Math.max(1, adminPageIndex - 1)}" ${adminPageIndex <= 1 ? "disabled" : ""}>Previous</button>
+    <span>Page ${adminPageIndex} of ${totalPages}</span>
+    <button class="btn" data-action="admin-page" data-page="${Math.min(totalPages, adminPageIndex + 1)}" ${adminPageIndex >= totalPages ? "disabled" : ""}>Next</button>`;
+}
+
+function refreshAdminTable() {
+  const tableBody = document.querySelector("[data-admin-table-body]");
+  const tableCount = document.querySelector("[data-admin-table-count]");
+  const tableMeta = document.querySelector("[data-admin-table-meta]");
+  const pagination = document.querySelector("[data-admin-pagination]");
+  if (!tableBody || !tableCount || !tableMeta || !pagination) return;
+  const { activeLabel, normalizedSearch, filteredRows, totalPages, pageRows } = getAdminTableState();
+  tableCount.textContent = `${activeLabel}: ${filteredRows.length}/${functionalState.adminRows.length} records loaded from backend.`;
+  tableMeta.innerHTML = `<span class="chip green">Live data</span><span class="chip">Page ${adminPageIndex}/${totalPages}</span>`;
+  tableBody.innerHTML = adminTableRowsHtml(pageRows, normalizedSearch);
+  pagination.innerHTML = adminPaginationHtml(totalPages);
+  bindAdminTableActions();
+}
+
+function bindAdminTableActions() {
+  document.querySelectorAll("[data-action='admin-page']").forEach((button) => button.addEventListener("click", () => {
+    adminPageIndex = Math.max(1, Number(button.dataset.page || 1));
+    refreshAdminTable();
+  }));
+  document.querySelectorAll("[data-action='admin-delete']").forEach((button) => button.addEventListener("click", handleAdminDelete));
+  document.querySelectorAll("[data-action='admin-edit']").forEach((button) => button.addEventListener("click", handleAdminEdit));
+}
 
 bindPage = function functionalBindPage() {
   document.querySelectorAll("[data-toast]").forEach((node) => {
@@ -2669,6 +2919,9 @@ bindPage = function functionalBindPage() {
   document.querySelectorAll("[data-admin]").forEach((button) => {
     button.addEventListener("click", () => {
       adminResource = normalizeAdminResource(button.dataset.admin);
+      adminSearchTerm = "";
+      adminStatusFilter = "all";
+      adminPageIndex = 1;
       render();
     });
   });
@@ -2727,6 +2980,17 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-form='profile-save']").forEach((form) => form.addEventListener("submit", handleProfileSave));
   document.querySelectorAll("[data-form='settings-save']").forEach((form) => form.addEventListener("submit", handleSettingsSave));
   document.querySelectorAll("[data-form='admin-add']").forEach((form) => form.addEventListener("submit", handleAdminAdd));
+  document.querySelectorAll("[data-admin-search]").forEach((input) => input.addEventListener("input", () => {
+    adminSearchTerm = input.value;
+    adminPageIndex = 1;
+    window.clearTimeout(adminSearchTimer);
+    adminSearchTimer = window.setTimeout(refreshAdminTable, 280);
+  }));
+  document.querySelectorAll("[data-admin-filter]").forEach((select) => select.addEventListener("change", () => {
+    adminStatusFilter = select.value || "all";
+    adminPageIndex = 1;
+    refreshAdminTable();
+  }));
   document.querySelectorAll("[data-form='roadmap-assessment']").forEach((form) => form.addEventListener("submit", handleRoadmapAssessmentSubmit));
   document.querySelectorAll("[data-action='assessment-next']").forEach((button) => button.addEventListener("click", handleAssessmentNext));
   document.querySelectorAll("[data-action='assessment-prev']").forEach((button) => button.addEventListener("click", handleAssessmentPrev));
@@ -2735,7 +2999,7 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='preview-roadmap']").forEach((card) => card.addEventListener("click", handleRoadmapPreview));
   document.querySelectorAll("[data-action='choose-roadmap']").forEach((button) => button.addEventListener("click", handleChooseRoadmap));
   document.querySelectorAll("[data-action='choose-roadmap-signup']").forEach((button) => button.addEventListener("click", handleChooseRoadmapSignup));
-  document.querySelectorAll("[data-action='admin-delete']").forEach((button) => button.addEventListener("click", handleAdminDelete));
+  bindAdminTableActions();
 }
 
 function assessmentTimelineWeeks(value = "") {
@@ -3246,17 +3510,43 @@ async function handleAdminAdd(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
   const resource = normalizeAdminResource(adminResource);
+  const status = data.status || (resource === "notifications" ? "Draft" : "Live");
   await api(`/admin/${resource}`, {
     method: "POST",
     body: JSON.stringify({
       title: data.title,
       name: data.title,
-      status: "Live",
+      status,
       owner: "Studox Admin",
-      description: "Created from admin panel",
+      description: resource === "notifications" ? "Announcement created from admin panel" : "Created from admin panel",
+      type: resource === "notifications" ? "announcement" : resource,
+      read: false,
     }),
   });
-  toast("Admin item added.");
+  toast(resource === "notifications" ? "Announcement saved." : "Admin item added.");
+  await render();
+}
+
+async function handleAdminEdit(event) {
+  const id = event.currentTarget.dataset.adminId;
+  if (!id) {
+    toast("This row cannot be edited because it has no saved id.");
+    return;
+  }
+  const row = functionalState.adminRows.find((item) => String(dataId(item)) === String(id));
+  const currentTitle = row?.title || row?.name || row?.email || "";
+  const nextTitle = window.prompt("Update title / name", currentTitle);
+  if (!nextTitle || nextTitle.trim() === currentTitle) return;
+  const resource = normalizeAdminResource(adminResource);
+  await api(`/admin/${resource}/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      title: nextTitle.trim(),
+      name: nextTitle.trim(),
+      updatedAt: new Date().toISOString(),
+    }),
+  });
+  toast("Admin item updated.");
   await render();
 }
 
@@ -3266,6 +3556,7 @@ async function handleAdminDelete(event) {
     toast("This row cannot be deleted because it has no saved id.");
     return;
   }
+  if (!window.confirm("Delete this admin item? This uses the existing admin CRUD delete action.")) return;
   await api(`/admin/${normalizeAdminResource(adminResource)}/${id}`, { method: "DELETE" });
   toast("Admin item deleted.");
   await render();
@@ -3638,6 +3929,11 @@ render = async function configuredRender() {
     setRoute("landing");
     return;
   }
+  if (route === "admin" && !isAdminUser()) {
+    toast("Admin access is internal only.");
+    setRoute("dashboard");
+    return;
+  }
   app.innerHTML = loadingView(route);
   await loadFunctionalData(route);
   app.innerHTML = routeMap[route]();
@@ -3731,6 +4027,7 @@ function saveAuthSession(result, goal) {
     email: user.email || currentUser.email,
     goal: goal || currentUser.goal,
     plan: user.plan || currentUser.plan || "free",
+    role: user.role || currentUser.role || "student",
     avatar: (user.name || currentUser.name)
       .split(" ")
       .map((word) => word[0])
