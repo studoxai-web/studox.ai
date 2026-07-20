@@ -228,6 +228,27 @@ The important user id field is:
 req.user.id
 ```
 
+### Admin Access
+
+The Admin Panel is internal-only. Firebase owns identity, but Studox owns authorization through the backend `User.role` field.
+
+Admin access requires:
+
+```js
+req.user.role === "admin"
+```
+
+Frontend behavior:
+
+- normal users do not see the Admin Panel sidebar link
+- direct `/#admin` access redirects non-admin users to dashboard
+
+Backend behavior:
+
+- admin APIs require `authRequired`
+- admin APIs require `requireAdmin`
+- frontend role checks are only for UX; backend role checks are the real access control
+
 ## 5. Backend Architecture
 
 The backend entry point is:
@@ -749,6 +770,10 @@ GET/POST /api/ai-mentor/chat
 GET      /api/notifications
 GET/POST/PUT/DELETE /api/admin/:resource
 ```
+
+Admin API routes are internal-only and require `User.role === "admin"`.
+
+`GET /api/admin/summary` returns counts for users, courses, roadmaps, tests, internships, hackathons, certificates, notifications, active backend-role admins, and reports. The active admin count comes from Studox `User.role === "admin"`, not Firebase custom claims.
 
 ## 12. Generic CRUD System
 
