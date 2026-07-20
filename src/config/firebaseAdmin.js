@@ -34,5 +34,7 @@ function initializeFirebaseAdmin() {
 module.exports = {
   admin,
   initializeFirebaseAdmin,
-  firebaseAdminApp: initializeFirebaseAdmin(),
+  get firebaseAdminApp() {
+    return firebaseAdminApp;
+  },
 };

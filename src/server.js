@@ -1278,7 +1278,12 @@ app.post("/api/auth/firebase", async (req, res) => {
       return res.status(503).json({ message: "Firebase Admin SDK is not installed.", error: error.message });
     }
 
-    const firebaseApp = firebase.initializeFirebaseAdmin();
+    let firebaseApp;
+    try {
+      firebaseApp = firebase.initializeFirebaseAdmin();
+    } catch (error) {
+      return res.status(503).json({ message: "Firebase Admin credentials are invalid. Check FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL and FIREBASE_PROJECT_ID in .env.", error: error.message });
+    }
     if (!firebaseApp) return res.status(503).json({ message: "Firebase Admin credentials are not configured." });
 
     const decoded = await firebase.admin.auth().verifyIdToken(token);

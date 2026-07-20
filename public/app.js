@@ -3654,13 +3654,22 @@ handleLogin = async function configuredHandleLogin(event) {
   if (!data.email || !data.password) return showAuthFeedback(feedback, "Email and password are required.", true);
   setFormBusy(form, true);
   try {
+    let result = null;
     const firebase = await getFirebaseBridge();
-    if (!firebase) throw new Error("Firebase is not configured.");
-    const credential = await firebase.signInWithEmailAndPassword(data.email, data.password);
-    firebaseCurrentUser = credential.user;
-    const token = await credential.user.getIdToken();
-    const result = await authRequest("/auth/firebase", null, token);
-    if (!result?.ok || !result.user) throw new Error(result?.message || "Login failed.");
+    if (firebase) {
+      try {
+        const credential = await firebase.signInWithEmailAndPassword(data.email, data.password);
+        firebaseCurrentUser = credential.user;
+        const token = await credential.user.getIdToken();
+        result = await authRequest("/auth/firebase", null, token);
+      } catch (error) {
+        console.warn("Firebase login skipped, falling back to Studox JWT auth.", error.message);
+      }
+    }
+    if (!result?.ok || !result.token) {
+      result = await authRequest("/auth/login", { email: data.email, password: data.password });
+    }
+    if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
     saveAuthSession(result);
     if (await savePendingRoadmapAfterAuth()) return;
     if (await resumePendingRoadmapGeneration()) return;
@@ -3683,15 +3692,31 @@ handleSignup = async function configuredHandleSignup(event) {
   if (!data.terms) return showAuthFeedback(feedback, "Please accept the privacy settings to continue.", true);
   setFormBusy(form, true);
   try {
+    let result = null;
     const firebase = await getFirebaseBridge();
-    if (!firebase) throw new Error("Firebase is not configured.");
-    const credential = await firebase.createUserWithEmailAndPassword(data.email, data.password);
-    await firebase.updateProfile(credential.user, { displayName: data.name });
-    firebaseCurrentUser = credential.user;
-    const token = await credential.user.getIdToken(true);
-    const result = await authRequest("/auth/firebase", null, token);
-    if (!result?.ok || !result.user) throw new Error(result?.message || "Signup failed.");
+    if (firebase) {
+      try {
+        const credential = await firebase.createUserWithEmailAndPassword(data.email, data.password);
+        await firebase.updateProfile(credential.user, { displayName: data.name });
+        firebaseCurrentUser = credential.user;
+        const token = await credential.user.getIdToken(true);
+        result = await authRequest("/auth/firebase", null, token);
+      } catch (error) {
+        console.warn("Firebase signup skipped, falling back to Studox JWT auth.", error.message);
+      }
+    }
+    if (!result?.ok || !result.token) {
+      result = await authRequest("/auth/signup", {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        password: data.password
+      });
+    }
+    if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
     saveAuthSession(result);
+    localStorage.setItem("studox-jarvis-welcome-pending", "true");
+    localStorage.removeItem("studox-jarvis-welcome-seen");
     if (await savePendingRoadmapAfterAuth()) return;
     setRoute("dashboard");
   } catch (error) {
