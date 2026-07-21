@@ -3,6 +3,8 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -53,6 +55,14 @@ window.studoxFirebase = {
     return signInWithEmailAndPassword(auth, email, password);
   },
   updateProfile,
+  async sendEmailVerification(user) {
+    return sendEmailVerification(user);
+  },
+  async sendPasswordResetEmail(email) {
+    const auth = await initializeStudoxFirebase();
+    if (!auth) throw new Error("Firebase is not configured.");
+    return sendPasswordResetEmail(auth, email);
+  },
   async signOut() {
     const auth = await initializeStudoxFirebase();
     if (auth) await signOut(auth);

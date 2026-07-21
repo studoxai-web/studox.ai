@@ -141,34 +141,205 @@ async function resolveFirebaseAuthUser(token) {
   if (!firebaseApp) return null;
 
   const decoded = await firebase.admin.auth().verifyIdToken(token);
-  const firebaseUid = decoded.uid;
-  const email = normalizeEmail(decoded.email);
-  if (!firebaseUid) return null;
-
-  let user = null;
-  if (mongoReady()) {
-    user = await User.findOne({ firebaseUid });
-    if (!user && email) {
-      user = await User.findOneAndUpdate({ email }, { $set: { firebaseUid } }, { new: true });
-    }
-  } else {
-    user = memory.users.find((item) => item.firebaseUid === firebaseUid);
-    if (!user && email) {
-      user = memory.users.find((item) => item.email === email);
-      if (user) {
-        user.firebaseUid = firebaseUid;
-        persistMemory();
-      }
-    }
-  }
-
+  const user = await syncFirebaseUser(decoded);
   if (!user) return null;
   return {
     id: String(user._id || user.id),
     email: user.email,
     role: user.role || "student",
-    firebaseUid,
+    firebaseUid: user.firebaseUid,
   };
+}
+
+async function syncFirebaseUser(decoded) {
+  const firebaseUid = decoded.uid;
+  const email = normalizeEmail(decoded.email);
+  const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
+  const photoURL = decoded.picture || "";
+  const emailVerified = decoded.email_verified === true;
+  const now = new Date();
+
+  if (!firebaseUid) return null;
+  if (!email) return null;
+
+  let user;
+  if (mongoReady()) {
+    // Firebase UID is the canonical identity. Always prefer it before any legacy email migration path.
+    user = await User.findOne({ firebaseUid });
+    if (!user) {
+      const legacyUser = await User.findOne({ email });
+      if (legacyUser) {
+        // TODO (Migration):
+        // This email-linking path exists only to migrate legacy users.
+        // After all users have migrated to Firebase Authentication,
+        // remove this logic entirely.
+        user = await User.findByIdAndUpdate(
+          legacyUser._id,
+          {
+            $set: {
+              firebaseUid,
+              name: legacyUser.name || name,
+              photoURL: photoURL || legacyUser.photoURL,
+              status: legacyUser.status || "pending",
+            },
+          },
+          { new: true },
+        );
+      }
+    }
+    if (!user) {
+      // New Firebase users start pending because Firebase owns email verification.
+      user = await User.create({ firebaseUid, email, name, photoURL, role: "student", status: "pending", plan: "free" });
+    }
+
+    const updates = {
+      lastLoginAt: now,
+      email,
+      name: user.name || name,
+      photoURL: photoURL || user.photoURL,
+    };
+    // Activation depends on Firebase email verification; unverified users remain pending.
+    if (emailVerified && user.status === "pending") {
+      updates.status = "active";
+      if (!user.verifiedAt) updates.verifiedAt = now;
+    } else if (!emailVerified && !["disabled", "scheduled_for_deletion"].includes(user.status)) {
+      updates.status = "pending";
+    }
+    user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
+
+    await StudentProfile.findOneAndUpdate(
+      { user: user._id },
+      {
+        $setOnInsert: {
+          user: user._id,
+          username: email.split("@")[0],
+          skills: [],
+          level: "Beginner",
+          xp: 0,
+          profileCompletion: 0,
+          streak: 0,
+        },
+      },
+      { upsert: true, new: true },
+    );
+    await UserSettings.findOneAndUpdate(
+      { user: user._id },
+      { $setOnInsert: { user: user._id } },
+      { upsert: true, new: true },
+    );
+    return user;
+  }
+
+  user = memory.users.find((item) => item.firebaseUid === firebaseUid);
+  if (!user) {
+    const legacyUser = memory.users.find((item) => item.email === email);
+    if (legacyUser) {
+      user = legacyUser;
+      user.firebaseUid = firebaseUid;
+      user.name = user.name || name;
+      user.photoURL = photoURL || user.photoURL;
+      user.status = user.status || "pending";
+    }
+  }
+  if (!user) {
+    user = { id: memoryId("user"), firebaseUid, name, email, photoURL, role: "student", status: "pending", plan: "free" };
+    memory.users.push(user);
+  }
+  user.email = email;
+  user.name = user.name || name;
+  user.photoURL = photoURL || user.photoURL;
+  user.lastLoginAt = now.toISOString();
+  if (emailVerified && user.status === "pending") {
+    user.status = "active";
+    user.verifiedAt = user.verifiedAt || now.toISOString();
+  } else if (!emailVerified && !["disabled", "scheduled_for_deletion"].includes(user.status)) {
+    user.status = "pending";
+  }
+
+  const userId = user.id || user._id;
+  if (!memory.profiles.find((item) => String(item.user) === String(userId))) {
+    memory.profiles.push({
+      user: userId,
+      username: email.split("@")[0],
+      skills: [],
+      level: "Beginner",
+      xp: 0,
+      profileCompletion: 0,
+      streak: 0,
+    });
+  }
+  if (!memory.settings.find((item) => String(item.user) === String(userId))) {
+    memory.settings.push({ user: userId, theme: "system", accentColor: "#2563eb", language: "English" });
+  }
+  persistMemory();
+  return user;
+}
+
+async function getFirebaseAuthenticatedMongoUser(token) {
+  let firebase;
+  try {
+    firebase = require("./config/firebaseAdmin");
+  } catch (error) {
+    error.statusCode = 503;
+    error.authCode = "firebase_admin_missing";
+    throw error;
+  }
+
+  const firebaseApp = firebase.initializeFirebaseAdmin();
+  if (!firebaseApp) {
+    const error = new Error("Firebase Admin credentials are not configured.");
+    error.statusCode = 503;
+    error.authCode = "firebase_admin_not_configured";
+    throw error;
+  }
+
+  // Firebase is verified first because it is the only identity provider in the finalized auth architecture.
+  const decoded = await firebase.admin.auth().verifyIdToken(token, true);
+  const firebaseUid = decoded.uid;
+  if (!firebaseUid) {
+    const error = new Error("Firebase token is missing uid.");
+    error.statusCode = 401;
+    error.authCode = "missing_firebase_uid";
+    throw error;
+  }
+  if (!mongoReady()) {
+    const error = new Error("Database is not connected.");
+    error.statusCode = 503;
+    error.authCode = "database_unavailable";
+    throw error;
+  }
+
+  // firebaseUid is canonical. The backend never trusts frontend identity or token role claims.
+  const user = await User.findOne({ firebaseUid });
+  if (!user) {
+    const error = new Error("No Studox account is linked to this Firebase user.");
+    error.statusCode = 401;
+    error.authCode = "unknown_firebase_uid";
+    throw error;
+  }
+
+  if (user.status === "pending") {
+    // Pending users are blocked until Firebase email verification activates the Mongo account.
+    const error = new Error("Email verification required.");
+    error.statusCode = 403;
+    error.authCode = "email_verification_required";
+    throw error;
+  }
+  if (user.status === "disabled") {
+    const error = new Error("Account is disabled.");
+    error.statusCode = 403;
+    error.authCode = "account_disabled";
+    throw error;
+  }
+  if (user.status === "scheduled_for_deletion") {
+    const error = new Error("Account is scheduled for deletion.");
+    error.statusCode = 403;
+    error.authCode = "account_scheduled_for_deletion";
+    throw error;
+  }
+
+  // req.user must be the MongoDB user document so role and app status always come from Studox.
+  return user;
 }
 
 async function authOptional(req, _res, next) {
@@ -195,18 +366,12 @@ async function authRequired(req, res, next) {
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return res.status(401).json({ message: "Please login to continue." });
   try {
-    req.user = jwt.verify(token, jwtSecret);
+    req.user = await getFirebaseAuthenticatedMongoUser(token);
     return next();
-  } catch (_error) {
-    try {
-      const firebaseUser = await resolveFirebaseAuthUser(token);
-      if (firebaseUser) {
-        req.user = firebaseUser;
-        return next();
-      }
-    } catch (_firebaseError) {
-      // Fall through to the existing expired-session response.
-    }
+  } catch (error) {
+    const status = error.statusCode || 401;
+    if (status === 403) return res.status(403).json({ message: error.message });
+    if (status === 503) return res.status(503).json({ message: error.message });
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 }
@@ -1294,79 +1459,11 @@ app.post("/api/auth/firebase", async (req, res) => {
     if (!firebaseApp) return res.status(503).json({ message: "Firebase Admin credentials are not configured." });
 
     const decoded = await firebase.admin.auth().verifyIdToken(token);
-    const firebaseUid = decoded.uid;
-    const email = normalizeEmail(decoded.email);
-    const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
-    const photoURL = decoded.picture || "";
+    if (!decoded.uid) return res.status(400).json({ message: "Firebase token is missing uid." });
+    if (!normalizeEmail(decoded.email)) return res.status(400).json({ message: "Firebase account email is required." });
 
-    if (!firebaseUid) return res.status(400).json({ message: "Firebase token is missing uid." });
-    if (!email) return res.status(400).json({ message: "Firebase account email is required." });
-
-    let user;
-    if (mongoReady()) {
-      user = await User.findOne({ firebaseUid });
-      if (!user) {
-        user = await User.findOneAndUpdate(
-          { email },
-          { $set: { firebaseUid, name, photoURL } },
-          { new: true },
-        );
-      }
-      if (!user) {
-        user = await User.create({ firebaseUid, email, name, photoURL, role: "student", plan: "free" });
-      }
-
-      await StudentProfile.findOneAndUpdate(
-        { user: user._id },
-        {
-          $setOnInsert: {
-            user: user._id,
-            username: email.split("@")[0],
-            skills: [],
-            level: "Beginner",
-            xp: 0,
-            profileCompletion: 0,
-            streak: 0,
-          },
-        },
-        { upsert: true, new: true },
-      );
-      await UserSettings.findOneAndUpdate(
-        { user: user._id },
-        { $setOnInsert: { user: user._id } },
-        { upsert: true, new: true },
-      );
-    } else {
-      user = memory.users.find((item) => item.firebaseUid === firebaseUid);
-      if (!user) {
-        user = memory.users.find((item) => item.email === email);
-        if (user) {
-          user.firebaseUid = firebaseUid;
-          user.name = name || user.name;
-          user.photoURL = photoURL;
-        }
-      }
-      if (!user) {
-        user = { id: memoryId("user"), firebaseUid, name, email, photoURL, role: "student", plan: "free" };
-        memory.users.push(user);
-      }
-      const userId = user.id || user._id;
-      if (!memory.profiles.find((item) => String(item.user) === String(userId))) {
-        memory.profiles.push({
-          user: userId,
-          username: email.split("@")[0],
-          skills: [],
-          level: "Beginner",
-          xp: 0,
-          profileCompletion: 0,
-          streak: 0,
-        });
-      }
-      if (!memory.settings.find((item) => String(item.user) === String(userId))) {
-        memory.settings.push({ user: userId, theme: "system", accentColor: "#2563eb", language: "English" });
-      }
-      persistMemory();
-    }
+    const user = await syncFirebaseUser(decoded);
+    if (!user) return res.status(401).json({ message: "Firebase authentication failed." });
 
     res.json({ success: true, user: publicUser(user) });
   } catch (error) {
@@ -1621,7 +1718,7 @@ app.post("/api/auth/reset-password", async (req, res) => {
   res.json({ message: "Password reset successfully." });
 });
 
-app.get("/api/profile", authOptional, async (req, res) => {
+app.get("/api/profile", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
     if (profile) return res.json(profile);
@@ -1629,7 +1726,7 @@ app.get("/api/profile", authOptional, async (req, res) => {
   res.json(memory.profiles.find((profile) => profile.user === req.user.id) || memory.profiles[0]);
 });
 
-app.put("/api/profile", authOptional, async (req, res) => {
+app.put("/api/profile", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const profile = await StudentProfile.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
     return res.json(profile);
@@ -1644,7 +1741,7 @@ app.put("/api/profile", authOptional, async (req, res) => {
   res.json(profile);
 });
 
-app.get("/api/settings", authOptional, async (req, res) => {
+app.get("/api/settings", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const settings = await UserSettings.findOne({ user: req.user.id }).lean();
     if (settings) return res.json(settings);
@@ -1652,7 +1749,7 @@ app.get("/api/settings", authOptional, async (req, res) => {
   res.json(memory.settings.find((settings) => settings.user === req.user.id) || memory.settings[0]);
 });
 
-app.put("/api/settings", authOptional, async (req, res) => {
+app.put("/api/settings", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const settings = await UserSettings.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
     return res.json(settings);
@@ -1780,7 +1877,7 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
   res.json(roadmaps.map(normalizeRoadmapShape));
 });
 
-app.post("/api/roadmaps/generate", authOptional, async (req, res) => {
+app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
   try {
     const input = { ...req.body, userId: req.user.id };
     const errors = roadmapInputErrors(input);
@@ -1938,7 +2035,7 @@ app.get("/api/tests/:id/questions", async (req, res) => {
   res.json(questions.filter((question) => String(question.test) === req.params.id || String(question.test?._id) === req.params.id));
 });
 
-app.post("/api/tests/:id/submit", authOptional, async (req, res) => {
+app.post("/api/tests/:id/submit", authRequired, async (req, res) => {
   const answers = req.body.answers || [];
   const questions = (await listResource("questions")).filter((question) => String(question.test) === req.params.id);
   const correct = answers.filter((answer) => {
@@ -1960,23 +2057,23 @@ app.post("/api/tests/:id/submit", authOptional, async (req, res) => {
   res.status(201).json(result);
 });
 
-app.get("/api/test-results", authOptional, async (_req, res) => {
+app.get("/api/test-results", authRequired, async (_req, res) => {
   res.json(await listResource("test-results"));
 });
 
-app.get("/api/dsa/progress", authOptional, async (_req, res) => {
+app.get("/api/dsa/progress", authRequired, async (_req, res) => {
   const list = await listResource("dsa");
   res.json(list[0]);
 });
 
-app.put("/api/dsa/progress", authOptional, async (req, res) => {
+app.put("/api/dsa/progress", authRequired, async (req, res) => {
   const current = memory.dsaProgress[0];
   Object.assign(current, req.body, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(current);
 });
 
-app.post("/api/dsa/solve-challenge", authOptional, (req, res) => {
+app.post("/api/dsa/solve-challenge", authRequired, (req, res) => {
   const userId = currentUserId(req);
   let current = memory.dsaProgress.find((item) => String(item.user || "user_demo") === String(userId));
   if (!current) {
@@ -2003,20 +2100,20 @@ app.post("/api/dsa/solve-challenge", authOptional, (req, res) => {
   res.json({ message: "Problem solved and DSA progress updated.", progress: current });
 });
 
-app.get("/api/resume", authOptional, async (_req, res) => {
+app.get("/api/resume", authRequired, async (_req, res) => {
   const list = await listResource("resumes");
   res.json(list[0]);
 });
 
-app.post("/api/resume", authOptional, async (req, res) => {
+app.post("/api/resume", authRequired, async (req, res) => {
   res.status(201).json(await createResource("resumes", { user: req.user.id, ...req.body }));
 });
 
-app.put("/api/resume/:id", authOptional, async (req, res) => {
+app.put("/api/resume/:id", authRequired, async (req, res) => {
   res.json(await updateResource("resumes", req.params.id, req.body));
 });
 
-app.post("/api/resume/ats-score", authOptional, (req, res) => {
+app.post("/api/resume/ats-score", authRequired, (req, res) => {
   const resumeText = `${req.body.resumeText || ""}`.toLowerCase();
   const keywords = ["react", "node", "mongodb", "api", "project", "internship", "dsa"];
   const matches = keywords.filter((keyword) => resumeText.includes(keyword)).length;
@@ -2031,15 +2128,15 @@ app.post("/api/resume/ats-score", authOptional, (req, res) => {
   });
 });
 
-app.get("/api/projects", authOptional, async (_req, res) => {
+app.get("/api/projects", authRequired, async (_req, res) => {
   res.json(await listResource("projects"));
 });
 
-app.post("/api/projects", authOptional, async (req, res) => {
+app.post("/api/projects", authRequired, async (req, res) => {
   res.status(201).json(await createResource("projects", { user: req.user.id, ...req.body }));
 });
 
-app.put("/api/projects/:id", authOptional, async (req, res) => {
+app.put("/api/projects/:id", authRequired, async (req, res) => {
   res.json(await updateResource("projects", req.params.id, req.body));
 });
 
@@ -2047,11 +2144,11 @@ app.get("/api/internships", async (_req, res) => {
   res.json(await listResource("internships"));
 });
 
-app.post("/api/internships", authOptional, async (req, res) => {
+app.post("/api/internships", authRequired, async (req, res) => {
   res.status(201).json(await createResource("internships", req.body));
 });
 
-app.post("/api/internships/:id/apply", authOptional, async (req, res) => {
+app.post("/api/internships/:id/apply", authRequired, async (req, res) => {
   const internship = memory.internships.find((item) => item.id === req.params.id);
   if (internship) {
     internship.applicants = internship.applicants || [];
@@ -2065,11 +2162,11 @@ app.get("/api/hackathons", async (_req, res) => {
   res.json(await listResource("hackathons"));
 });
 
-app.post("/api/hackathons", authOptional, async (req, res) => {
+app.post("/api/hackathons", authRequired, async (req, res) => {
   res.status(201).json(await createResource("hackathons", req.body));
 });
 
-app.post("/api/hackathons/:id/register", authOptional, (req, res) => {
+app.post("/api/hackathons/:id/register", authRequired, (req, res) => {
   const hackathon = memory.hackathons.find((item) => item.id === req.params.id);
   if (hackathon) {
     hackathon.registrations = hackathon.registrations || [];
@@ -2079,15 +2176,15 @@ app.post("/api/hackathons/:id/register", authOptional, (req, res) => {
   res.json({ message: "Hackathon registration confirmed.", hackathonId: req.params.id, user: req.user.id });
 });
 
-app.get("/api/certificates", authOptional, async (_req, res) => {
+app.get("/api/certificates", authRequired, async (_req, res) => {
   res.json(await listResource("certificates"));
 });
 
-app.post("/api/certificates", authOptional, async (req, res) => {
+app.post("/api/certificates", authRequired, async (req, res) => {
   res.status(201).json(await createResource("certificates", { user: req.user.id, ...req.body }));
 });
 
-app.post("/api/certificates/:id/share", authOptional, (req, res) => {
+app.post("/api/certificates/:id/share", authRequired, (req, res) => {
   const certificate = memory.certificates.find((item) => item.id === req.params.id);
   if (certificate) {
     certificate.shareCount = Number(certificate.shareCount || 0) + 1;
@@ -2159,11 +2256,11 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
   });
 });
 
-app.get("/api/notifications", authOptional, async (_req, res) => {
+app.get("/api/notifications", authRequired, async (_req, res) => {
   res.json(await listResource("notifications"));
 });
 
-app.patch("/api/notifications/:id/read", authOptional, async (req, res) => {
+app.patch("/api/notifications/:id/read", authRequired, async (req, res) => {
   res.json(await updateResource("notifications", req.params.id, { read: true }));
 });
 
