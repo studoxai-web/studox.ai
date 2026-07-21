@@ -307,6 +307,41 @@ Current allow-listed platform-content writes:
 - `POST /api/internships`
 - `POST /api/hackathons`
 
+### Input Validation
+
+The backend uses reusable validation helpers before route handlers touch database helpers or business actions. Validation helpers return a consistent `400` response:
+
+```json
+{
+  "message": "Invalid request input.",
+  "errors": []
+}
+```
+
+Current validation coverage:
+
+- Authorization header Bearer format
+- payment and billing plan enums
+- Razorpay ID/signature primitive formats
+- common route identifiers such as `id`, `courseId`, and `moduleId`
+- admin `resource` enum from `resourceMap`
+- profile payloads including skills and education arrays
+- settings payloads including notification and privacy objects
+- roadmap generate/select payloads using the current roadmap contracts
+- test submission answers arrays
+- DSA progress topics, recent problems, badges, and solve-challenge problem payloads
+- resume sections, analysis arrays, ATS score, and target role
+- project skills and links
+- certificate, internship, and hackathon create payloads
+- AI counselling and mentor chat payloads
+- admin create/update payload checks for supported resources
+
+Complex payload validation rejects malformed object bodies, malformed nested objects, over-sized arrays/strings, invalid URLs/dates/enums, invalid identifiers, excessive nesting, and dangerous object keys such as Mongo operators or prototype-pollution keys before business logic runs.
+
+Remaining validation gap:
+
+- Some generic admin resources still use broad validation because their stored shape is intentionally flexible or legacy/demo-backed. They still pass the dangerous-key and nesting-depth guard.
+
 ## 5. Backend Architecture
 
 The backend entry point is:
