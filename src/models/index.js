@@ -14,15 +14,12 @@ const User = model(
       email: { type: String, required: true, unique: true, lowercase: true, trim: true },
       firebaseUid: { type: String, unique: true, sparse: true, trim: true },
       phone: { type: String, trim: true },
-      password: String,
       photoURL: String,
       role: { type: String, enum: ["student", "admin"], default: "student" },
       // Tracks the Studox account lifecycle while Firebase owns identity verification.
       status: { type: String, enum: ["pending", "active", "scheduled_for_deletion", "disabled"], default: "pending" },
       plan: { type: String, enum: ["free", "pro", "elite"], default: "free" },
       activeRoadmapId: { type: Schema.Types.ObjectId, ref: "Roadmap" },
-      resetOtp: String,
-      resetOtpExpires: Date,
       // Updated when a verified Firebase user successfully signs in.
       lastLoginAt: Date,
       // Stores when Firebase email verification first activated the Studox account.

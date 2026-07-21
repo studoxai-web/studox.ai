@@ -63,25 +63,14 @@ let firebaseCurrentUser = null;
 let firebaseAuthReadyPromise = null;
 let firebaseSessionSyncPromise = null;
 
-if (localStorage.getItem("demoSession") === "true") {
-  localStorage.removeItem("demoSession");
-  localStorage.removeItem("studox-user");
-  currentUser = defaultUser;
-}
-
 function hasDemoSession() {
   return Boolean(firebaseCurrentUser);
-}
-
-function createDemoSession(user = currentUser) {
-  localStorage.setItem("studox-user", JSON.stringify(user));
 }
 
 function clearDemoSession() {
   window.studoxFirebase?.signOut?.().catch(() => {});
   firebaseCurrentUser = null;
   firebaseSessionSyncPromise = null;
-  localStorage.removeItem("demoSession");
   localStorage.removeItem("studox-user");
   localStorage.removeItem("studox-plan");
   localStorage.removeItem("studox-return-route");
@@ -467,7 +456,11 @@ function handleApiAuthResponse(status, data = {}) {
   if (status === 403) {
     const message = data.message || "";
     if (message.toLowerCase().includes("email verification")) {
-      currentUser = { ...currentUser, status: "pending" };
+      currentUser = {
+        ...currentUser,
+        status: "pending",
+        verificationBlockChecked: true,
+      };
       localStorage.setItem("studox-user", JSON.stringify(currentUser));
       toast("Please verify your email before continuing.");
       if (protectedRoutes.has(getRoute())) window.setTimeout(render, 0);
@@ -3978,6 +3971,9 @@ render = async function configuredRender() {
     setRoute("landing");
     return;
   }
+  if (protectedRoutes.has(route) && currentUser?.status === "pending" && !currentUser.verificationBlockChecked) {
+    await api("/auth/me");
+  }
   if (protectedRoutes.has(route) && ["pending", "disabled", "scheduled_for_deletion"].includes(currentUser?.status)) {
     app.innerHTML = authStatusBlockView(currentUser.status);
     bindPage();
@@ -4081,9 +4077,6 @@ async function authRequest(path, payload, bearerToken = "") {
 }
 
 function saveAuthSession(result, goal) {
-  localStorage.removeItem("demoSession");
-  localStorage.removeItem("studox-token");
-  localStorage.removeItem("studox-auth-provider");
   const user = result.user || {};
   currentUser = {
     ...currentUser,

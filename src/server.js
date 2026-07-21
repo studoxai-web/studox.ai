@@ -2,16 +2,12 @@ require("dotenv").config();
 
 const path = require("path");
 const fs = require("fs");
-const dns = require("dns").promises;
 const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const connectDatabase = require("./config/db");
-const { sendOtpEmail, sendWelcomeEmail } = require("./config/mailer");
 const models = require("./models");
 const mockData = require("./data/mockData");
 
@@ -38,9 +34,7 @@ const {
 
 const app = express();
 const port = process.env.PORT || 4000;
-const jwtSecret = process.env.JWT_SECRET || "studox_local_secret";
 const storePath = path.join(__dirname, "data", "runtime-store.json");
-const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
 const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
 const mentorLimitTemporarilyDisabled = true;
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
@@ -50,7 +44,6 @@ const paymentPlans = {
   elite: { name: "Elite", amount: 70700 },
 };
 const memory = loadMemoryStore();
-ensureDemoAccount();
 
 const resourceMap = {
   users: { model: User, key: "users" },
@@ -104,22 +97,8 @@ function persistMemory() {
   }
 }
 
-function ensureDemoAccount() {
-  if (process.env.NODE_ENV === "production") return;
-  const demoUser = memory.users?.find((user) => user.email === "aarav@studox.ai");
-  if (demoUser && demoUser.password !== demoPasswordHash) {
-    demoUser.password = demoPasswordHash;
-    persistMemory();
-  }
-}
-
 function mongoReady() {
   return mongoose.connection.readyState === 1;
-}
-
-function signToken(user) {
-  const id = user._id || user.id || "user_demo";
-  return jwt.sign({ id, email: user.email, role: user.role || "student" }, jwtSecret, { expiresIn: "7d" });
 }
 
 function publicUser(user) {
@@ -156,7 +135,6 @@ async function syncFirebaseUser(decoded) {
   const email = normalizeEmail(decoded.email);
   const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
   const photoURL = decoded.picture || "";
-  const emailVerified = decoded.email_verified === true;
   const now = new Date();
 
   if (!firebaseUid) return null;
@@ -188,7 +166,6 @@ async function syncFirebaseUser(decoded) {
       }
     }
     if (!user) {
-      // New Firebase users start pending because Firebase owns email verification.
       user = await User.create({ firebaseUid, email, name, photoURL, role: "student", status: "pending", plan: "free" });
     }
 
@@ -198,12 +175,11 @@ async function syncFirebaseUser(decoded) {
       name: user.name || name,
       photoURL: photoURL || user.photoURL,
     };
-    // Activation depends on Firebase email verification; unverified users remain pending.
-    if (emailVerified && user.status === "pending") {
+    // TEMPORARY DEVELOPMENT FLOW:
+    // Email verification is not enforced yet, so pending Firebase users become active after login.
+    if (user.status === "pending") {
       updates.status = "active";
       if (!user.verifiedAt) updates.verifiedAt = now;
-    } else if (!emailVerified && !["disabled", "scheduled_for_deletion"].includes(user.status)) {
-      updates.status = "pending";
     }
     user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
 
@@ -249,11 +225,11 @@ async function syncFirebaseUser(decoded) {
   user.name = user.name || name;
   user.photoURL = photoURL || user.photoURL;
   user.lastLoginAt = now.toISOString();
-  if (emailVerified && user.status === "pending") {
+  // TEMPORARY DEVELOPMENT FLOW:
+  // Email verification is not enforced yet, so pending Firebase users become active after login.
+  if (user.status === "pending") {
     user.status = "active";
     user.verifiedAt = user.verifiedAt || now.toISOString();
-  } else if (!emailVerified && !["disabled", "scheduled_for_deletion"].includes(user.status)) {
-    user.status = "pending";
   }
 
   const userId = user.id || user._id;
@@ -294,7 +270,7 @@ async function getFirebaseAuthenticatedMongoUser(token) {
   }
 
   // Firebase is verified first because it is the only identity provider in the finalized auth architecture.
-  const decoded = await firebase.admin.auth().verifyIdToken(token, true);
+  const decoded = await firebase.admin.auth().verifyIdToken(token);
   const firebaseUid = decoded.uid;
   if (!firebaseUid) {
     const error = new Error("Firebase token is missing uid.");
@@ -318,13 +294,8 @@ async function getFirebaseAuthenticatedMongoUser(token) {
     throw error;
   }
 
-  if (user.status === "pending") {
-    // Pending users are blocked until Firebase email verification activates the Mongo account.
-    const error = new Error("Email verification required.");
-    error.statusCode = 403;
-    error.authCode = "email_verification_required";
-    throw error;
-  }
+  // TEMPORARY DEVELOPMENT FLOW:
+  // Pending users are not blocked until the real email verification flow is implemented.
   if (user.status === "disabled") {
     const error = new Error("Account is disabled.");
     error.statusCode = 403;
@@ -345,19 +316,10 @@ async function getFirebaseAuthenticatedMongoUser(token) {
 async function authOptional(req, _res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) {
-    req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
-    return next();
-  }
+  if (!token) return next();
   try {
-    req.user = jwt.verify(token, jwtSecret);
-  } catch (_error) {
-    try {
-      req.user = (await resolveFirebaseAuthUser(token)) || { id: "user_demo", email: "aarav@studox.ai", role: "student" };
-    } catch (_firebaseError) {
-      req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
-    }
-  }
+    req.user = await resolveFirebaseAuthUser(token);
+  } catch (_error) {}
   next();
 }
 
@@ -383,16 +345,12 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function findMemoryUser(emailOrPhone) {
-  return memory.users.find((user) => user.email === emailOrPhone || user.phone === emailOrPhone);
-}
-
 function currentUserId(req) {
-  return req.user?.id || "user_demo";
+  return req.user?.id || null;
 }
 
 function byUser(list, userId) {
-  return (list || []).filter((item) => String(item.user || item.userId || "user_demo") === String(userId));
+  return (list || []).filter((item) => String(item.user || item.userId || "") === String(userId));
 }
 
 function roadmapOwnerQuery(userId) {
@@ -1326,38 +1284,6 @@ function hasValidEmailFormat(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
-async function validateEmailDomain(email) {
-  const normalized = normalizeEmail(email);
-  if (!hasValidEmailFormat(normalized)) {
-    return { ok: false, message: "Please enter a valid email address." };
-  }
-
-  const domain = normalized.split("@")[1];
-  const typoDomains = {
-    "gamil.com": "gmail.com",
-    "gmial.com": "gmail.com",
-    "gmai.com": "gmail.com",
-    "gnail.com": "gmail.com",
-    "gmail.co": "gmail.com",
-    "yaho.com": "yahoo.com",
-    "yahoo.co": "yahoo.com",
-    "outlok.com": "outlook.com",
-    "hotmial.com": "hotmail.com",
-  };
-
-  if (typoDomains[domain]) {
-    return { ok: false, message: `Email domain looks wrong. Did you mean ${typoDomains[domain]}?` };
-  }
-
-  try {
-    const mx = await dns.resolveMx(domain);
-    if (!mx.length) return { ok: false, message: "This email domain cannot receive emails." };
-    return { ok: true };
-  } catch (_error) {
-    return { ok: false, message: "This email domain does not exist or cannot receive emails." };
-  }
-}
-
 async function listResource(resource, filter = {}) {
   const config = resourceMap[resource];
   if (!config) return null;
@@ -1391,6 +1317,35 @@ async function updateResource(resource, id, payload) {
   list[index] = { ...list[index], ...payload, updatedAt: new Date().toISOString() };
   persistMemory();
   return list[index];
+}
+
+function isOwnedByUser(item, userId) {
+  return Boolean(item && String(item.user || item.userId || "") === String(userId));
+}
+
+function pickFields(source = {}, fields = []) {
+  return fields.reduce((picked, field) => {
+    if (Object.prototype.hasOwnProperty.call(source, field)) picked[field] = source[field];
+    return picked;
+  }, {});
+}
+
+async function findOwnedResource(resource, id, userId) {
+  const config = resourceMap[resource];
+  if (!config) return null;
+  if (mongoReady() && config.model && mongoose.isValidObjectId(id)) {
+    const item = await config.model.findById(id).lean();
+    return isOwnedByUser(item, userId) ? item : null;
+  }
+  const list = memory[config.key] || [];
+  const item = list.find((entry) => String(entry.id || entry._id) === String(id));
+  return isOwnedByUser(item, userId) ? item : null;
+}
+
+async function updateOwnedResource(resource, id, userId, payload) {
+  const item = await findOwnedResource(resource, id, userId);
+  if (!item) return null;
+  return updateResource(resource, id, payload);
 }
 
 async function deleteResource(resource, id) {
@@ -1468,106 +1423,6 @@ app.post("/api/auth/firebase", async (req, res) => {
     res.json({ success: true, user: publicUser(user) });
   } catch (error) {
     res.status(401).json({ message: "Firebase authentication failed.", error: error.message });
-  }
-});
-
-app.post("/api/auth/signup", async (req, res) => {
-  try {
-    const { name, phone, password, field } = req.body;
-    const email = normalizeEmail(req.body.email);
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email and password are required." });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ message: "Password must be at least 8 characters." });
-    }
-    const emailCheck = await validateEmailDomain(email);
-    if (!emailCheck.ok) {
-      return res.status(400).json({ message: emailCheck.message });
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-    let user;
-    let createdUserId;
-
-    if (mongoReady()) {
-      const exists = await User.findOne({ email });
-      if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = await User.create({ name, email, phone, password: hashed });
-      createdUserId = user._id;
-      await StudentProfile.create({
-        user: user._id,
-        username: email.split("@")[0],
-        field,
-        skills: [],
-        level: "Beginner",
-        xp: 0,
-        profileCompletion: 0,
-        streak: 0,
-      });
-      await UserSettings.create({ user: user._id });
-    } else {
-      const exists = memory.users.find((item) => item.email === email);
-      if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student", plan: "free" };
-      memory.users.push(user);
-      memory.profiles.push({
-        user: user.id,
-        username: email.split("@")[0],
-        field,
-        skills: [],
-        level: "Beginner",
-        xp: 0,
-        profileCompletion: 0,
-        streak: 0,
-      });
-      memory.settings.push({ user: user.id, theme: "system", accentColor: "#2563eb", language: "English" });
-      persistMemory();
-    }
-
-    let welcomeEmailSent = false;
-    let emailWarning = "";
-    try {
-      await sendWelcomeEmail({ to: email, name, goal: "your learning goal" });
-      welcomeEmailSent = true;
-    } catch (error) {
-      emailWarning = error.code === "EMAIL_NOT_CONFIGURED"
-        ? "Signup email is not configured. Please contact admin."
-        : "We could not send welcome email right now. Account was created.";
-      console.warn(emailWarning);
-      console.warn(error.message);
-    }
-
-    res.status(201).json({
-      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created.",
-      token: signToken(user),
-      user: publicUser(user),
-      welcomeEmailSent,
-      emailWarning,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Signup failed.", error: error.message });
-  }
-});
-
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const emailOrPhone = req.body.email || req.body.phone;
-    const password = req.body.password || "";
-    if (!emailOrPhone || !password) return res.status(400).json({ message: "Email or phone and password are required." });
-
-    let user;
-    if (mongoReady()) user = await User.findOne({ $or: [{ email: emailOrPhone }, { phone: emailOrPhone }] });
-    else user = findMemoryUser(emailOrPhone);
-
-    if (!user) return res.status(404).json({ message: "Account not found." });
-    const valid = await bcrypt.compare(password, user.password || "");
-    if (!valid) return res.status(401).json({ message: "Invalid password." });
-
-    if (mongoReady() && user._id) await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
-    res.json({ message: "Logged in successfully.", token: signToken(user), user: publicUser(user) });
-  } catch (error) {
-    res.status(500).json({ message: "Login failed.", error: error.message });
   }
 });
 
@@ -1658,85 +1513,23 @@ app.post("/api/billing/upgrade", authRequired, async (req, res) => {
     subscription: { status: "active", startedAt: new Date().toISOString() },
   });
 });
-app.post("/api/auth/forgot-password", async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email is required." });
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const otpExpiresAt = new Date(Date.now() + Number(process.env.OTP_EXPIRY_MINUTES || 10) * 60 * 1000);
-  let user;
-
-  if (mongoReady()) {
-    user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "No account found with this email." });
-    user.resetOtp = otp;
-    user.resetOtpExpires = otpExpiresAt;
-    await user.save();
-  } else {
-    user = findMemoryUser(email);
-    if (!user) return res.status(404).json({ message: "No account found with this email." });
-    user.resetOtp = otp;
-    user.resetOtpExpires = otpExpiresAt.toISOString();
-    persistMemory();
-  }
-
-  try {
-    await sendOtpEmail({ to: email, otp, name: user.name });
-    res.json({ message: "OTP sent to your registered email." });
-  } catch (error) {
-    res.status(error.code === "EMAIL_NOT_CONFIGURED" ? 500 : 502).json({
-      message: error.code === "EMAIL_NOT_CONFIGURED"
-        ? "Email OTP is not configured. Add SMTP settings in .env."
-        : "Could not send OTP email. Please check SMTP settings.",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/api/auth/reset-password", async (req, res) => {
-  const { email, otp, password } = req.body;
-  if (!email || !otp || !password) return res.status(400).json({ message: "Email, OTP and new password are required." });
-  if (password.length < 8) return res.status(400).json({ message: "Password must be at least 8 characters." });
-  const hashed = await bcrypt.hash(password, 10);
-
-  if (mongoReady()) {
-    const user = await User.findOne({ email, resetOtp: otp, resetOtpExpires: { $gt: new Date() } });
-    if (!user) return res.status(400).json({ message: "Invalid or expired OTP." });
-    user.password = hashed;
-    user.resetOtp = undefined;
-    user.resetOtpExpires = undefined;
-    await user.save();
-  } else {
-    const user = findMemoryUser(email);
-    const expiresAt = user?.resetOtpExpires ? new Date(user.resetOtpExpires).getTime() : 0;
-    if (!user || user.resetOtp !== otp || expiresAt < Date.now()) return res.status(400).json({ message: "Invalid or expired OTP." });
-    user.password = hashed;
-    delete user.resetOtp;
-    delete user.resetOtpExpires;
-    persistMemory();
-  }
-
-  res.json({ message: "Password reset successfully." });
-});
-
 app.get("/api/profile", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
     if (profile) return res.json(profile);
   }
-  res.json(memory.profiles.find((profile) => profile.user === req.user.id) || memory.profiles[0]);
+  res.json(memory.profiles.find((profile) => String(profile.user) === String(req.user.id)) || {});
 });
 
 app.put("/api/profile", authRequired, async (req, res) => {
+  const profileUpdate = pickFields(req.body, ["username", "goal", "field", "college", "branch", "bio", "skills", "education", "level"]);
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const profile = await StudentProfile.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
+    const profile = await StudentProfile.findOneAndUpdate({ user: req.user.id }, profileUpdate, { new: true, upsert: true }).lean();
     return res.json(profile);
   }
-  const profile = memory.profiles.find((item) => item.user === req.user.id) || memory.profiles[0];
-  Object.assign(profile, req.body, { updatedAt: new Date().toISOString() });
-  if (req.body.name || req.body.email || req.body.phone) {
-    const user = memory.users.find((item) => item.id === req.user.id);
-    if (user) Object.assign(user, { name: req.body.name || user.name, email: req.body.email || user.email, phone: req.body.phone || user.phone });
-  }
+  const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id)) || { user: req.user.id };
+  if (!memory.profiles.includes(profile)) memory.profiles.unshift(profile);
+  Object.assign(profile, profileUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(profile);
 });
@@ -1746,16 +1539,18 @@ app.get("/api/settings", authRequired, async (req, res) => {
     const settings = await UserSettings.findOne({ user: req.user.id }).lean();
     if (settings) return res.json(settings);
   }
-  res.json(memory.settings.find((settings) => settings.user === req.user.id) || memory.settings[0]);
+  res.json(memory.settings.find((settings) => String(settings.user) === String(req.user.id)) || {});
 });
 
 app.put("/api/settings", authRequired, async (req, res) => {
+  const settingsUpdate = pickFields(req.body, ["theme", "accentColor", "language", "notifications", "privacy"]);
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const settings = await UserSettings.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
+    const settings = await UserSettings.findOneAndUpdate({ user: req.user.id }, settingsUpdate, { new: true, upsert: true }).lean();
     return res.json(settings);
   }
-  const settings = memory.settings.find((item) => item.user === req.user.id) || memory.settings[0];
-  Object.assign(settings, req.body, { updatedAt: new Date().toISOString() });
+  const settings = memory.settings.find((item) => String(item.user) === String(req.user.id)) || { user: req.user.id };
+  if (!memory.settings.includes(settings)) memory.settings.unshift(settings);
+  Object.assign(settings, settingsUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(settings);
 });
@@ -1990,15 +1785,18 @@ app.get("/api/courses/:id", async (req, res) => {
   res.json({ ...course, modules: modules.filter((module) => !module.course || module.course === course.id || String(module.course) === String(course._id)) });
 });
 
-app.patch("/api/courses/:courseId/modules/:moduleId", authRequired, async (req, res) => {
-  const updated = await updateResource("modules", req.params.moduleId, req.body);
-  res.json(updated || { message: "Module progress updated in demo mode.", ...req.body });
+app.patch("/api/courses/:courseId/modules/:moduleId", authRequired, requireAdmin, async (req, res) => {
+  const moduleUpdate = pickFields(req.body, ["title", "description", "order", "lessons", "status", "progress", "resources"]);
+  const updated = await updateResource("modules", req.params.moduleId, moduleUpdate);
+  res.json(updated || { message: "Module progress updated in demo mode.", ...moduleUpdate });
 });
 
 app.post("/api/courses/:courseId/continue", authRequired, async (req, res) => {
-  const course = memory.courses.find((item) => String(item.id || item._id || item.slug) === String(req.params.courseId)) || memory.courses[0];
+  const sourceCourse = memory.courses.find((item) => String(item.id || item._id || item.slug) === String(req.params.courseId)) || memory.courses[0];
+  const course = sourceCourse ? { ...sourceCourse } : null;
   const courseId = course?.id || course?._id || req.params.courseId;
-  const module = memory.modules.find((item) => String(item.course) === String(courseId) && item.status !== "completed") || memory.modules.find((item) => String(item.course) === String(courseId)) || memory.modules[0];
+  const sourceModule = memory.modules.find((item) => String(item.course) === String(courseId) && item.status !== "completed") || memory.modules.find((item) => String(item.course) === String(courseId)) || memory.modules[0];
+  const module = sourceModule ? { ...sourceModule } : null;
   if (module) {
     module.status = module.progress >= 75 ? "completed" : "in-progress";
     module.progress = Math.min(100, Number(module.progress || 0) + 12);
@@ -2057,25 +1855,46 @@ app.post("/api/tests/:id/submit", authRequired, async (req, res) => {
   res.status(201).json(result);
 });
 
-app.get("/api/test-results", authRequired, async (_req, res) => {
-  res.json(await listResource("test-results"));
+app.get("/api/test-results", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const results = await TestResult.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(results);
+  }
+  res.json(byUser(memory.testResults || [], req.user.id));
 });
 
-app.get("/api/dsa/progress", authRequired, async (_req, res) => {
-  const list = await listResource("dsa");
-  res.json(list[0]);
+app.get("/api/dsa/progress", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const progress = await DSAProgress.findOne({ user: req.user.id }).lean();
+    return res.json(progress || {});
+  }
+  res.json(memory.dsaProgress.find((item) => String(item.user) === String(req.user.id)) || {});
 });
 
 app.put("/api/dsa/progress", authRequired, async (req, res) => {
-  const current = memory.dsaProgress[0];
-  Object.assign(current, req.body, { updatedAt: new Date().toISOString() });
+  let current;
+  const dsaUpdate = pickFields(req.body, ["problemsSolved", "acceptanceRate", "currentStreak", "ranking", "totalProblems", "topics", "recentProblems", "badges"]);
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    current = await DSAProgress.findOneAndUpdate(
+      { user: req.user.id },
+      { ...dsaUpdate, user: req.user.id, updatedAt: new Date() },
+      { new: true, upsert: true, runValidators: true },
+    ).lean();
+    return res.json(current);
+  }
+  current = memory.dsaProgress.find((item) => String(item.user) === String(req.user.id));
+  if (!current) {
+    current = { user: req.user.id };
+    memory.dsaProgress.unshift(current);
+  }
+  Object.assign(current, dsaUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(current);
 });
 
 app.post("/api/dsa/solve-challenge", authRequired, (req, res) => {
   const userId = currentUserId(req);
-  let current = memory.dsaProgress.find((item) => String(item.user || "user_demo") === String(userId));
+  let current = memory.dsaProgress.find((item) => String(item.user || "") === String(userId));
   if (!current) {
     current = { user: userId, problemsSolved: 0, acceptanceRate: 0, currentStreak: 0, ranking: 5000, totalProblems: 760, topics: [], recentProblems: [], badges: [] };
     memory.dsaProgress.push(current);
@@ -2100,17 +1919,22 @@ app.post("/api/dsa/solve-challenge", authRequired, (req, res) => {
   res.json({ message: "Problem solved and DSA progress updated.", progress: current });
 });
 
-app.get("/api/resume", authRequired, async (_req, res) => {
-  const list = await listResource("resumes");
-  res.json(list[0]);
+app.get("/api/resume", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const resume = await Resume.findOne({ user: req.user.id }).sort({ createdAt: -1 }).lean();
+    return res.json(resume || {});
+  }
+  res.json(memory.resumes.find((item) => String(item.user) === String(req.user.id)) || {});
 });
 
 app.post("/api/resume", authRequired, async (req, res) => {
-  res.status(201).json(await createResource("resumes", { user: req.user.id, ...req.body }));
+  res.status(201).json(await createResource("resumes", { user: req.user.id, ...pickFields(req.body, ["template", "sections", "atsScore", "analysis", "targetRole"]) }));
 });
 
 app.put("/api/resume/:id", authRequired, async (req, res) => {
-  res.json(await updateResource("resumes", req.params.id, req.body));
+  const updated = await updateOwnedResource("resumes", req.params.id, req.user.id, pickFields(req.body, ["template", "sections", "atsScore", "analysis", "targetRole"]));
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
 app.post("/api/resume/ats-score", authRequired, (req, res) => {
@@ -2128,24 +1952,30 @@ app.post("/api/resume/ats-score", authRequired, (req, res) => {
   });
 });
 
-app.get("/api/projects", authRequired, async (_req, res) => {
-  res.json(await listResource("projects"));
+app.get("/api/projects", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(projects);
+  }
+  res.json(byUser(memory.projects || [], req.user.id));
 });
 
 app.post("/api/projects", authRequired, async (req, res) => {
-  res.status(201).json(await createResource("projects", { user: req.user.id, ...req.body }));
+  res.status(201).json(await createResource("projects", { user: req.user.id, ...pickFields(req.body, ["title", "description", "skills", "status", "links"]) }));
 });
 
 app.put("/api/projects/:id", authRequired, async (req, res) => {
-  res.json(await updateResource("projects", req.params.id, req.body));
+  const updated = await updateOwnedResource("projects", req.params.id, req.user.id, pickFields(req.body, ["title", "description", "skills", "status", "links"]));
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
 app.get("/api/internships", async (_req, res) => {
   res.json(await listResource("internships"));
 });
 
-app.post("/api/internships", authRequired, async (req, res) => {
-  res.status(201).json(await createResource("internships", req.body));
+app.post("/api/internships", authRequired, requireAdmin, async (req, res) => {
+  res.status(201).json(await createResource("internships", pickFields(req.body, ["role", "company", "domain", "location", "duration", "stipend", "remote", "type", "matchScore", "skills"])));
 });
 
 app.post("/api/internships/:id/apply", authRequired, async (req, res) => {
@@ -2162,8 +1992,8 @@ app.get("/api/hackathons", async (_req, res) => {
   res.json(await listResource("hackathons"));
 });
 
-app.post("/api/hackathons", authRequired, async (req, res) => {
-  res.status(201).json(await createResource("hackathons", req.body));
+app.post("/api/hackathons", authRequired, requireAdmin, async (req, res) => {
+  res.status(201).json(await createResource("hackathons", pickFields(req.body, ["title", "domain", "duration", "prize", "startsAt", "mode", "skills"])));
 });
 
 app.post("/api/hackathons/:id/register", authRequired, (req, res) => {
@@ -2176,17 +2006,22 @@ app.post("/api/hackathons/:id/register", authRequired, (req, res) => {
   res.json({ message: "Hackathon registration confirmed.", hackathonId: req.params.id, user: req.user.id });
 });
 
-app.get("/api/certificates", authRequired, async (_req, res) => {
-  res.json(await listResource("certificates"));
+app.get("/api/certificates", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const certificates = await Certificate.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(certificates);
+  }
+  res.json(byUser(memory.certificates || [], req.user.id));
 });
 
 app.post("/api/certificates", authRequired, async (req, res) => {
-  res.status(201).json(await createResource("certificates", { user: req.user.id, ...req.body }));
+  res.status(201).json(await createResource("certificates", { user: req.user.id, ...pickFields(req.body, ["title", "category", "issuedAt", "status", "credentialId", "badgeUrl"]) }));
 });
 
-app.post("/api/certificates/:id/share", authRequired, (req, res) => {
-  const certificate = memory.certificates.find((item) => item.id === req.params.id);
-  if (certificate) {
+app.post("/api/certificates/:id/share", authRequired, async (req, res) => {
+  const certificate = await findOwnedResource("certificates", req.params.id, req.user.id);
+  if (!certificate) return res.status(403).json({ message: "Forbidden." });
+  if (!mongoReady()) {
     certificate.shareCount = Number(certificate.shareCount || 0) + 1;
     persistMemory();
   }
@@ -2256,12 +2091,18 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
   });
 });
 
-app.get("/api/notifications", authRequired, async (_req, res) => {
-  res.json(await listResource("notifications"));
+app.get("/api/notifications", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const notifications = await Notification.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(notifications);
+  }
+  res.json(byUser(memory.notifications || [], req.user.id));
 });
 
 app.patch("/api/notifications/:id/read", authRequired, async (req, res) => {
-  res.json(await updateResource("notifications", req.params.id, { read: true }));
+  const updated = await updateOwnedResource("notifications", req.params.id, req.user.id, { read: true });
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
 app.get("/api/admin/summary", authRequired, requireAdmin, async (_req, res) => {
