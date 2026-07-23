@@ -2,16 +2,12 @@ require("dotenv").config();
 
 const path = require("path");
 const fs = require("fs");
-const dns = require("dns").promises;
 const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const connectDatabase = require("./config/db");
-const { sendOtpEmail, sendWelcomeEmail } = require("./config/mailer");
 const models = require("./models");
 const mockData = require("./data/mockData");
 
@@ -38,9 +34,7 @@ const {
 
 const app = express();
 const port = process.env.PORT || 4000;
-const jwtSecret = process.env.JWT_SECRET || "studox_local_secret";
 const storePath = path.join(__dirname, "data", "runtime-store.json");
-const demoPasswordHash = "$2a$10$VlFtbubhwtdXCVX6ORgsp.BlMNNQdHoI.EOMqVpxiQCobqBERtJ6m";
 const mentorFreeChatLimit = Number(process.env.MENTOR_FREE_CHAT_LIMIT || 10);
 const mentorLimitTemporarilyDisabled = true;
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
@@ -50,7 +44,6 @@ const paymentPlans = {
   elite: { name: "Elite", amount: 70700 },
 };
 const memory = loadMemoryStore();
-ensureDemoAccount();
 
 const resourceMap = {
   users: { model: User, key: "users" },
@@ -104,22 +97,8 @@ function persistMemory() {
   }
 }
 
-function ensureDemoAccount() {
-  if (process.env.NODE_ENV === "production") return;
-  const demoUser = memory.users?.find((user) => user.email === "aarav@studox.ai");
-  if (demoUser && demoUser.password !== demoPasswordHash) {
-    demoUser.password = demoPasswordHash;
-    persistMemory();
-  }
-}
-
 function mongoReady() {
   return mongoose.connection.readyState === 1;
-}
-
-function signToken(user) {
-  const id = user._id || user.id || "user_demo";
-  return jwt.sign({ id, email: user.email, role: user.role || "student" }, jwtSecret, { expiresIn: "7d" });
 }
 
 function publicUser(user) {
@@ -141,72 +120,221 @@ async function resolveFirebaseAuthUser(token) {
   if (!firebaseApp) return null;
 
   const decoded = await firebase.admin.auth().verifyIdToken(token);
-  const firebaseUid = decoded.uid;
-  const email = normalizeEmail(decoded.email);
-  if (!firebaseUid) return null;
-
-  let user = null;
-  if (mongoReady()) {
-    user = await User.findOne({ firebaseUid });
-    if (!user && email) {
-      user = await User.findOneAndUpdate({ email }, { $set: { firebaseUid } }, { new: true });
-    }
-  } else {
-    user = memory.users.find((item) => item.firebaseUid === firebaseUid);
-    if (!user && email) {
-      user = memory.users.find((item) => item.email === email);
-      if (user) {
-        user.firebaseUid = firebaseUid;
-        persistMemory();
-      }
-    }
-  }
-
+  const user = await syncFirebaseUser(decoded);
   if (!user) return null;
   return {
     id: String(user._id || user.id),
     email: user.email,
     role: user.role || "student",
-    firebaseUid,
+    firebaseUid: user.firebaseUid,
   };
 }
 
-async function authOptional(req, _res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) {
-    req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
-    return next();
+async function syncFirebaseUser(decoded) {
+  const firebaseUid = decoded.uid;
+  const email = normalizeEmail(decoded.email);
+  const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
+  const photoURL = decoded.picture || "";
+  const now = new Date();
+
+  if (!firebaseUid) return null;
+  if (!email) return null;
+
+  let user;
+  if (mongoReady()) {
+    // Firebase UID is the canonical identity. Always prefer it before any legacy email migration path.
+    user = await User.findOne({ firebaseUid });
+    if (!user) {
+      const legacyUser = await User.findOne({ email });
+      if (legacyUser) {
+        // TODO (Migration):
+        // This email-linking path exists only to migrate legacy users.
+        // After all users have migrated to Firebase Authentication,
+        // remove this logic entirely.
+        user = await User.findByIdAndUpdate(
+          legacyUser._id,
+          {
+            $set: {
+              firebaseUid,
+              name: legacyUser.name || name,
+              photoURL: photoURL || legacyUser.photoURL,
+              status: legacyUser.status || "pending",
+            },
+          },
+          { new: true },
+        );
+      }
+    }
+    if (!user) {
+      user = await User.create({ firebaseUid, email, name, photoURL, role: "student", status: "pending", plan: "free" });
+    }
+
+    const updates = {
+      lastLoginAt: now,
+      email,
+      name: user.name || name,
+      photoURL: photoURL || user.photoURL,
+    };
+    // TEMPORARY DEVELOPMENT FLOW:
+    // Email verification is not enforced yet, so pending Firebase users become active after login.
+    if (user.status === "pending") {
+      updates.status = "active";
+      if (!user.verifiedAt) updates.verifiedAt = now;
+    }
+    user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
+
+    await StudentProfile.findOneAndUpdate(
+      { user: user._id },
+      {
+        $setOnInsert: {
+          user: user._id,
+          username: email.split("@")[0],
+          skills: [],
+          level: "Beginner",
+          xp: 0,
+          profileCompletion: 0,
+          streak: 0,
+        },
+      },
+      { upsert: true, new: true },
+    );
+    await UserSettings.findOneAndUpdate(
+      { user: user._id },
+      { $setOnInsert: { user: user._id } },
+      { upsert: true, new: true },
+    );
+    return user;
   }
-  try {
-    req.user = jwt.verify(token, jwtSecret);
-  } catch (_error) {
-    try {
-      req.user = (await resolveFirebaseAuthUser(token)) || { id: "user_demo", email: "aarav@studox.ai", role: "student" };
-    } catch (_firebaseError) {
-      req.user = { id: "user_demo", email: "aarav@studox.ai", role: "student" };
+
+  user = memory.users.find((item) => item.firebaseUid === firebaseUid);
+  if (!user) {
+    const legacyUser = memory.users.find((item) => item.email === email);
+    if (legacyUser) {
+      user = legacyUser;
+      user.firebaseUid = firebaseUid;
+      user.name = user.name || name;
+      user.photoURL = photoURL || user.photoURL;
+      user.status = user.status || "pending";
     }
   }
+  if (!user) {
+    user = { id: memoryId("user"), firebaseUid, name, email, photoURL, role: "student", status: "pending", plan: "free" };
+    memory.users.push(user);
+  }
+  user.email = email;
+  user.name = user.name || name;
+  user.photoURL = photoURL || user.photoURL;
+  user.lastLoginAt = now.toISOString();
+  // TEMPORARY DEVELOPMENT FLOW:
+  // Email verification is not enforced yet, so pending Firebase users become active after login.
+  if (user.status === "pending") {
+    user.status = "active";
+    user.verifiedAt = user.verifiedAt || now.toISOString();
+  }
+
+  const userId = user.id || user._id;
+  if (!memory.profiles.find((item) => String(item.user) === String(userId))) {
+    memory.profiles.push({
+      user: userId,
+      username: email.split("@")[0],
+      skills: [],
+      level: "Beginner",
+      xp: 0,
+      profileCompletion: 0,
+      streak: 0,
+    });
+  }
+  if (!memory.settings.find((item) => String(item.user) === String(userId))) {
+    memory.settings.push({ user: userId, theme: "system", accentColor: "#2563eb", language: "English" });
+  }
+  persistMemory();
+  return user;
+}
+
+async function getFirebaseAuthenticatedMongoUser(token) {
+  let firebase;
+  try {
+    firebase = require("./config/firebaseAdmin");
+  } catch (error) {
+    error.statusCode = 503;
+    error.authCode = "firebase_admin_missing";
+    throw error;
+  }
+
+  const firebaseApp = firebase.initializeFirebaseAdmin();
+  if (!firebaseApp) {
+    const error = new Error("Firebase Admin credentials are not configured.");
+    error.statusCode = 503;
+    error.authCode = "firebase_admin_not_configured";
+    throw error;
+  }
+
+  // Firebase is verified first because it is the only identity provider in the finalized auth architecture.
+  const decoded = await firebase.admin.auth().verifyIdToken(token);
+  const firebaseUid = decoded.uid;
+  if (!firebaseUid) {
+    const error = new Error("Firebase token is missing uid.");
+    error.statusCode = 401;
+    error.authCode = "missing_firebase_uid";
+    throw error;
+  }
+  if (!mongoReady()) {
+    const error = new Error("Database is not connected.");
+    error.statusCode = 503;
+    error.authCode = "database_unavailable";
+    throw error;
+  }
+
+  // firebaseUid is canonical. The backend never trusts frontend identity or token role claims.
+  const user = await User.findOne({ firebaseUid });
+  if (!user) {
+    const error = new Error("No Studox account is linked to this Firebase user.");
+    error.statusCode = 401;
+    error.authCode = "unknown_firebase_uid";
+    throw error;
+  }
+
+  // TEMPORARY DEVELOPMENT FLOW:
+  // Pending users are not blocked until the real email verification flow is implemented.
+  if (user.status === "disabled") {
+    const error = new Error("Account is disabled.");
+    error.statusCode = 403;
+    error.authCode = "account_disabled";
+    throw error;
+  }
+  if (user.status === "scheduled_for_deletion") {
+    const error = new Error("Account is scheduled for deletion.");
+    error.statusCode = 403;
+    error.authCode = "account_scheduled_for_deletion";
+    throw error;
+  }
+
+  // req.user must be the MongoDB user document so role and app status always come from Studox.
+  return user;
+}
+
+async function authOptional(req, _res, next) {
+  const errors = [];
+  const token = validateBearerHeader(req, errors, { required: false });
+  if (!token) return next();
+  try {
+    req.user = await resolveFirebaseAuthUser(token);
+  } catch (_error) {}
   next();
 }
 
 async function authRequired(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ message: "Please login to continue." });
+  const errors = [];
+  const token = validateBearerHeader(req, errors);
+  if (!token && errors.some((error) => error.code === "required")) return res.status(401).json({ message: "Please login to continue." });
+  if (errors.length) return validationFailed(res, errors);
   try {
-    req.user = jwt.verify(token, jwtSecret);
+    req.user = await getFirebaseAuthenticatedMongoUser(token);
     return next();
-  } catch (_error) {
-    try {
-      const firebaseUser = await resolveFirebaseAuthUser(token);
-      if (firebaseUser) {
-        req.user = firebaseUser;
-        return next();
-      }
-    } catch (_firebaseError) {
-      // Fall through to the existing expired-session response.
-    }
+  } catch (error) {
+    const status = error.statusCode || 401;
+    if (status === 403) return res.status(403).json({ message: error.message });
+    if (status === 503) return res.status(503).json({ message: error.message });
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 }
@@ -218,16 +346,12 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function findMemoryUser(emailOrPhone) {
-  return memory.users.find((user) => user.email === emailOrPhone || user.phone === emailOrPhone);
-}
-
 function currentUserId(req) {
-  return req.user?.id || "user_demo";
+  return req.user?.id || null;
 }
 
 function byUser(list, userId) {
-  return (list || []).filter((item) => String(item.user || item.userId || "user_demo") === String(userId));
+  return (list || []).filter((item) => String(item.user || item.userId || "") === String(userId));
 }
 
 function roadmapOwnerQuery(userId) {
@@ -1211,38 +1335,6 @@ function hasValidEmailFormat(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
-async function validateEmailDomain(email) {
-  const normalized = normalizeEmail(email);
-  if (!hasValidEmailFormat(normalized)) {
-    return { ok: false, message: "Please enter a valid email address." };
-  }
-
-  const domain = normalized.split("@")[1];
-  const typoDomains = {
-    "gamil.com": "gmail.com",
-    "gmial.com": "gmail.com",
-    "gmai.com": "gmail.com",
-    "gnail.com": "gmail.com",
-    "gmail.co": "gmail.com",
-    "yaho.com": "yahoo.com",
-    "yahoo.co": "yahoo.com",
-    "outlok.com": "outlook.com",
-    "hotmial.com": "hotmail.com",
-  };
-
-  if (typoDomains[domain]) {
-    return { ok: false, message: `Email domain looks wrong. Did you mean ${typoDomains[domain]}?` };
-  }
-
-  try {
-    const mx = await dns.resolveMx(domain);
-    if (!mx.length) return { ok: false, message: "This email domain cannot receive emails." };
-    return { ok: true };
-  } catch (_error) {
-    return { ok: false, message: "This email domain does not exist or cannot receive emails." };
-  }
-}
-
 async function listResource(resource, filter = {}) {
   const config = resourceMap[resource];
   if (!config) return null;
@@ -1276,6 +1368,481 @@ async function updateResource(resource, id, payload) {
   list[index] = { ...list[index], ...payload, updatedAt: new Date().toISOString() };
   persistMemory();
   return list[index];
+}
+
+function isOwnedByUser(item, userId) {
+  return Boolean(item && String(item.user || item.userId || "") === String(userId));
+}
+
+function pickFields(source = {}, fields = []) {
+  return fields.reduce((picked, field) => {
+    if (Object.prototype.hasOwnProperty.call(source, field)) picked[field] = source[field];
+    return picked;
+  }, {});
+}
+
+function validationError(field, message, code = "invalid") {
+  return { field, message, code };
+}
+
+function validationFailed(res, errors) {
+  return res.status(400).json({ message: "Invalid request input.", errors });
+}
+
+function hasField(source = {}, field) {
+  return Object.prototype.hasOwnProperty.call(source, field);
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype);
+}
+
+function validateRequired(source, field, errors) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null || source[field] === "") {
+    errors.push(validationError(field, `${field} is required.`, "required"));
+    return false;
+  }
+  return true;
+}
+
+function validateString(source, field, errors, { required = false, min = 0, max = 500, pattern, allowEmpty = true } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  const value = source[field];
+  if (typeof value !== "string") {
+    errors.push(validationError(field, `${field} must be a string.`, "type"));
+    return;
+  }
+  if (!allowEmpty && !value.trim()) errors.push(validationError(field, `${field} cannot be empty.`, "required"));
+  if (value.length < min) errors.push(validationError(field, `${field} must be at least ${min} characters.`, "min_length"));
+  if (value.length > max) errors.push(validationError(field, `${field} must be at most ${max} characters.`, "max_length"));
+  if (pattern && value && !pattern.test(value)) errors.push(validationError(field, `${field} has an invalid format.`, "format"));
+}
+
+function validateNumber(source, field, errors, { required = false, min, max, integer = false } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null || source[field] === "") {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  const value = source[field];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    errors.push(validationError(field, `${field} must be a number.`, "type"));
+    return;
+  }
+  if (integer && !Number.isInteger(value)) errors.push(validationError(field, `${field} must be an integer.`, "integer"));
+  if (min !== undefined && value < min) errors.push(validationError(field, `${field} must be at least ${min}.`, "min"));
+  if (max !== undefined && value > max) errors.push(validationError(field, `${field} must be at most ${max}.`, "max"));
+}
+
+function validateBoolean(source, field, errors, { required = false } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (typeof source[field] !== "boolean") errors.push(validationError(field, `${field} must be a boolean.`, "type"));
+}
+
+function validateEnum(source, field, values, errors, { required = false } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null || source[field] === "") {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (!values.includes(source[field])) errors.push(validationError(field, `${field} must be one of: ${values.join(", ")}.`, "enum"));
+}
+
+function validateArray(source, field, errors, { required = false, max = 50 } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (!Array.isArray(source[field])) {
+    errors.push(validationError(field, `${field} must be an array.`, "type"));
+    return;
+  }
+  if (source[field].length > max) errors.push(validationError(field, `${field} must contain at most ${max} items.`, "max_items"));
+}
+
+function validatePlainObject(source, field, errors, { required = false } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (!isPlainObject(source[field])) errors.push(validationError(field, `${field} must be a plain object.`, "type"));
+}
+
+function validateObject(source, field, errors, options = {}) {
+  validatePlainObject(source, field, errors, options);
+}
+
+function validateObjectId(source, field, errors, { required = false } = {}) {
+  if (!hasField(source, field) || !source[field]) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (!mongoose.isValidObjectId(String(source[field]))) errors.push(validationError(field, `${field} must be a valid ObjectId.`, "object_id"));
+}
+
+function validateIdentifier(source, field, errors, { required = false, max = 100 } = {}) {
+  if (!hasField(source, field) || source[field] === undefined || source[field] === null || source[field] === "") {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  const value = String(source[field]);
+  if (value.length > max || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    errors.push(validationError(field, `${field} has an invalid format.`, "identifier"));
+  }
+}
+
+function validateObjectIdOrIdentifier(source, field, errors, options = {}) {
+  validateIdentifier(source, field, errors, options);
+}
+
+function validateUrl(source, field, errors, { required = false, max = 500 } = {}) {
+  if (!hasField(source, field) || !source[field]) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (typeof source[field] !== "string" || source[field].length > max) {
+    errors.push(validationError(field, `${field} must be a valid URL string.`, "url"));
+    return;
+  }
+  try {
+    const url = new URL(source[field]);
+    if (!["http:", "https:"].includes(url.protocol)) errors.push(validationError(field, `${field} must be an http(s) URL.`, "url"));
+  } catch (_error) {
+    errors.push(validationError(field, `${field} must be a valid URL.`, "url"));
+  }
+}
+
+function validateDate(source, field, errors, { required = false } = {}) {
+  if (!hasField(source, field) || !source[field]) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  const date = new Date(source[field]);
+  if (Number.isNaN(date.getTime())) errors.push(validationError(field, `${field} must be a valid date.`, "date"));
+}
+
+function validateUuid(source, field, errors, { required = false } = {}) {
+  validateString(source, field, errors, {
+    required,
+    min: 36,
+    max: 36,
+    pattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  });
+}
+
+function validateBearerHeader(req, errors, { required = true } = {}) {
+  const header = req.headers.authorization || "";
+  if (!header) {
+    if (required) errors.push(validationError("authorization", "Authorization header is required.", "required"));
+    return "";
+  }
+  if (typeof header !== "string" || !header.startsWith("Bearer ")) {
+    errors.push(validationError("authorization", "Authorization header must use Bearer token format.", "bearer"));
+    return "";
+  }
+  const token = header.slice(7).trim();
+  if (!token) errors.push(validationError("authorization", "Bearer token is required.", "required"));
+  return token;
+}
+
+function validateAllowedResource(resource, errors) {
+  if (!resourceMap[resource]) errors.push(validationError("resource", "Unknown resource.", "enum"));
+}
+
+function validateNoDangerousKeys(value, errors, field = "body", depth = 0, maxDepth = 6) {
+  if (depth > maxDepth) {
+    errors.push(validationError(field, `${field} is too deeply nested.`, "max_depth"));
+    return;
+  }
+  if (field === "body" && depth === 0 && Array.isArray(value)) {
+    errors.push(validationError(field, "Request body must be a plain object.", "type"));
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => validateNoDangerousKeys(item, errors, `${field}.${index}`, depth + 1, maxDepth));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  if (!isPlainObject(value)) {
+    errors.push(validationError(field, `${field} must be a plain object.`, "type"));
+    return;
+  }
+  Object.entries(value).forEach(([key, child]) => {
+    const childField = `${field}.${key}`;
+    if (key === "__proto__" || key === "prototype" || key === "constructor" || key.startsWith("$") || key.includes(".")) {
+      errors.push(validationError(childField, `${childField} is not allowed.`, "dangerous_key"));
+      return;
+    }
+    validateNoDangerousKeys(child, errors, childField, depth + 1, maxDepth);
+  });
+}
+
+function validateStringArray(source, field, errors, { required = false, max = 30, itemMax = 120 } = {}) {
+  validateArray(source, field, errors, { required, max });
+  if (!Array.isArray(source[field])) return;
+  source[field].forEach((item, index) => {
+    if (typeof item !== "string" || item.trim().length > itemMax) {
+      errors.push(validationError(`${field}.${index}`, `${field}.${index} must be a string under ${itemMax} characters.`, "type"));
+    }
+  });
+}
+
+function validateEducationItems(items, errors, field = "education") {
+  if (!Array.isArray(items)) return;
+  items.forEach((item, index) => {
+    if (!isPlainObject(item)) {
+      errors.push(validationError(`${field}.${index}`, `${field}.${index} must be a plain object.`, "type"));
+      return;
+    }
+    ["school", "degree", "field", "year"].forEach((key) => validateString(item, key, errors, { max: 160 }));
+  });
+}
+
+function validateProfilePayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateString(body, "username", errors, { max: 80 });
+  validateString(body, "goal", errors, { max: 180 });
+  validateString(body, "field", errors, { max: 120 });
+  validateString(body, "college", errors, { max: 160 });
+  validateString(body, "branch", errors, { max: 120 });
+  validateString(body, "bio", errors, { max: 1000 });
+  validateStringArray(body, "skills", errors, { max: 50, itemMax: 80 });
+  validateArray(body, "education", errors, { max: 20 });
+  validateEducationItems(body.education, errors);
+  validateEnum(body, "level", ["Beginner", "Intermediate", "Advanced"], errors);
+}
+
+function validateSettingsPayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateEnum(body, "theme", ["light", "dark", "system"], errors);
+  validateString(body, "accentColor", errors, { max: 32, pattern: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i });
+  validateString(body, "language", errors, { max: 60 });
+  validatePlainObject(body, "notifications", errors);
+  validatePlainObject(body, "privacy", errors);
+}
+
+function validateResumePayload(body, errors) {
+  validateNoDangerousKeys(body, errors, "body", 0, 7);
+  validateString(body, "template", errors, { max: 80 });
+  validatePlainObject(body, "sections", errors);
+  validateNumber(body, "atsScore", errors, { min: 0, max: 100 });
+  validateArray(body, "analysis", errors, { max: 50 });
+  if (Array.isArray(body.analysis)) {
+    body.analysis.forEach((item, index) => {
+      if (typeof item !== "string" || item.length > 300) errors.push(validationError(`analysis.${index}`, "analysis items must be short strings.", "type"));
+    });
+  }
+  validateString(body, "targetRole", errors, { max: 120 });
+}
+
+function validateProjectPayload(body, errors, { create = false } = {}) {
+  validateNoDangerousKeys(body, errors);
+  validateString(body, "title", errors, { required: create, min: 1, max: 160, allowEmpty: false });
+  validateString(body, "description", errors, { max: 2000 });
+  validateStringArray(body, "skills", errors, { max: 30, itemMax: 80 });
+  validateString(body, "status", errors, { max: 40 });
+  validatePlainObject(body, "links", errors);
+  if (isPlainObject(body.links)) {
+    validateUrl(body.links, "github", errors);
+    validateUrl(body.links, "demo", errors);
+    validateUrl(body.links, "live", errors);
+    validateUrl(body.links, "repository", errors);
+  }
+}
+
+function validateDsaProblem(problem, errors, field = "problem", { required = false } = {}) {
+  if (!problem) {
+    if (required) errors.push(validationError(field, `${field} is required.`, "required"));
+    return;
+  }
+  if (!isPlainObject(problem)) {
+    errors.push(validationError(field, `${field} must be a plain object.`, "type"));
+    return;
+  }
+  validateString(problem, "title", errors, { required, min: required ? 1 : 0, max: 180, allowEmpty: !required });
+  validateString(problem, "topic", errors, { required, min: required ? 1 : 0, max: 120, allowEmpty: !required });
+  validateEnum(problem, "level", ["Easy", "Medium", "Hard"], errors);
+  validateString(problem, "status", errors, { max: 60 });
+  validateNumber(problem, "score", errors, { min: 0, max: 100 });
+}
+
+function validateDsaPayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateNumber(body, "problemsSolved", errors, { min: 0, max: 100000, integer: true });
+  validateNumber(body, "acceptanceRate", errors, { min: 0, max: 100 });
+  validateNumber(body, "currentStreak", errors, { min: 0, max: 10000, integer: true });
+  validateNumber(body, "ranking", errors, { min: 1, max: 10000000, integer: true });
+  validateNumber(body, "totalProblems", errors, { min: 0, max: 100000, integer: true });
+  validateArray(body, "topics", errors, { max: 100 });
+  (body.topics || []).forEach((topic, index) => {
+    if (!isPlainObject(topic)) return errors.push(validationError(`topics.${index}`, "topics items must be objects.", "type"));
+    validateString(topic, "name", errors, { max: 120 });
+    validateNumber(topic, "solved", errors, { min: 0, max: 100000, integer: true });
+    validateNumber(topic, "total", errors, { min: 0, max: 100000, integer: true });
+  });
+  validateArray(body, "recentProblems", errors, { max: 100 });
+  (body.recentProblems || []).forEach((problem, index) => validateDsaProblem(problem, errors, `recentProblems.${index}`));
+  validateStringArray(body, "badges", errors, { max: 100, itemMax: 80 });
+}
+
+function validateTestSubmissionPayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateArray(body, "answers", errors, { required: true, max: 200 });
+  (body.answers || []).forEach((answer, index) => {
+    if (!isPlainObject(answer)) {
+      errors.push(validationError(`answers.${index}`, "answers items must be objects.", "type"));
+      return;
+    }
+    validateObjectIdOrIdentifier(answer, "question", errors, { required: true, max: 120 });
+    validateString(answer, "selected", errors, { max: 500 });
+  });
+  validateNumber(body, "timeTakenMinutes", errors, { min: 0, max: 600 });
+}
+
+function validateInternshipPayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateString(body, "role", errors, { required: true, min: 1, max: 160, allowEmpty: false });
+  validateString(body, "company", errors, { required: true, min: 1, max: 160, allowEmpty: false });
+  validateString(body, "domain", errors, { max: 120 });
+  validateString(body, "location", errors, { max: 160 });
+  validateString(body, "duration", errors, { max: 80 });
+  validateString(body, "stipend", errors, { max: 80 });
+  validateBoolean(body, "remote", errors);
+  validateString(body, "type", errors, { max: 80 });
+  validateNumber(body, "matchScore", errors, { min: 0, max: 100 });
+  validateStringArray(body, "skills", errors, { max: 30, itemMax: 80 });
+}
+
+function validateHackathonPayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateString(body, "title", errors, { required: true, min: 1, max: 180, allowEmpty: false });
+  validateString(body, "domain", errors, { max: 120 });
+  validateString(body, "duration", errors, { max: 80 });
+  validateString(body, "prize", errors, { max: 120 });
+  validateDate(body, "startsAt", errors);
+  validateString(body, "mode", errors, { max: 80 });
+  validateStringArray(body, "skills", errors, { max: 30, itemMax: 80 });
+}
+
+function validateCertificatePayload(body, errors) {
+  validateNoDangerousKeys(body, errors);
+  validateString(body, "title", errors, { required: true, min: 1, max: 180, allowEmpty: false });
+  validateString(body, "category", errors, { max: 80 });
+  validateDate(body, "issuedAt", errors);
+  validateString(body, "status", errors, { max: 40 });
+  validateString(body, "credentialId", errors, { max: 120 });
+  validateUrl(body, "badgeUrl", errors);
+}
+
+function validateRoadmapGeneratePayload(body, errors) {
+  validateNoDangerousKeys(body, errors, "body", 0, 7);
+  errors.push(...roadmapInputErrors(body).map((message) => validationError("roadmap", message)));
+}
+
+function validateRoadmapSelectPayload(body, errors) {
+  validateNoDangerousKeys(body, errors, "body", 0, 8);
+  validatePlainObject(body, "roadmap", errors, { required: true });
+  if (isPlainObject(body.roadmap)) {
+    errors.push(...roadmapOptionErrors(body.roadmap, 0).map((message) => validationError("roadmap", message)));
+  }
+}
+
+function validateAdminPayload(resource, body, errors) {
+  validateNoDangerousKeys(body, errors, "body", 0, 7);
+  switch (resource) {
+    case "users":
+      validateString(body, "name", errors, { max: 120 });
+      validateString(body, "email", errors, { max: 180 });
+      validateEnum(body, "role", ["student", "admin"], errors);
+      validateEnum(body, "status", ["pending", "active", "scheduled_for_deletion", "disabled"], errors);
+      validateString(body, "phone", errors, { max: 40 });
+      validateUrl(body, "photoURL", errors);
+      validateObjectId(body, "activeRoadmapId", errors);
+      break;
+    case "profiles":
+      validateProfilePayload(body, errors);
+      break;
+    case "settings":
+      validateSettingsPayload(body, errors);
+      break;
+    case "resumes":
+      validateResumePayload(body, errors);
+      break;
+    case "projects":
+      validateProjectPayload(body, errors);
+      break;
+    case "internships":
+      validateInternshipPayload(body, errors);
+      break;
+    case "hackathons":
+      validateHackathonPayload(body, errors);
+      break;
+    case "certificates":
+      validateCertificatePayload(body, errors);
+      break;
+    case "roadmaps":
+      validateString(body, "title", errors, { max: 180 });
+      validateString(body, "careerGoal", errors, { max: 180 });
+      validateString(body, "summary", errors, { max: 2000 });
+      validateNumber(body, "estimatedDurationWeeks", errors, { min: 1, max: 260 });
+      validateString(body, "difficulty", errors, { max: 80 });
+      validateEnum(body, "status", ["draft", "active", "completed", "archived"], errors);
+      validateArray(body, "weeks", errors, { max: 104 });
+      break;
+    case "courses":
+      validateString(body, "title", errors, { max: 180 });
+      validateString(body, "description", errors, { max: 2000 });
+      validateString(body, "level", errors, { max: 80 });
+      validateNumber(body, "progress", errors, { min: 0, max: 100 });
+      validateStringArray(body, "tags", errors, { max: 30, itemMax: 80 });
+      break;
+    case "modules":
+      validateString(body, "title", errors, { max: 180 });
+      validateString(body, "description", errors, { max: 2000 });
+      validateNumber(body, "order", errors, { min: 0, max: 1000, integer: true });
+      validateNumber(body, "lessons", errors, { min: 0, max: 500, integer: true });
+      validateEnum(body, "status", ["completed", "in-progress", "locked"], errors);
+      validateNumber(body, "progress", errors, { min: 0, max: 100 });
+      validateStringArray(body, "resources", errors, { max: 25, itemMax: 200 });
+      break;
+    case "tests":
+      validateString(body, "title", errors, { max: 180 });
+      validateNumber(body, "durationMinutes", errors, { min: 1, max: 600, integer: true });
+      validateNumber(body, "totalQuestions", errors, { min: 0, max: 500, integer: true });
+      validateDate(body, "scheduledAt", errors);
+      validateStringArray(body, "sections", errors, { max: 20, itemMax: 80 });
+      break;
+    case "questions":
+      validateObjectIdOrIdentifier(body, "test", errors);
+      validateString(body, "prompt", errors, { max: 2000 });
+      validateStringArray(body, "options", errors, { max: 10, itemMax: 500 });
+      validateString(body, "answer", errors, { max: 500 });
+      break;
+    default:
+      break;
+  }
+}
+
+async function findOwnedResource(resource, id, userId) {
+  const config = resourceMap[resource];
+  if (!config) return null;
+  if (mongoReady() && config.model && mongoose.isValidObjectId(id)) {
+    const item = await config.model.findById(id).lean();
+    return isOwnedByUser(item, userId) ? item : null;
+  }
+  const list = memory[config.key] || [];
+  const item = list.find((entry) => String(entry.id || entry._id) === String(id));
+  return isOwnedByUser(item, userId) ? item : null;
+}
+
+async function updateOwnedResource(resource, id, userId, payload) {
+  const item = await findOwnedResource(resource, id, userId);
+  if (!item) return null;
+  return updateResource(resource, id, payload);
 }
 
 async function deleteResource(resource, id) {
@@ -1324,9 +1891,10 @@ app.get("/api/firebase/config", (_req, res) => {
 
 app.post("/api/auth/firebase", async (req, res) => {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-    if (!token) return res.status(401).json({ message: "Firebase ID token is required." });
+    const errors = [];
+    const token = validateBearerHeader(req, errors);
+    if (!token && errors.some((error) => error.code === "required")) return res.status(401).json({ message: "Firebase ID token is required." });
+    if (errors.length) return validationFailed(res, errors);
 
     let firebase;
     try {
@@ -1344,183 +1912,15 @@ app.post("/api/auth/firebase", async (req, res) => {
     if (!firebaseApp) return res.status(503).json({ message: "Firebase Admin credentials are not configured." });
 
     const decoded = await firebase.admin.auth().verifyIdToken(token);
-    const firebaseUid = decoded.uid;
-    const email = normalizeEmail(decoded.email);
-    const name = decoded.name || decoded.displayName || (email ? email.split("@")[0] : "Studox Student");
-    const photoURL = decoded.picture || "";
+    if (!decoded.uid) return res.status(400).json({ message: "Firebase token is missing uid." });
+    if (!normalizeEmail(decoded.email)) return res.status(400).json({ message: "Firebase account email is required." });
 
-    if (!firebaseUid) return res.status(400).json({ message: "Firebase token is missing uid." });
-    if (!email) return res.status(400).json({ message: "Firebase account email is required." });
-
-    let user;
-    if (mongoReady()) {
-      user = await User.findOne({ firebaseUid });
-      if (!user) {
-        user = await User.findOneAndUpdate(
-          { email },
-          { $set: { firebaseUid, name, photoURL } },
-          { new: true },
-        );
-      }
-      if (!user) {
-        user = await User.create({ firebaseUid, email, name, photoURL, role: "student", plan: "free" });
-      }
-
-      await StudentProfile.findOneAndUpdate(
-        { user: user._id },
-        {
-          $setOnInsert: {
-            user: user._id,
-            username: email.split("@")[0],
-            skills: [],
-            level: "Beginner",
-            xp: 0,
-            profileCompletion: 0,
-            streak: 0,
-          },
-        },
-        { upsert: true, new: true },
-      );
-      await UserSettings.findOneAndUpdate(
-        { user: user._id },
-        { $setOnInsert: { user: user._id } },
-        { upsert: true, new: true },
-      );
-    } else {
-      user = memory.users.find((item) => item.firebaseUid === firebaseUid);
-      if (!user) {
-        user = memory.users.find((item) => item.email === email);
-        if (user) {
-          user.firebaseUid = firebaseUid;
-          user.name = name || user.name;
-          user.photoURL = photoURL;
-        }
-      }
-      if (!user) {
-        user = { id: memoryId("user"), firebaseUid, name, email, photoURL, role: "student", plan: "free" };
-        memory.users.push(user);
-      }
-      const userId = user.id || user._id;
-      if (!memory.profiles.find((item) => String(item.user) === String(userId))) {
-        memory.profiles.push({
-          user: userId,
-          username: email.split("@")[0],
-          skills: [],
-          level: "Beginner",
-          xp: 0,
-          profileCompletion: 0,
-          streak: 0,
-        });
-      }
-      if (!memory.settings.find((item) => String(item.user) === String(userId))) {
-        memory.settings.push({ user: userId, theme: "system", accentColor: "#2563eb", language: "English" });
-      }
-      persistMemory();
-    }
+    const user = await syncFirebaseUser(decoded);
+    if (!user) return res.status(401).json({ message: "Firebase authentication failed." });
 
     res.json({ success: true, user: publicUser(user) });
   } catch (error) {
     res.status(401).json({ message: "Firebase authentication failed.", error: error.message });
-  }
-});
-
-app.post("/api/auth/signup", async (req, res) => {
-  try {
-    const { name, phone, password, field } = req.body;
-    const email = normalizeEmail(req.body.email);
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email and password are required." });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ message: "Password must be at least 8 characters." });
-    }
-    const emailCheck = await validateEmailDomain(email);
-    if (!emailCheck.ok) {
-      return res.status(400).json({ message: emailCheck.message });
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-    let user;
-    let createdUserId;
-
-    if (mongoReady()) {
-      const exists = await User.findOne({ email });
-      if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = await User.create({ name, email, phone, password: hashed });
-      createdUserId = user._id;
-      await StudentProfile.create({
-        user: user._id,
-        username: email.split("@")[0],
-        field,
-        skills: [],
-        level: "Beginner",
-        xp: 0,
-        profileCompletion: 0,
-        streak: 0,
-      });
-      await UserSettings.create({ user: user._id });
-    } else {
-      const exists = memory.users.find((item) => item.email === email);
-      if (exists) return res.status(409).json({ message: "Account already exists. Please login instead." });
-      user = { id: memoryId("user"), name, email, phone, password: hashed, role: "student", plan: "free" };
-      memory.users.push(user);
-      memory.profiles.push({
-        user: user.id,
-        username: email.split("@")[0],
-        field,
-        skills: [],
-        level: "Beginner",
-        xp: 0,
-        profileCompletion: 0,
-        streak: 0,
-      });
-      memory.settings.push({ user: user.id, theme: "system", accentColor: "#2563eb", language: "English" });
-      persistMemory();
-    }
-
-    let welcomeEmailSent = false;
-    let emailWarning = "";
-    try {
-      await sendWelcomeEmail({ to: email, name, goal: "your learning goal" });
-      welcomeEmailSent = true;
-    } catch (error) {
-      emailWarning = error.code === "EMAIL_NOT_CONFIGURED"
-        ? "Signup email is not configured. Please contact admin."
-        : "We could not send welcome email right now. Account was created.";
-      console.warn(emailWarning);
-      console.warn(error.message);
-    }
-
-    res.status(201).json({
-      message: welcomeEmailSent ? "Account created. Welcome email sent." : "Account created.",
-      token: signToken(user),
-      user: publicUser(user),
-      welcomeEmailSent,
-      emailWarning,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Signup failed.", error: error.message });
-  }
-});
-
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const emailOrPhone = req.body.email || req.body.phone;
-    const password = req.body.password || "";
-    if (!emailOrPhone || !password) return res.status(400).json({ message: "Email or phone and password are required." });
-
-    let user;
-    if (mongoReady()) user = await User.findOne({ $or: [{ email: emailOrPhone }, { phone: emailOrPhone }] });
-    else user = findMemoryUser(emailOrPhone);
-
-    if (!user) return res.status(404).json({ message: "Account not found." });
-    const valid = await bcrypt.compare(password, user.password || "");
-    if (!valid) return res.status(401).json({ message: "Invalid password." });
-
-    if (mongoReady() && user._id) await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
-    res.json({ message: "Logged in successfully.", token: signToken(user), user: publicUser(user) });
-  } catch (error) {
-    res.status(500).json({ message: "Login failed.", error: error.message });
   }
 });
 
@@ -1550,10 +1950,10 @@ app.get("/api/billing/plan", authRequired, async (req, res) => {
 });
 
 app.post("/api/payments/create-order", authRequired, async (req, res) => {
+  const errors = [];
   const plan = String(req.body.plan || "").toLowerCase();
-  if (!["pro", "elite"].includes(plan)) {
-    return res.status(400).json({ message: "Please choose a valid premium plan." });
-  }
+  validateEnum({ plan }, "plan", ["pro", "elite"], errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
 
   try {
     const order = await createRazorpayOrder({ plan, userId: req.user.id });
@@ -1573,8 +1973,14 @@ app.post("/api/payments/create-order", authRequired, async (req, res) => {
 });
 
 app.post("/api/payments/verify", authRequired, async (req, res) => {
+  const errors = [];
   const plan = String(req.body.plan || "").toLowerCase();
   const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body;
+  validateEnum({ plan }, "plan", ["pro", "elite"], errors, { required: true });
+  validateString(req.body, "razorpay_order_id", errors, { required: true, min: 3, max: 120, pattern: /^[A-Za-z0-9_:-]+$/ });
+  validateString(req.body, "razorpay_payment_id", errors, { required: true, min: 3, max: 120, pattern: /^[A-Za-z0-9_:-]+$/ });
+  validateString(req.body, "razorpay_signature", errors, { required: true, min: 32, max: 256, pattern: /^[A-Za-z0-9_=+/-]+$/ });
+  if (errors.length) return validationFailed(res, errors);
 
   if (!["pro", "elite"].includes(plan)) return res.status(400).json({ message: "Please choose a valid premium plan." });
   if (!orderId || !paymentId || !signature) return res.status(400).json({ message: "Payment verification details are missing." });
@@ -1596,10 +2002,10 @@ app.post("/api/payments/verify", authRequired, async (req, res) => {
 app.post("/api/billing/upgrade", authRequired, async (req, res) => {
   if (process.env.NODE_ENV === "production") return res.status(403).json({ message: "Use verified payment checkout to upgrade plans." });
 
+  const errors = [];
   const plan = String(req.body.plan || "").toLowerCase();
-  if (!["pro", "elite"].includes(plan)) {
-    return res.status(400).json({ message: "Please choose a valid premium plan." });
-  }
+  validateEnum({ plan }, "plan", ["pro", "elite"], errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
 
   const user = await activateUserPlan(req.user.id, plan);
   if (!user) return res.status(404).json({ message: "User not found." });
@@ -1611,104 +2017,50 @@ app.post("/api/billing/upgrade", authRequired, async (req, res) => {
     subscription: { status: "active", startedAt: new Date().toISOString() },
   });
 });
-app.post("/api/auth/forgot-password", async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email is required." });
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const otpExpiresAt = new Date(Date.now() + Number(process.env.OTP_EXPIRY_MINUTES || 10) * 60 * 1000);
-  let user;
-
-  if (mongoReady()) {
-    user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "No account found with this email." });
-    user.resetOtp = otp;
-    user.resetOtpExpires = otpExpiresAt;
-    await user.save();
-  } else {
-    user = findMemoryUser(email);
-    if (!user) return res.status(404).json({ message: "No account found with this email." });
-    user.resetOtp = otp;
-    user.resetOtpExpires = otpExpiresAt.toISOString();
-    persistMemory();
-  }
-
-  try {
-    await sendOtpEmail({ to: email, otp, name: user.name });
-    res.json({ message: "OTP sent to your registered email." });
-  } catch (error) {
-    res.status(error.code === "EMAIL_NOT_CONFIGURED" ? 500 : 502).json({
-      message: error.code === "EMAIL_NOT_CONFIGURED"
-        ? "Email OTP is not configured. Add SMTP settings in .env."
-        : "Could not send OTP email. Please check SMTP settings.",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/api/auth/reset-password", async (req, res) => {
-  const { email, otp, password } = req.body;
-  if (!email || !otp || !password) return res.status(400).json({ message: "Email, OTP and new password are required." });
-  if (password.length < 8) return res.status(400).json({ message: "Password must be at least 8 characters." });
-  const hashed = await bcrypt.hash(password, 10);
-
-  if (mongoReady()) {
-    const user = await User.findOne({ email, resetOtp: otp, resetOtpExpires: { $gt: new Date() } });
-    if (!user) return res.status(400).json({ message: "Invalid or expired OTP." });
-    user.password = hashed;
-    user.resetOtp = undefined;
-    user.resetOtpExpires = undefined;
-    await user.save();
-  } else {
-    const user = findMemoryUser(email);
-    const expiresAt = user?.resetOtpExpires ? new Date(user.resetOtpExpires).getTime() : 0;
-    if (!user || user.resetOtp !== otp || expiresAt < Date.now()) return res.status(400).json({ message: "Invalid or expired OTP." });
-    user.password = hashed;
-    delete user.resetOtp;
-    delete user.resetOtpExpires;
-    persistMemory();
-  }
-
-  res.json({ message: "Password reset successfully." });
-});
-
-app.get("/api/profile", authOptional, async (req, res) => {
+app.get("/api/profile", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const profile = await StudentProfile.findOne({ user: req.user.id }).lean();
     if (profile) return res.json(profile);
   }
-  res.json(memory.profiles.find((profile) => profile.user === req.user.id) || memory.profiles[0]);
+  res.json(memory.profiles.find((profile) => String(profile.user) === String(req.user.id)) || {});
 });
 
-app.put("/api/profile", authOptional, async (req, res) => {
+app.put("/api/profile", authRequired, async (req, res) => {
+  const errors = [];
+  validateProfilePayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const profileUpdate = pickFields(req.body, ["username", "goal", "field", "college", "branch", "bio", "skills", "education", "level"]);
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const profile = await StudentProfile.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
+    const profile = await StudentProfile.findOneAndUpdate({ user: req.user.id }, profileUpdate, { new: true, upsert: true }).lean();
     return res.json(profile);
   }
-  const profile = memory.profiles.find((item) => item.user === req.user.id) || memory.profiles[0];
-  Object.assign(profile, req.body, { updatedAt: new Date().toISOString() });
-  if (req.body.name || req.body.email || req.body.phone) {
-    const user = memory.users.find((item) => item.id === req.user.id);
-    if (user) Object.assign(user, { name: req.body.name || user.name, email: req.body.email || user.email, phone: req.body.phone || user.phone });
-  }
+  const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id)) || { user: req.user.id };
+  if (!memory.profiles.includes(profile)) memory.profiles.unshift(profile);
+  Object.assign(profile, profileUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(profile);
 });
 
-app.get("/api/settings", authOptional, async (req, res) => {
+app.get("/api/settings", authRequired, async (req, res) => {
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const settings = await UserSettings.findOne({ user: req.user.id }).lean();
     if (settings) return res.json(settings);
   }
-  res.json(memory.settings.find((settings) => settings.user === req.user.id) || memory.settings[0]);
+  res.json(memory.settings.find((settings) => String(settings.user) === String(req.user.id)) || {});
 });
 
-app.put("/api/settings", authOptional, async (req, res) => {
+app.put("/api/settings", authRequired, async (req, res) => {
+  const errors = [];
+  validateSettingsPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const settingsUpdate = pickFields(req.body, ["theme", "accentColor", "language", "notifications", "privacy"]);
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const settings = await UserSettings.findOneAndUpdate({ user: req.user.id }, req.body, { new: true, upsert: true }).lean();
+    const settings = await UserSettings.findOneAndUpdate({ user: req.user.id }, settingsUpdate, { new: true, upsert: true }).lean();
     return res.json(settings);
   }
-  const settings = memory.settings.find((item) => item.user === req.user.id) || memory.settings[0];
-  Object.assign(settings, req.body, { updatedAt: new Date().toISOString() });
+  const settings = memory.settings.find((item) => String(item.user) === String(req.user.id)) || { user: req.user.id };
+  if (!memory.settings.includes(settings)) memory.settings.unshift(settings);
+  Object.assign(settings, settingsUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(settings);
 });
@@ -1830,11 +2182,12 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
   res.json(roadmaps.map(normalizeRoadmapShape));
 });
 
-app.post("/api/roadmaps/generate", authOptional, async (req, res) => {
+app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
   try {
     const input = { ...req.body, userId: req.user.id };
-    const errors = roadmapInputErrors(input);
-    if (errors.length) return res.status(400).json({ message: "Invalid roadmap input.", errors });
+    const errors = [];
+    validateRoadmapGeneratePayload(input, errors);
+    if (errors.length) return validationFailed(res, errors);
 
     const aiResult = await generateRoadmapOptions(input);
     let roadmaps;
@@ -1865,14 +2218,11 @@ app.post("/api/roadmaps/select", authRequired, async (req, res) => {
       return res.status(400).json({ message: "Valid logged-in user is required." });
     }
 
+    const errors = [];
+    validateRoadmapSelectPayload(req.body, errors);
+    if (errors.length) return validationFailed(res, errors);
+
     const selectedRoadmap = req.body.roadmap;
-    if (!selectedRoadmap || typeof selectedRoadmap !== "object" || Array.isArray(selectedRoadmap)) {
-      return res.status(400).json({ message: "Roadmap is required." });
-    }
-    const optionErrors = roadmapOptionErrors(selectedRoadmap, 0);
-    if (optionErrors.length) {
-      return res.status(400).json({ message: "Invalid roadmap option.", errors: optionErrors });
-    }
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found." });
@@ -1916,6 +2266,9 @@ app.post("/api/roadmaps/select", authRequired, async (req, res) => {
 });
 
 app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   let roadmap;
   if (mongoReady() && mongoose.isValidObjectId(req.user.id) && mongoose.isValidObjectId(req.params.id)) {
     roadmap = await Roadmap.findOne({ _id: req.params.id, ...roadmapOwnerQuery(req.user.id) }).lean();
@@ -1937,21 +2290,35 @@ app.get("/api/courses", async (_req, res) => {
 });
 
 app.get("/api/courses/:id", async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   const courses = await listResource("courses");
   const course = courses.find((item) => String(item._id || item.id || item.slug) === req.params.id) || courses[0];
   const modules = await listResource("modules", mongoReady() && course?._id ? { course: course._id } : {});
   res.json({ ...course, modules: modules.filter((module) => !module.course || module.course === course.id || String(module.course) === String(course._id)) });
 });
 
-app.patch("/api/courses/:courseId/modules/:moduleId", authRequired, async (req, res) => {
-  const updated = await updateResource("modules", req.params.moduleId, req.body);
-  res.json(updated || { message: "Module progress updated in demo mode.", ...req.body });
+app.patch("/api/courses/:courseId/modules/:moduleId", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "courseId", errors, { required: true });
+  validateObjectIdOrIdentifier(req.params, "moduleId", errors, { required: true });
+  validateAdminPayload("modules", req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const moduleUpdate = pickFields(req.body, ["title", "description", "order", "lessons", "status", "progress", "resources"]);
+  const updated = await updateResource("modules", req.params.moduleId, moduleUpdate);
+  res.json(updated || { message: "Module progress updated in demo mode.", ...moduleUpdate });
 });
 
 app.post("/api/courses/:courseId/continue", authRequired, async (req, res) => {
-  const course = memory.courses.find((item) => String(item.id || item._id || item.slug) === String(req.params.courseId)) || memory.courses[0];
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "courseId", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
+  const sourceCourse = memory.courses.find((item) => String(item.id || item._id || item.slug) === String(req.params.courseId)) || memory.courses[0];
+  const course = sourceCourse ? { ...sourceCourse } : null;
   const courseId = course?.id || course?._id || req.params.courseId;
-  const module = memory.modules.find((item) => String(item.course) === String(courseId) && item.status !== "completed") || memory.modules.find((item) => String(item.course) === String(courseId)) || memory.modules[0];
+  const sourceModule = memory.modules.find((item) => String(item.course) === String(courseId) && item.status !== "completed") || memory.modules.find((item) => String(item.course) === String(courseId)) || memory.modules[0];
+  const module = sourceModule ? { ...sourceModule } : null;
   if (module) {
     module.status = module.progress >= 75 ? "completed" : "in-progress";
     module.progress = Math.min(100, Number(module.progress || 0) + 12);
@@ -1984,11 +2351,18 @@ app.get("/api/tests", async (_req, res) => {
 });
 
 app.get("/api/tests/:id/questions", async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   const questions = await listResource("questions");
   res.json(questions.filter((question) => String(question.test) === req.params.id || String(question.test?._id) === req.params.id));
 });
 
-app.post("/api/tests/:id/submit", authOptional, async (req, res) => {
+app.post("/api/tests/:id/submit", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  validateTestSubmissionPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
   const answers = req.body.answers || [];
   const questions = (await listResource("questions")).filter((question) => String(question.test) === req.params.id);
   const correct = answers.filter((answer) => {
@@ -2010,25 +2384,53 @@ app.post("/api/tests/:id/submit", authOptional, async (req, res) => {
   res.status(201).json(result);
 });
 
-app.get("/api/test-results", authOptional, async (_req, res) => {
-  res.json(await listResource("test-results"));
+app.get("/api/test-results", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const results = await TestResult.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(results);
+  }
+  res.json(byUser(memory.testResults || [], req.user.id));
 });
 
-app.get("/api/dsa/progress", authOptional, async (_req, res) => {
-  const list = await listResource("dsa");
-  res.json(list[0]);
+app.get("/api/dsa/progress", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const progress = await DSAProgress.findOne({ user: req.user.id }).lean();
+    return res.json(progress || {});
+  }
+  res.json(memory.dsaProgress.find((item) => String(item.user) === String(req.user.id)) || {});
 });
 
-app.put("/api/dsa/progress", authOptional, async (req, res) => {
-  const current = memory.dsaProgress[0];
-  Object.assign(current, req.body, { updatedAt: new Date().toISOString() });
+app.put("/api/dsa/progress", authRequired, async (req, res) => {
+  let current;
+  const errors = [];
+  validateDsaPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const dsaUpdate = pickFields(req.body, ["problemsSolved", "acceptanceRate", "currentStreak", "ranking", "totalProblems", "topics", "recentProblems", "badges"]);
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    current = await DSAProgress.findOneAndUpdate(
+      { user: req.user.id },
+      { ...dsaUpdate, user: req.user.id, updatedAt: new Date() },
+      { new: true, upsert: true, runValidators: true },
+    ).lean();
+    return res.json(current);
+  }
+  current = memory.dsaProgress.find((item) => String(item.user) === String(req.user.id));
+  if (!current) {
+    current = { user: req.user.id };
+    memory.dsaProgress.unshift(current);
+  }
+  Object.assign(current, dsaUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(current);
 });
 
-app.post("/api/dsa/solve-challenge", authOptional, (req, res) => {
+app.post("/api/dsa/solve-challenge", authRequired, (req, res) => {
+  const errors = [];
+  validateNoDangerousKeys(req.body, errors);
+  validateDsaProblem(req.body.problem, errors, "problem");
+  if (errors.length) return validationFailed(res, errors);
   const userId = currentUserId(req);
-  let current = memory.dsaProgress.find((item) => String(item.user || "user_demo") === String(userId));
+  let current = memory.dsaProgress.find((item) => String(item.user || "") === String(userId));
   if (!current) {
     current = { user: userId, problemsSolved: 0, acceptanceRate: 0, currentStreak: 0, ranking: 5000, totalProblems: 760, topics: [], recentProblems: [], badges: [] };
     memory.dsaProgress.push(current);
@@ -2053,20 +2455,35 @@ app.post("/api/dsa/solve-challenge", authOptional, (req, res) => {
   res.json({ message: "Problem solved and DSA progress updated.", progress: current });
 });
 
-app.get("/api/resume", authOptional, async (_req, res) => {
-  const list = await listResource("resumes");
-  res.json(list[0]);
+app.get("/api/resume", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const resume = await Resume.findOne({ user: req.user.id }).sort({ createdAt: -1 }).lean();
+    return res.json(resume || {});
+  }
+  res.json(memory.resumes.find((item) => String(item.user) === String(req.user.id)) || {});
 });
 
-app.post("/api/resume", authOptional, async (req, res) => {
-  res.status(201).json(await createResource("resumes", { user: req.user.id, ...req.body }));
+app.post("/api/resume", authRequired, async (req, res) => {
+  const errors = [];
+  validateResumePayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  res.status(201).json(await createResource("resumes", { user: req.user.id, ...pickFields(req.body, ["template", "sections", "atsScore", "analysis", "targetRole"]) }));
 });
 
-app.put("/api/resume/:id", authOptional, async (req, res) => {
-  res.json(await updateResource("resumes", req.params.id, req.body));
+app.put("/api/resume/:id", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  validateResumePayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const updated = await updateOwnedResource("resumes", req.params.id, req.user.id, pickFields(req.body, ["template", "sections", "atsScore", "analysis", "targetRole"]));
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
-app.post("/api/resume/ats-score", authOptional, (req, res) => {
+app.post("/api/resume/ats-score", authRequired, (req, res) => {
+  const errors = [];
+  validateString(req.body, "resumeText", errors, { required: true, min: 1, max: 50000, allowEmpty: false });
+  if (errors.length) return validationFailed(res, errors);
   const resumeText = `${req.body.resumeText || ""}`.toLowerCase();
   const keywords = ["react", "node", "mongodb", "api", "project", "internship", "dsa"];
   const matches = keywords.filter((keyword) => resumeText.includes(keyword)).length;
@@ -2081,27 +2498,46 @@ app.post("/api/resume/ats-score", authOptional, (req, res) => {
   });
 });
 
-app.get("/api/projects", authOptional, async (_req, res) => {
-  res.json(await listResource("projects"));
+app.get("/api/projects", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(projects);
+  }
+  res.json(byUser(memory.projects || [], req.user.id));
 });
 
-app.post("/api/projects", authOptional, async (req, res) => {
-  res.status(201).json(await createResource("projects", { user: req.user.id, ...req.body }));
+app.post("/api/projects", authRequired, async (req, res) => {
+  const errors = [];
+  validateProjectPayload(req.body, errors, { create: true });
+  if (errors.length) return validationFailed(res, errors);
+  res.status(201).json(await createResource("projects", { user: req.user.id, ...pickFields(req.body, ["title", "description", "skills", "status", "links"]) }));
 });
 
-app.put("/api/projects/:id", authOptional, async (req, res) => {
-  res.json(await updateResource("projects", req.params.id, req.body));
+app.put("/api/projects/:id", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  validateProjectPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  const updated = await updateOwnedResource("projects", req.params.id, req.user.id, pickFields(req.body, ["title", "description", "skills", "status", "links"]));
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
 app.get("/api/internships", async (_req, res) => {
   res.json(await listResource("internships"));
 });
 
-app.post("/api/internships", authOptional, async (req, res) => {
-  res.status(201).json(await createResource("internships", req.body));
+app.post("/api/internships", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateInternshipPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  res.status(201).json(await createResource("internships", pickFields(req.body, ["role", "company", "domain", "location", "duration", "stipend", "remote", "type", "matchScore", "skills"])));
 });
 
-app.post("/api/internships/:id/apply", authOptional, async (req, res) => {
+app.post("/api/internships/:id/apply", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   const internship = memory.internships.find((item) => item.id === req.params.id);
   if (internship) {
     internship.applicants = internship.applicants || [];
@@ -2115,11 +2551,17 @@ app.get("/api/hackathons", async (_req, res) => {
   res.json(await listResource("hackathons"));
 });
 
-app.post("/api/hackathons", authOptional, async (req, res) => {
-  res.status(201).json(await createResource("hackathons", req.body));
+app.post("/api/hackathons", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateHackathonPayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  res.status(201).json(await createResource("hackathons", pickFields(req.body, ["title", "domain", "duration", "prize", "startsAt", "mode", "skills"])));
 });
 
-app.post("/api/hackathons/:id/register", authOptional, (req, res) => {
+app.post("/api/hackathons/:id/register", authRequired, (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   const hackathon = memory.hackathons.find((item) => item.id === req.params.id);
   if (hackathon) {
     hackathon.registrations = hackathon.registrations || [];
@@ -2129,17 +2571,28 @@ app.post("/api/hackathons/:id/register", authOptional, (req, res) => {
   res.json({ message: "Hackathon registration confirmed.", hackathonId: req.params.id, user: req.user.id });
 });
 
-app.get("/api/certificates", authOptional, async (_req, res) => {
-  res.json(await listResource("certificates"));
+app.get("/api/certificates", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const certificates = await Certificate.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(certificates);
+  }
+  res.json(byUser(memory.certificates || [], req.user.id));
 });
 
-app.post("/api/certificates", authOptional, async (req, res) => {
-  res.status(201).json(await createResource("certificates", { user: req.user.id, ...req.body }));
+app.post("/api/certificates", authRequired, async (req, res) => {
+  const errors = [];
+  validateCertificatePayload(req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
+  res.status(201).json(await createResource("certificates", { user: req.user.id, ...pickFields(req.body, ["title", "category", "issuedAt", "status", "credentialId", "badgeUrl"]) }));
 });
 
-app.post("/api/certificates/:id/share", authOptional, (req, res) => {
-  const certificate = memory.certificates.find((item) => item.id === req.params.id);
-  if (certificate) {
+app.post("/api/certificates/:id/share", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
+  const certificate = await findOwnedResource("certificates", req.params.id, req.user.id);
+  if (!certificate) return res.status(403).json({ message: "Forbidden." });
+  if (!mongoReady()) {
     certificate.shareCount = Number(certificate.shareCount || 0) + 1;
     persistMemory();
   }
@@ -2147,6 +2600,12 @@ app.post("/api/certificates/:id/share", authOptional, (req, res) => {
 });
 
 app.post("/api/ai/counselling", authOptional, async (req, res) => {
+  const errors = [];
+  validateNoDangerousKeys(req.body, errors);
+  validateEnum(req.body, "step", ["education", "skills"], errors);
+  validateString(req.body, "education", errors, { max: 800 });
+  validateString(req.body, "skills", errors, { max: 800 });
+  if (errors.length) return validationFailed(res, errors);
   const step = String(req.body.step || "education").trim();
   const education = String(req.body.education || "").trim();
   const skills = String(req.body.skills || "").trim();
@@ -2167,9 +2626,12 @@ app.get("/api/ai-mentor/chat", authRequired, async (req, res) => {
 });
 
 app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
+  const errors = [];
+  validateNoDangerousKeys(req.body, errors);
+  validateString(req.body, "message", errors, { required: true, min: 1, max: 2000, allowEmpty: false });
+  validateString(req.body, "topic", errors, { max: 120 });
+  if (errors.length) return validationFailed(res, errors);
   const message = String(req.body.message || "").trim();
-  if (!message) return res.status(400).json({ message: "Message is required." });
-  if (message.length > 2000) return res.status(400).json({ message: "Message is too long. Keep it under 2000 characters." });
   const plan = await getUserPlan(req.user.id);
   const used = await countMentorChats(req.user.id);
   if (!mentorLimitTemporarilyDisabled && !isPremiumPlan(plan) && used >= mentorFreeChatLimit) {
@@ -2211,12 +2673,21 @@ app.post("/api/ai-mentor/chat", authRequired, async (req, res) => {
   });
 });
 
-app.get("/api/notifications", authOptional, async (_req, res) => {
-  res.json(await listResource("notifications"));
+app.get("/api/notifications", authRequired, async (req, res) => {
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const notifications = await Notification.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(notifications);
+  }
+  res.json(byUser(memory.notifications || [], req.user.id));
 });
 
-app.patch("/api/notifications/:id/read", authOptional, async (req, res) => {
-  res.json(await updateResource("notifications", req.params.id, { read: true }));
+app.patch("/api/notifications/:id/read", authRequired, async (req, res) => {
+  const errors = [];
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
+  const updated = await updateOwnedResource("notifications", req.params.id, req.user.id, { read: true });
+  if (!updated) return res.status(403).json({ message: "Forbidden." });
+  res.json(updated);
 });
 
 app.get("/api/admin/summary", authRequired, requireAdmin, async (_req, res) => {
@@ -2238,24 +2709,40 @@ app.get("/api/admin/summary", authRequired, requireAdmin, async (_req, res) => {
 });
 
 app.get("/api/admin/:resource", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateAllowedResource(req.params.resource, errors);
+  if (errors.length) return validationFailed(res, errors);
   const data = await listResource(req.params.resource);
   if (!data) return res.status(404).json({ message: "Unknown admin resource." });
   res.json(data);
 });
 
 app.post("/api/admin/:resource", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateAllowedResource(req.params.resource, errors);
+  validateAdminPayload(req.params.resource, req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
   const item = await createResource(req.params.resource, req.body);
   if (!item) return res.status(404).json({ message: "Unknown admin resource." });
   res.status(201).json(item);
 });
 
 app.put("/api/admin/:resource/:id", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateAllowedResource(req.params.resource, errors);
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  validateAdminPayload(req.params.resource, req.body, errors);
+  if (errors.length) return validationFailed(res, errors);
   const item = await updateResource(req.params.resource, req.params.id, req.body);
   if (!item) return res.status(404).json({ message: "Resource item not found." });
   res.json(item);
 });
 
 app.delete("/api/admin/:resource/:id", authRequired, requireAdmin, async (req, res) => {
+  const errors = [];
+  validateAllowedResource(req.params.resource, errors);
+  validateObjectIdOrIdentifier(req.params, "id", errors, { required: true });
+  if (errors.length) return validationFailed(res, errors);
   const item = await deleteResource(req.params.resource, req.params.id);
   if (!item) return res.status(404).json({ message: "Resource item not found." });
   res.json({ message: "Deleted.", item });

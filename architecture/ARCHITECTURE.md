@@ -10,7 +10,7 @@ Studox.ai is a single-page student learning platform with:
 
 - Landing page and assessment flow
 - Login/signup with Firebase Authentication
-- Legacy JWT authentication is still present as a compatibility fallback
+- Firebase Authentication is the only active authentication provider
 - AI roadmap generation
 - Dashboard and roadmap pages
 - Courses, tests, DSA, resume, projects, internships, hackathons, certificates, AI mentor, profile, settings, and admin screens
@@ -71,15 +71,14 @@ studox.ai/
 
 ## 2A. Firebase Auth Migration Status
 
-Firebase is currently in Phase 3 frontend-auth mode.
+Firebase is now the active authentication architecture.
 
-Previous Phase 2 behavior, now replaced on the frontend:
+Previous custom backend password/JWT authentication has been removed:
 
 ```text
-Login/Signup
--> /api/auth/login or /api/auth/signup
--> custom JWT
--> authRequired()/authOptional()
+Firebase Auth
+-> Firebase ID token
+-> Studox backend verification
 ```
 
 Current active frontend authentication uses:
@@ -102,9 +101,12 @@ Prepared Firebase infrastructure:
 - `src/server.js` exposes `POST /api/auth/firebase` to verify a Firebase ID token and find/create the matching Studox `User`, `StudentProfile`, and `UserSettings`.
 - `public/app.js` now uses Firebase Email/Password methods for signup/login and then calls `/api/auth/firebase`.
 - `public/app.js` waits for Firebase auth-state restoration before protected route checks to avoid redirect flicker.
-- `authRequired()` and `authOptional()` still support legacy JWTs, but now also accept Firebase ID tokens and map them to the matching Studox user.
+- `authRequired()` verifies Firebase ID tokens only, loads the MongoDB `User` by `firebaseUid`, and attaches the Mongo user document to `req.user`.
+- `authOptional()` may attach a Firebase-backed Mongo user when a valid Firebase token is present; otherwise it leaves `req.user` undefined.
 
-Important: Legacy backend signup/login endpoints still exist for compatibility, but the active frontend flow no longer calls them.
+Legacy backend signup/login/password-reset endpoints and JWT authentication have been removed. Firebase owns password authentication and password reset.
+
+Current temporary MVP auth decision: email verification is not enforced yet. Firebase users are synced into MongoDB and pending users are activated after login so they can enter the app with valid Firebase credentials. Re-enable email verification enforcement when the real verification UX is ready.
 
 ## 3. Frontend Architecture
 
@@ -185,12 +187,11 @@ This allows a user to complete the assessment before login, then resume roadmap 
 
 ## 4. Authentication Flow
 
-Authentication now uses Firebase on the frontend. Studox still stores lightweight user display/session metadata in browser localStorage:
+Authentication uses Firebase on the frontend. Studox still stores lightweight user display/session metadata in browser localStorage:
 
 ```text
 studox-user
 studox-plan
-studox-auth-provider
 ```
 
 Frontend auth check:
@@ -199,7 +200,7 @@ Frontend auth check:
 hasDemoSession()
 ```
 
-This currently checks the restored Firebase user first, with `studox-token` retained only as a legacy fallback.
+This checks the restored Firebase user. Legacy JWT/local token sessions are no longer used.
 
 Backend auth middleware:
 
@@ -212,8 +213,6 @@ authOptional(req, res, next)
 
 ```text
 Authorization: Bearer <Firebase ID token>
-or
-Authorization: Bearer <legacy jwt>
 ```
 
 When valid, it populates:
@@ -249,6 +248,100 @@ Backend behavior:
 - admin APIs require `requireAdmin`
 - frontend role checks are only for UX; backend role checks are the real access control
 
+### Data Isolation
+
+Authenticated user-specific read endpoints must return only records owned by the authenticated Mongo user from `req.user.id`.
+
+Current owner fields:
+
+- `StudentProfile.user`
+- `UserSettings.user`
+- `Roadmap.user` / `Roadmap.userId`
+- `TestResult.user`
+- `DSAProgress.user`
+- `Resume.user`
+- `Project.user`
+- `Certificate.user`
+- `Notification.user`
+
+Public catalog endpoints such as courses, internships, hackathons, health, and Firebase config remain public. Admin resource endpoints remain protected separately by `authRequired` plus `requireAdmin`.
+
+User-owned resource actions that accept an id must verify ownership before updating or performing an action. If the resource is missing or belongs to another user, the endpoint returns `403 Forbidden` without revealing which case occurred.
+
+Current ownership-protected actions:
+
+- `PUT /api/resume/:id` checks `Resume.user`
+- `PUT /api/projects/:id` checks `Project.user`
+- `POST /api/certificates/:id/share` checks `Certificate.user`
+- `PATCH /api/notifications/:id/read` checks `Notification.user`
+- `PUT /api/dsa/progress` updates only `DSAProgress.user === req.user.id`
+
+Platform-wide content mutations require backend admin authorization through `requireAdmin`.
+
+Current admin-only content mutations:
+
+- `PATCH /api/courses/:courseId/modules/:moduleId`
+- `POST /api/internships`
+- `POST /api/hackathons`
+
+Student actions such as internship application, hackathon registration, roadmap selection, resume/project/certificate creation, and course continue remain authenticated student flows.
+
+`POST /api/courses/:courseId/continue` must not edit global `Course` or `Module` catalog records. It may return a per-request progress copy for the UI, but persistent progress changes must stay on user-owned data such as the user's roadmap/profile/progress records.
+
+Update and create endpoints that accept client data use explicit field allow-lists for user-owned resources and direct platform-content mutations. Client requests must not be able to set server-managed fields such as `_id`, `user`, `userId`, `firebaseUid`, `role`, `status` on users, account lifecycle timestamps, `createdAt`, or `updatedAt`.
+
+Current allow-listed user-owned writes:
+
+- `PUT /api/profile`
+- `PUT /api/settings`
+- `PUT /api/dsa/progress`
+- `POST /api/resume`
+- `PUT /api/resume/:id`
+- `POST /api/projects`
+- `PUT /api/projects/:id`
+- `POST /api/certificates`
+
+Current allow-listed platform-content writes:
+
+- `PATCH /api/courses/:courseId/modules/:moduleId`
+- `POST /api/internships`
+- `POST /api/hackathons`
+
+### Input Validation
+
+The backend uses reusable validation helpers before route handlers touch database helpers or business actions. Validation helpers return a consistent `400` response:
+
+```json
+{
+  "message": "Invalid request input.",
+  "errors": []
+}
+```
+
+Current validation coverage:
+
+- Authorization header Bearer format
+- payment and billing plan enums
+- Razorpay ID/signature primitive formats
+- common route identifiers such as `id`, `courseId`, and `moduleId`
+- admin `resource` enum from `resourceMap`
+- profile payloads including skills and education arrays
+- settings payloads including notification and privacy objects
+- roadmap generate/select payloads using the current roadmap contracts
+- test submission answers arrays
+- DSA progress topics, recent problems, badges, and solve-challenge problem payloads
+- resume sections, analysis arrays, ATS score, and target role
+- project skills and links
+- certificate, internship, and hackathon create payloads
+- AI counselling and mentor chat payloads
+- admin create/update payload checks for supported resources
+
+Complex payload validation rejects malformed object bodies, malformed nested objects, over-sized arrays/strings, invalid URLs/dates/enums, invalid identifiers, excessive nesting, and dangerous object keys such as Mongo operators or prototype-pollution keys before business logic runs.
+
+Remaining validation gap:
+
+- Some generic admin resources still use broad validation because their stored shape is intentionally flexible or legacy/demo-backed. They still pass the dangerous-key and nesting-depth guard.
+
 ## 5. Backend Architecture
 
 The backend entry point is:
@@ -281,7 +374,6 @@ Important `.env` values:
 
 ```env
 PORT=4000
-JWT_SECRET=...
 MONGO_URI=...
 MONGO_DB_NAME=studox_ai
 
@@ -640,7 +732,7 @@ MVP note: the current pulled frontend stores the selected pending roadmap in `lo
 
 Phase 2 update: save-after-signup/login is now explicit. After successful authentication, `savePendingRoadmapAfterAuth()` reads `localStorage["studox-pending-roadmap"]`, calls `POST /api/roadmaps/select`, clears the pending roadmap only after a successful save, and redirects to Dashboard.
 
-Signup does not collect career goal and does not create a roadmap in the MVP. `POST /api/auth/signup` creates only the user, student profile, and user settings. Career goal comes from Assessment -> selected roadmap and is written to the student profile when `POST /api/roadmaps/select` saves the roadmap. The only endpoint that should create a user roadmap is `POST /api/roadmaps/select`.
+Signup does not collect career goal and does not create a roadmap in the MVP. Firebase creates the identity, then `POST /api/auth/firebase` creates/syncs the Studox user, student profile, and user settings. Career goal comes from Assessment -> selected roadmap and is written to the student profile when `POST /api/roadmaps/select` saves the roadmap. The only endpoint that should create a user roadmap is `POST /api/roadmaps/select`.
 
 ## 10. Dashboard and Roadmap Display
 
@@ -719,11 +811,8 @@ week.resources -> resource links
 ### Auth
 
 ```text
-POST /api/auth/signup
-POST /api/auth/login
 GET  /api/auth/me
-POST /api/auth/forgot-password
-POST /api/auth/reset-password
+POST /api/auth/firebase
 ```
 
 ### Dashboard and Roadmap
@@ -933,7 +1022,7 @@ Implemented:
 
 - Landing page
 - Login/signup
-- JWT auth
+- Firebase auth
 - Assessment UI
 - Short MVP assessment with required and optional questions
 - Manual frontend roadmap option generation for MVP

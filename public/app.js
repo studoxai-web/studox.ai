@@ -63,29 +63,16 @@ let firebaseCurrentUser = null;
 let firebaseAuthReadyPromise = null;
 let firebaseSessionSyncPromise = null;
 
-if (localStorage.getItem("demoSession") === "true" && !localStorage.getItem("studox-token")) {
-  localStorage.removeItem("demoSession");
-  localStorage.removeItem("studox-user");
-  currentUser = defaultUser;
-}
-
 function hasDemoSession() {
-  return Boolean(firebaseCurrentUser || localStorage.getItem("studox-token"));
-}
-
-function createDemoSession(user = currentUser) {
-  localStorage.setItem("studox-user", JSON.stringify(user));
+  return Boolean(firebaseCurrentUser);
 }
 
 function clearDemoSession() {
   window.studoxFirebase?.signOut?.().catch(() => {});
   firebaseCurrentUser = null;
   firebaseSessionSyncPromise = null;
-  localStorage.removeItem("demoSession");
-  localStorage.removeItem("studox-token");
   localStorage.removeItem("studox-user");
   localStorage.removeItem("studox-plan");
-  localStorage.removeItem("studox-auth-provider");
   localStorage.removeItem("studox-return-route");
   currentUser = defaultUser;
 }
@@ -123,6 +110,41 @@ async function syncStudoxFirebaseSession(user) {
   } finally {
     firebaseSessionSyncPromise = null;
   }
+}
+
+function isEmailVerificationRequired() {
+  return Boolean(firebaseCurrentUser && currentUser?.status === "pending");
+}
+
+async function requestFirebasePasswordReset(email) {
+  const firebase = await getFirebaseBridge();
+  if (!firebase) throw new Error("Firebase is not configured.");
+  await firebase.sendPasswordResetEmail(email);
+}
+
+function authStatusBlockView(status = currentUser?.status) {
+  const config = {
+    pending: {
+      title: "Verify your email to continue",
+      body: `We sent a verification link to ${currentUser.email || "your email"}. Please verify it, then refresh or login again to unlock Studox.ai.`,
+      action: `<button class="btn primary" type="button" data-action="resend-verification">Resend verification email</button>`,
+    },
+    disabled: {
+      title: "Account disabled",
+      body: "This account is disabled. Please contact Studox support.",
+      action: `<a class="btn primary" href="#landing">Back to home</a>`,
+    },
+    scheduled_for_deletion: {
+      title: "Account unavailable",
+      body: "This account is scheduled for deletion and cannot access Studox.ai features.",
+      action: `<a class="btn primary" href="#landing">Back to home</a>`,
+    },
+  }[status] || {
+    title: "Account access blocked",
+    body: "Please contact Studox support.",
+    action: `<a class="btn primary" href="#landing">Back to home</a>`,
+  };
+  return `<main class="auth-shell"><section class="auth-card"><div class="auth-panel"><span class="auth-badge">${icon("lock")} Account check</span><h1>${config.title}</h1><p>${config.body}</p><div class="hero-actions">${config.action}<button class="btn" type="button" data-action="logout">Logout</button></div></div></section></main>`;
 }
 
 async function waitForFirebaseAuth() {
@@ -409,18 +431,58 @@ async function api(path, options = {}) {
       ...(options.headers || {}),
     };
     const firebaseToken = await getFirebaseIdToken();
-    const legacyToken = localStorage.getItem("studox-token");
     if (firebaseToken) headers.Authorization = `Bearer ${firebaseToken}`;
-    else if (legacyToken) headers.Authorization = `Bearer ${legacyToken}`;
 
     const res = await fetch(`${apiBase}${path}`, {
       ...options,
       headers,
     });
-    return await res.json();
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    handleApiAuthResponse(res.status, data);
+    return data;
   } catch (error) {
     return null;
   }
+}
+
+function handleApiAuthResponse(status, data = {}) {
+  if (status === 401) {
+    toast(data.message || "Please login again.");
+    clearDemoSession();
+    setRoute("login");
+    return;
+  }
+  if (status === 403) {
+    const message = data.message || "";
+    if (message.toLowerCase().includes("email verification")) {
+      currentUser = {
+        ...currentUser,
+        status: "pending",
+        verificationBlockChecked: true,
+      };
+      localStorage.setItem("studox-user", JSON.stringify(currentUser));
+      toast("Please verify your email before continuing.");
+      if (protectedRoutes.has(getRoute())) window.setTimeout(render, 0);
+      return;
+    }
+    if (message.toLowerCase().includes("disabled")) {
+      currentUser = { ...currentUser, status: "disabled" };
+      localStorage.setItem("studox-user", JSON.stringify(currentUser));
+      toast("Your account is disabled. Please contact Studox support.");
+      if (protectedRoutes.has(getRoute())) window.setTimeout(render, 0);
+      return;
+    }
+    if (message.toLowerCase().includes("scheduled")) {
+      currentUser = { ...currentUser, status: "scheduled_for_deletion" };
+      localStorage.setItem("studox-user", JSON.stringify(currentUser));
+      toast("This account is unavailable. Please contact Studox support.");
+      if (protectedRoutes.has(getRoute())) window.setTimeout(render, 0);
+      return;
+    }
+    toast(message || "You do not have access to this action.");
+  }
+  if (status === 503) toast(data.message || "Server is temporarily unavailable. Please try again.");
 }
 
 function statCards(stats = dashboardStats) {
@@ -2185,11 +2247,12 @@ function bindPage() {
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
-      const result = await api("/auth/forgot-password", {
-        method: "POST",
-        body: JSON.stringify({ email: "aarav@studox.ai" }),
-      });
-      toast(result?.message || "OTP sent to your registered email.");
+      try {
+        await requestFirebasePasswordReset(currentUser.email || "aarav@studox.ai");
+        toast("Firebase password reset email sent.");
+      } catch (error) {
+        toast(error.message || "Could not send password reset email.");
+      }
     });
   });
 
@@ -2218,46 +2281,12 @@ function bindPage() {
 
 async function handleLogin(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  const result = await api("/auth/login", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-  if (result?.token) {
-    localStorage.setItem("studox-token", result.token);
-    currentUser = {
-      ...currentUser,
-      name: result.user?.name || currentUser.name,
-      email: result.user?.email || currentUser.email,
-    };
-    localStorage.setItem("studox-user", JSON.stringify(currentUser));
-  }
-  toast(result?.message || "Logged in with demo account.");
-  setRoute("dashboard");
+  toast("Firebase authentication is loading. Please try again.");
 }
 
 async function handleSignup(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  const result = await api("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({ ...data, password: "password123" }),
-  });
-  currentUser = {
-    ...currentUser,
-    name: data.name,
-    email: data.email,
-    avatar: data.name
-      .split(" ")
-      .map((word) => word[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase(),
-  };
-  localStorage.setItem("studox-user", JSON.stringify(currentUser));
-  if (result?.token) localStorage.setItem("studox-token", result.token);
-  toast(result?.message || "Account created. Your roadmap is ready.");
-  setRoute("dashboard");
+  toast("Firebase authentication is loading. Please try again.");
 }
 
 async function handleChat(event) {
@@ -2302,17 +2331,17 @@ async function handleChat(event) {
 async function mentorChatRequest(message) {
   try {
     const firebaseToken = await getFirebaseIdToken();
-    const legacyToken = localStorage.getItem("studox-token");
     const res = await fetch(`${apiBase}/ai-mentor/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: firebaseToken ? `Bearer ${firebaseToken}` : legacyToken ? `Bearer ${legacyToken}` : "",
+        Authorization: firebaseToken ? `Bearer ${firebaseToken}` : "",
       },
       body: JSON.stringify({ message }),
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
+    handleApiAuthResponse(res.status, data);
     return res.ok ? { ok: true, ...data } : { ok: false, status: res.status, ...data };
   } catch (_error) {
     return { ok: false, message: "Server connection failed. Please check backend is running." };
@@ -2418,16 +2447,16 @@ const functionalState = {
 
 api = async function functionalApi(path, options = {}) {
   const firebaseToken = await getFirebaseIdToken();
-  const legacyToken = localStorage.getItem("studox-token");
   const headers = {
     "Content-Type": "application/json",
-    ...(firebaseToken ? { Authorization: `Bearer ${firebaseToken}` } : legacyToken ? { Authorization: `Bearer ${legacyToken}` } : {}),
+    ...(firebaseToken ? { Authorization: `Bearer ${firebaseToken}` } : {}),
     ...(options.headers || {}),
   };
   try {
     const res = await fetch(`${apiBase}${path}`, { ...options, headers });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
+    handleApiAuthResponse(res.status, data);
     if (!res.ok) throw new Error(userFriendlyApiError(data.error || data.message || "Request failed."));
     return data;
   } catch (error) {
@@ -3099,8 +3128,12 @@ bindPage = function functionalBindPage() {
   document.querySelectorAll("[data-action='forgot']").forEach((link) => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
-      const result = await api("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email: "aarav@studox.ai" }) });
-      toast(result?.message || "OTP generated.");
+      try {
+        await requestFirebasePasswordReset(currentUser.email || "aarav@studox.ai");
+        toast("Firebase password reset email sent.");
+      } catch (error) {
+        toast(error.message || "Could not send password reset email.");
+      }
     });
   });
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
@@ -3199,6 +3232,7 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='preview-roadmap']").forEach((card) => card.addEventListener("click", handleRoadmapPreview));
   document.querySelectorAll("[data-action='choose-roadmap']").forEach((button) => button.addEventListener("click", handleChooseRoadmap));
   document.querySelectorAll("[data-action='choose-roadmap-signup']").forEach((button) => button.addEventListener("click", handleChooseRoadmapSignup));
+  document.querySelectorAll("[data-action='resend-verification']").forEach((button) => button.addEventListener("click", handleResendVerification));
   bindAdminTableActions();
 }
 
@@ -3727,6 +3761,21 @@ async function handleAdminAdd(event) {
   await render();
 }
 
+async function handleResendVerification(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const user = firebaseCurrentUser || window.studoxFirebase?.auth?.currentUser;
+    if (!user) return toast("Please login again to resend verification email.");
+    await window.studoxFirebase?.sendEmailVerification?.(user);
+    toast("Verification email sent. Please check your inbox.");
+  } catch (error) {
+    toast(error.message || "Could not send verification email right now.");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function handleAdminEdit(event) {
   const id = event.currentTarget.dataset.adminId;
   if (!id) {
@@ -4048,7 +4097,7 @@ loginForm = function configuredLoginForm() {
     <button class="btn primary glow auth-submit" type="submit">Login ${icon("arrow-right")}</button>
     <div class="form-feedback" data-auth-feedback></div>
   </form>
-  <div class="secure-note">${icon("lock")} Secure JWT login connected to Studox.ai backend.</div>
+  <div class="secure-note">${icon("lock")} Secure Firebase login connected to Studox.ai backend.</div>
   <p class="muted" style="text-align:center;margin-top:18px">New here? <a href="#signup" style="color:var(--blue);font-weight:800">Create an account</a></p>`;
 };
 
@@ -4085,11 +4134,11 @@ function authResetPage() {
         <div class="auth-visual-card">
           <span class="eyebrow">${icon("lock")} Account Recovery</span>
           <h1>Reset Password</h1>
-          <p>Request an OTP on your registered email, enter it below, and create a new secure password.</p>
+          <p>Firebase will send a secure password reset link to your registered email.</p>
         </div>
         <div class="auth-features">
-          <div class="auth-feature"><strong>Email OTP</strong><span>OTP will arrive in your inbox.</span></div>
-          <div class="auth-feature"><strong>Secure Reset</strong><span>OTP expires automatically.</span></div>
+          <div class="auth-feature"><strong>Email Link</strong><span>Reset link will arrive in your inbox.</span></div>
+          <div class="auth-feature"><strong>Firebase Reset</strong><span>Firebase owns password recovery.</span></div>
         </div>
       </aside>
       <section class="auth-panel">
@@ -4097,16 +4146,9 @@ function authResetPage() {
         <p class="muted">Use your registered email address.</p>
         <form class="form-grid" data-form="otp-request" novalidate>
           <div class="field"><label>Email</label><input name="email" type="email" placeholder="you@example.com" required /></div>
-          <button class="btn" type="submit">Send OTP</button>
+          <button class="btn primary glow" type="submit">Send Reset Link</button>
         </form>
-        <div class="divider">then</div>
-        <form class="form-grid" data-form="password-reset" novalidate>
-          <div class="field"><label>Email</label><input name="email" type="email" placeholder="you@example.com" required /></div>
-          <div class="field"><label>OTP</label><input name="otp" inputmode="numeric" placeholder="Enter 6-digit OTP" required /></div>
-          <div class="field password-field"><label>New password</label><input name="password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" minlength="8" required /><button type="button" class="btn icon ghost" data-password-toggle>${icon("eye")}</button></div>
-          <button class="btn primary glow" type="submit">Reset Password</button>
-          <div class="form-feedback" data-auth-feedback></div>
-        </form>
+        <div class="form-feedback" data-auth-feedback></div>
         <p class="muted" style="text-align:center;margin-top:18px"><a href="#login" style="color:var(--blue);font-weight:800">Back to login</a></p>
       </section>
     </section>
@@ -4127,6 +4169,14 @@ render = async function configuredRender() {
   const route = requestedRoute;
   if (protectedRoutes.has(route) && !hasDemoSession()) {
     setRoute("landing");
+    return;
+  }
+  if (protectedRoutes.has(route) && currentUser?.status === "pending" && !currentUser.verificationBlockChecked) {
+    await api("/auth/me");
+  }
+  if (protectedRoutes.has(route) && ["pending", "disabled", "scheduled_for_deletion"].includes(currentUser?.status)) {
+    app.innerHTML = authStatusBlockView(currentUser.status);
+    bindPage();
     return;
   }
   if (route === "admin" && !isAdminUser()) {
@@ -4150,23 +4200,18 @@ handleLogin = async function configuredHandleLogin(event) {
   if (!data.email || !data.password) return showAuthFeedback(feedback, "Email and password are required.", true);
   setFormBusy(form, true);
   try {
-    let result = null;
     const firebase = await getFirebaseBridge();
-    if (firebase) {
-      try {
-        const credential = await firebase.signInWithEmailAndPassword(data.email, data.password);
-        firebaseCurrentUser = credential.user;
-        const token = await credential.user.getIdToken();
-        result = await authRequest("/auth/firebase", null, token);
-      } catch (error) {
-        console.warn("Firebase login skipped, falling back to Studox JWT auth.", error.message);
-      }
-    }
-    if (!result?.ok || !result.token) {
-      result = await authRequest("/auth/login", { email: data.email, password: data.password });
-    }
-    if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
+    if (!firebase) return showAuthFeedback(feedback, "Firebase is not configured.", true);
+    const credential = await firebase.signInWithEmailAndPassword(data.email, data.password);
+    firebaseCurrentUser = credential.user;
+    const token = await credential.user.getIdToken();
+    const result = await authRequest("/auth/firebase", null, token);
+    if (!result?.ok || !result.user) return showAuthFeedback(feedback, result?.message || "Login failed.", true);
     saveAuthSession(result);
+    if (isEmailVerificationRequired()) {
+      setRoute("dashboard");
+      return;
+    }
     if (await savePendingRoadmapAfterAuth()) return;
     if (await resumePendingRoadmapGeneration()) return;
     setRoute("dashboard");
@@ -4188,31 +4233,22 @@ handleSignup = async function configuredHandleSignup(event) {
   if (!data.terms) return showAuthFeedback(feedback, "Please accept the privacy settings to continue.", true);
   setFormBusy(form, true);
   try {
-    let result = null;
     const firebase = await getFirebaseBridge();
-    if (firebase) {
-      try {
-        const credential = await firebase.createUserWithEmailAndPassword(data.email, data.password);
-        await firebase.updateProfile(credential.user, { displayName: data.name });
-        firebaseCurrentUser = credential.user;
-        const token = await credential.user.getIdToken(true);
-        result = await authRequest("/auth/firebase", null, token);
-      } catch (error) {
-        console.warn("Firebase signup skipped, falling back to Studox JWT auth.", error.message);
-      }
-    }
-    if (!result?.ok || !result.token) {
-      result = await authRequest("/auth/signup", {
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        password: data.password
-      });
-    }
-    if (!result?.ok || !result.token) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
+    if (!firebase) return showAuthFeedback(feedback, "Firebase is not configured.", true);
+    const credential = await firebase.createUserWithEmailAndPassword(data.email, data.password);
+    await firebase.updateProfile(credential.user, { displayName: data.name });
+    await firebase.sendEmailVerification?.(credential.user);
+    firebaseCurrentUser = credential.user;
+    const token = await credential.user.getIdToken(true);
+    const result = await authRequest("/auth/firebase", null, token);
+    if (!result?.ok || !result.user) return showAuthFeedback(feedback, result?.message || "Signup failed.", true);
     saveAuthSession(result);
     localStorage.setItem("studox-jarvis-welcome-pending", "true");
     localStorage.removeItem("studox-jarvis-welcome-seen");
+    if (isEmailVerificationRequired()) {
+      setRoute("dashboard");
+      return;
+    }
     if (await savePendingRoadmapAfterAuth()) return;
     setRoute("dashboard");
   } catch (error) {
@@ -4234,17 +4270,13 @@ async function authRequest(path, payload, bearerToken = "") {
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
-    return res.ok ? { ok: true, ...data } : { ok: false, ...data };
+    return res.ok ? { ok: true, ...data } : { ok: false, status: res.status, ...data };
   } catch (_error) {
     return { ok: false, message: "Server connection failed. Please check backend is running." };
   }
 }
 
 function saveAuthSession(result, goal) {
-  localStorage.removeItem("demoSession");
-  if (result.token) localStorage.setItem("studox-token", result.token);
-  else localStorage.removeItem("studox-token");
-  localStorage.setItem("studox-auth-provider", result.token ? "jwt" : "firebase");
   const user = result.user || {};
   currentUser = {
     ...currentUser,
@@ -4253,6 +4285,7 @@ function saveAuthSession(result, goal) {
     goal: goal || currentUser.goal,
     plan: user.plan || currentUser.plan || "free",
     role: user.role || currentUser.role || "student",
+    status: user.status || currentUser.status || "pending",
     avatar: (user.name || currentUser.name)
       .split(" ")
       .map((word) => word[0])
@@ -4450,12 +4483,16 @@ async function handleOtpRequest(event) {
   const data = Object.fromEntries(new FormData(form));
   if (!data.email) return toast("Email is required.");
   setFormBusy(form, true);
-  const result = await api("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email: data.email }) });
-  setFormBusy(form, false);
-  if (!result) return;
-  const resetForm = document.querySelector("[data-form='password-reset']");
-  if (resetForm) resetForm.email.value = data.email;
-  toast(result?.message || "OTP sent to your email. Check inbox or spam.");
+  try {
+    await requestFirebasePasswordReset(data.email);
+    const resetForm = document.querySelector("[data-form='password-reset']");
+    if (resetForm) resetForm.email.value = data.email;
+    toast("Firebase password reset email sent. Check inbox or spam.");
+  } catch (error) {
+    toast(error.message || "Could not send password reset email.");
+  } finally {
+    setFormBusy(form, false);
+  }
 }
 
 async function handlePasswordReset(event) {
@@ -4463,15 +4500,18 @@ async function handlePasswordReset(event) {
   const form = event.currentTarget;
   const feedback = form.querySelector("[data-auth-feedback]");
   const data = Object.fromEntries(new FormData(form));
-  if (!data.email || !data.otp || !data.password) return showAuthFeedback(feedback, "Email, OTP and new password are required.", true);
-  if (data.password.length < 8) return showAuthFeedback(feedback, "Password must be at least 8 characters.", true);
+  if (!data.email) return showAuthFeedback(feedback, "Email is required.", true);
   setFormBusy(form, true);
-  const result = await api("/auth/reset-password", { method: "POST", body: JSON.stringify(data) });
-  setFormBusy(form, false);
-  if (!result) return showAuthFeedback(feedback, "Password reset failed.", true);
-  showAuthFeedback(feedback, "Password reset successful. Please login.", false);
-  toast(result.message || "Password reset successful.");
-  window.setTimeout(() => setRoute("login"), 900);
+  try {
+    await requestFirebasePasswordReset(data.email);
+    showAuthFeedback(feedback, "Firebase password reset email sent. Please check your inbox.", false);
+    toast("Password reset email sent.");
+    window.setTimeout(() => setRoute("login"), 900);
+  } catch (error) {
+    showAuthFeedback(feedback, error.message || "Password reset failed.", true);
+  } finally {
+    setFormBusy(form, false);
+  }
 }
 
 authPage = function cinematicAuthPage(type) {
