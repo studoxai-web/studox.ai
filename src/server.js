@@ -997,6 +997,54 @@ async function generateCompleteRoadmap(input, selectedRoadmap) {
   ]);
 }
 
+function normalizeCounsellingInput(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9+#.\s/-]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function hasCounsellingInputSignal(text, signals) {
+  return signals.some((signal) => signal.test(text));
+}
+
+const counsellingEducationSignals = [
+  /\b(bca|mca|btech|b\.tech|bsc|b\.sc|bcom|b\.com|ba|b\.a|bba|mba|diploma|iti|polytechnic|engineering|cse|computer science)\b/,
+  /\b(10th|12th|11th|school|college|university|graduation|graduate|undergraduate|degree|semester|sem|year|class|student|fresher|internship|intern|job|working|employed|commerce|science|arts|pcm|pcb)\b/,
+  /\b(studying|study|doing|pursuing|preparing|current|currently|abhi|kar raha|kar rha|kar rahi|padh raha|padh rha|padh rahi|mein hu|me hu|main hu)\b/
+];
+
+const counsellingSkillSignals = [
+  /\b(web development|full stack|frontend|backend|html|css|javascript|js|react|node|express|mongodb|sql|python|java|c\+\+|cpp|dsa|data analytics|data analyst|machine learning|ai|ml|ai\/ml|artificial intelligence|cybersecurity|cyber security|ethical hacking|ui\/ux|figma|graphic design|cloud|devops|app development|android|flutter|digital marketing|excel|communication|english)\b/,
+  /\b(web|coding|programming|developer|design|analytics|security|database|portfolio|project|skill|skills|course|learning|seekhna|sikhna|karni|krni|interest|interested)\b/
+];
+
+const counsellingEmptySkillSignals = [/\b(no|nahi|nhi|not sure|confused|decide nahi|decided nahi|blank|skip)\b/];
+const counsellingWeakAnswers = [/^(hi|hello|hey|ok|okay|yes|no|haan|ha|nahi|nhi|thanks|thank you|good|fine)$/];
+
+function validateCounsellingApiAnswer(step, payload = {}) {
+  const education = normalizeCounsellingInput(payload.education);
+  const skills = normalizeCounsellingInput(payload.skills);
+  if (step === "education") {
+    if (!education) return { ok: false, message: "Education/current status is required." };
+    if (education.length < 5 || counsellingWeakAnswers.some((pattern) => pattern.test(education))) {
+      return { ok: false, message: "Answer current education/status se match nahi hua." };
+    }
+    const hasEducation = hasCounsellingInputSignal(education, counsellingEducationSignals);
+    const skillOnly = hasCounsellingInputSignal(education, counsellingSkillSignals) && !hasEducation;
+    if (skillOnly) return { ok: false, message: "Pehle current education/status answer karo, skill baad mein puchha jayega." };
+    if (!hasEducation) return { ok: false, message: "Current education/course/year/status clear nahi mila." };
+    return { ok: true };
+  }
+
+  if (!education) return { ok: false, message: "Education step complete karna required hai." };
+  if (!skills || hasCounsellingInputSignal(skills, counsellingEmptySkillSignals)) return { ok: true };
+  if ((skills.length < 3 && !/\b(ai|ml|js)\b/.test(skills)) || counsellingWeakAnswers.some((pattern) => pattern.test(skills))) {
+    return { ok: false, message: "Skill/career interest answer se match nahi hua." };
+  }
+  const hasSkill = hasCounsellingInputSignal(skills, counsellingSkillSignals);
+  const educationOnly = hasCounsellingInputSignal(skills, counsellingEducationSignals) && !hasSkill;
+  if (educationOnly) return { ok: false, message: "Yeh education/status answer lag raha hai. Skill interest bhejo ya blank rakho." };
+  if (!hasSkill) return { ok: false, message: "Skill/career answer clear nahi mila." };
+  return { ok: true };
+}
 function localCounsellingMessages(step, payload = {}) {
   const education = String(payload.education || "").trim();
   const skills = String(payload.skills || "").trim();
@@ -1044,7 +1092,7 @@ function localCounsellingReport(payload = {}) {
   if (text.includes("ui") || text.includes("ux") || text.includes("figma") || text.includes("design")) recommendedTrack = "UI/UX Designer";
   else if (text.includes("cyber") || text.includes("security")) recommendedTrack = "Cybersecurity";
   else if (text.includes("data") || text.includes("sql") || text.includes("analytics")) recommendedTrack = "Data Analyst";
-  else if ((text.includes("ai") || text.includes("ml") || text.includes("machine")) && !text.includes("web")) recommendedTrack = "AI/ML Engineer";
+  else if (/\b(ai|ml|ai\/ml|machine learning|artificial intelligence)\b/.test(text) && !/\bweb\b/.test(text)) recommendedTrack = "AI/ML Engineer";
   else if (text.includes("web") || text.includes("frontend") || text.includes("html") || text.includes("react")) recommendedTrack = "Web Development";
 
   const scoreFor = (track) => {
@@ -1098,6 +1146,8 @@ Return only JSON. No markdown, no code fences.
 Student education/current status: ${education || "not provided"}
 Student skill interest: ${skills || "not provided"}
 Current counselling step: ${step}
+
+Strict validation behavior: answer only the current step. Education step must discuss current course/status. Skills step must discuss skill/career interest or not-decided. If the answer is weak, ask for the correct answer instead of pretending it is valid.
 
 Allowed career tracks: Full Stack Developer, AI/ML Engineer, Data Analyst, Cybersecurity, UI/UX Designer, Web Development.
 Allowed assessment focus values: Job-ready skills, Internship preparation, Portfolio projects, DSA and coding, Interview preparation.
@@ -2103,6 +2153,8 @@ app.post("/api/ai/counselling", authOptional, async (req, res) => {
   if (!["education", "skills"].includes(step)) return res.status(400).json({ message: "Invalid counselling step." });
   if (step === "education" && !education) return res.status(400).json({ message: "Education/current status is required." });
   if (education.length > 800 || skills.length > 800) return res.status(400).json({ message: "Counselling answer is too long." });
+  const validation = validateCounsellingApiAnswer(step, { education, skills });
+  if (!validation.ok) return res.status(422).json({ code: "COUNSELLING_ANSWER_MISMATCH", message: validation.message });
   const result = await generateCounsellingReply(step, { education, skills });
   res.json(result);
 });

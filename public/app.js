@@ -56,7 +56,7 @@ let pendingRoadmapGeneration = false;
 let pendingRoadmapSelection = false;
 let assessmentStep = 0;
 const assessmentAnswers = {};
-const counsellingState = { step: "education", education: "", skills: "", messages: [], report: null, provider: "local", loading: false };
+const counsellingState = { step: "education", education: "", skills: "", messages: [], report: null, provider: "local", loading: false, error: "" };
 const pendingAssessmentKey = "studox-pending-assessment";
 let firebaseAuthReady = false;
 let firebaseCurrentUser = null;
@@ -454,7 +454,7 @@ function progress(label, value) {
 }
 
 function studoxLandingPage() {
-  return `<main class="landing view">
+  return `<main class="landing view landing-page">
     <nav class="landing-nav" id="navbar">
       ${brand()}
       <div class="nav-links" id="navLinks">
@@ -580,7 +580,7 @@ function studoxLandingPage() {
             <div class="roadmap-detail-grid">
               <article>
                 <h5>Topics</h5>
-                ${["Variables & Data Types", "Functions & Scope", "DOM Manipulation", "Events Handling", "Mini Project"].map((item) => `<p><span>✓</span>${item}</p>`).join("")}
+                ${["Variables & Data Types", "Functions & Scope", "DOM Manipulation", "Events Handling", "Mini Project"].map((item) => `<p><span class="topic-check"></span>${item}</p>`).join("")}
               </article>
               <article>
                 <h5>Resources</h5>
@@ -606,15 +606,151 @@ function studoxLandingPage() {
     </section>
 
     <footer class="landing-footer simple-landing-footer">
-      <p>Loved by students across India</p>
-      <div class="college-strip">
-        <span>NEED DISCUSSION BEFORE WRITING AND TESTING THERE</span>
+      <div class="simple-footer-inner">
+        <div class="footer-mini-brand">
+          ${brand()}
+          <p>AI counselling, personalized roadmaps, curated courses and mentor guidance for students who want clear weekly progress.</p>
+        </div>
+        <nav class="simple-footer-links" aria-label="Landing footer links">
+          <a href="#how-it-works">How It Works</a>
+          <a href="#features">Features</a>
+          <a href="#roadmap">Roadmap</a>
+          <a href="#courses">Courses</a>
+          <a href="#about">About Us</a>
+        </nav>
+        <div class="college-strip">
+          ${["BCA", "B.Tech", "Diploma", "School", "Freshers", "Self learners"].map((item) => `<span>${item}</span>`).join("")}
+        </div>
       </div>
     </footer>
   </main>`;
 }
 
 
+function aboutUsPage() {
+  const stats = [
+    ["2,500+", "students guided", "Across colleges, freshers and self-learners"],
+    ["500+", "college communities", "Built for Indian student learning habits"],
+    ["8", "career signals", "Goal, level, time, projects and learning style"],
+    ["24/7", "AI support", "Counselling, roadmap help and mentor guidance"]
+  ];
+  const pillars = [
+    ["Career clarity first", "We start with counselling because students do not just need content, they need the right direction.", "bot"],
+    ["Roadmaps that feel real", "Every plan considers current level, weekly time, projects, timeline and practical outcomes.", "map"],
+    ["Practice with proof", "Courses, tests, DSA, portfolio projects and progress tracking come together in one student dashboard.", "test"],
+    ["Built for confidence", "Studox.ai turns confusion into weekly actions students can actually complete.", "trophy"]
+  ];
+  const timeline = [
+    ["01", "Understand the student", "AI counselling captures education, interests and skill direction before the assessment."],
+    ["02", "Design the path", "Career assignment turns answers into a focused roadmap for the selected career goal."],
+    ["03", "Learn with structure", "Courses, weekly tasks, tests and projects keep the student moving with clarity."],
+    ["04", "Become career ready", "Resume, internships, practice and mentor support help convert learning into opportunity."]
+  ];
+  const coverage = ["AI career counselling", "Personalized roadmap", "Curated courses", "Weekly tests", "DSA practice", "Projects", "Resume readiness", "Internship tracking", "AI mentor", "Progress analytics"];
+  const team = [
+    ["Students", "The learner at the center", "Every feature is designed around real student confusion, time pressure and placement anxiety."],
+    ["Mentors", "Practical career guidance", "The product voice focuses on clear advice, simple next steps and realistic timelines."],
+    ["AI systems", "Personalized support", "Gemini-powered counselling and mentor flows help scale guidance without losing context."]
+  ];
+
+  return `<main class="landing view about-page">
+    <nav class="landing-nav about-nav" id="navbar">
+      ${brand()}
+      <div class="nav-links" id="navLinks">
+        <a href="#landing">Home</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#features">Features</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="#courses">Courses</a>
+        <a href="#about" class="active">About Us</a>
+      </div>
+      <div class="nav-actions"><a href="#login" class="nav-login-link">Log in</a><a href="#signup" class="btn primary nav-cta-btn">Get Started Free</a></div>
+      <button class="mobile-nav-button" id="mobileNavBtn" aria-label="Toggle menu">${icon("menu")}</button>
+    </nav>
+
+    <section class="about-hero-section">
+      <div class="about-hero-copy">
+        <span class="about-kicker">Built for student success</span>
+        <h1>We are building the AI career companion students wish they had earlier.</h1>
+        <p>Studox.ai helps students move from confusion to a focused career path with AI counselling, personalized roadmaps, curated courses, practice, projects and progress tracking in one premium learning space.</p>
+        <div class="about-hero-actions">
+          <a class="btn primary" href="#counselling" data-action="start-assessment" onclick="window.startRoadmapCounselling?.(event)">Build My AI Roadmap</a>
+          <a class="btn ghost" href="#courses">Explore Courses</a>
+        </div>
+      </div>
+      <div class="about-hero-media">
+        <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80" alt="Students collaborating around laptops" />
+        <div class="about-floating-card primary"><strong>AI counselling</strong><span>Personal direction before roadmap</span></div>
+        <div class="about-floating-card secondary"><strong>Career ready</strong><span>Projects, tests and mentor support</span></div>
+      </div>
+    </section>
+
+    <section class="about-stat-strip">
+      ${stats.map(([value, label, detail]) => `<article><strong>${value}</strong><span>${label}</span><p>${detail}</p></article>`).join("")}
+    </section>
+
+    <section class="about-story-grid">
+      <div class="about-story-image">
+        <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80" alt="Student learning from an online course" loading="lazy" />
+      </div>
+      <div class="about-story-copy">
+        <span class="about-kicker">Why Studox.ai exists</span>
+        <h2>Most students do not fail because they cannot learn. They struggle because the path is unclear.</h2>
+        <p>One student wants full stack. Another wants AI. Someone else is in BCA, diploma, school or B.Tech and does not know where to start. Studox.ai brings counselling, assessment and execution together so every student gets a path that fits their level and weekly time.</p>
+        <div class="about-check-list">
+          ${["No random course jumping", "No generic roadmap confusion", "No guessing what to learn next", "A clear weekly plan with measurable progress"].map((item) => `<span>${icon("star")} ${item}</span>`).join("")}
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section-block">
+      <div class="about-section-head"><span class="about-kicker">What makes us different</span><h2>A complete student growth system, not just another course list.</h2></div>
+      <div class="about-pillar-grid">
+        ${pillars.map(([title, text, iconName]) => `<article><div>${icon(iconName)}</div><h3>${title}</h3><p>${text}</p></article>`).join("")}
+      </div>
+    </section>
+
+    <section class="about-feature-band">
+      <div>
+        <span class="about-kicker">What we cover</span>
+        <h2>Everything needed from first clarity to career readiness.</h2>
+        <p>Studox.ai connects career counselling, roadmap generation, learning, practice, portfolio and progress. Students can discover what to learn, follow it weekly, and build proof along the way.</p>
+      </div>
+      <div class="about-coverage-cloud">
+        ${coverage.map((item) => `<span>${item}</span>`).join("")}
+      </div>
+    </section>
+
+    <section class="about-journey-section">
+      <div class="about-journey-copy">
+        <span class="about-kicker">The Studox journey</span>
+        <h2>From career confusion to a roadmap students can follow.</h2>
+        <p>Our flow is intentionally simple: understand the student, recommend the right direction, build the roadmap, then track consistent progress.</p>
+      </div>
+      <div class="about-journey-list">
+        ${timeline.map(([num, title, text]) => `<article><b>${num}</b><div><h3>${title}</h3><p>${text}</p></div></article>`).join("")}
+      </div>
+    </section>
+
+    <section class="about-people-grid">
+      <div class="about-people-copy">
+        <span class="about-kicker">Who we build for</span>
+        <h2>Students who want a serious career path without feeling lost.</h2>
+        <p>Studox.ai is designed for college students, beginners, self-learners and placement-focused learners who want career guidance that feels personal and actionable.</p>
+        <div class="about-team-list">${team.map(([title, label, text]) => `<article><strong>${title}</strong><span>${label}</span><p>${text}</p></article>`).join("")}</div>
+      </div>
+      <div class="about-people-photos">
+        <img src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=900&q=80" alt="Students and mentors working together" loading="lazy" />
+        <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80" alt="Team discussing learning strategy" loading="lazy" />
+      </div>
+    </section>
+
+    <section class="about-cta-panel">
+      <div><span class="about-kicker">Ready when you are</span><h2>Your roadmap should feel like it was made for you.</h2><p>Start with AI counselling, answer the career assignment, and let Studox.ai turn your goals into weekly progress.</p></div>
+      <a class="btn primary glow" href="#counselling" data-action="start-assessment" onclick="window.startRoadmapCounselling?.(event)">Start AI Counselling</a>
+    </section>
+  </main>`;
+}
 function resetAssessmentFlow() {
   assessmentStep = 0;
   Object.keys(assessmentAnswers).forEach((key) => delete assessmentAnswers[key]);
@@ -636,6 +772,7 @@ function ensureCounsellingStarted() {
   counsellingState.report = null;
   counsellingState.provider = "local";
   counsellingState.loading = false;
+  counsellingState.error = "";
   counsellingState.messages = [
     { from: "ai", text: "Hey, I am Studox AI. Before the career assignment, let me understand your current education and skill direction." },
     { from: "ai", text: "Aap abhi kya kar rahe ho? Example: BCA first year, B.Tech CSE, 12th, diploma, commerce, ya working." }
@@ -683,7 +820,7 @@ function buildClientCounsellingReport(payload = {}) {
   if (text.includes("ui") || text.includes("ux") || text.includes("figma")) recommendedTrack = "UI/UX Designer";
   else if (text.includes("cyber") || text.includes("security")) recommendedTrack = "Cybersecurity";
   else if (text.includes("data") || text.includes("sql") || text.includes("analytics")) recommendedTrack = "Data Analyst";
-  else if ((text.includes("ai") || text.includes("ml")) && !text.includes("web")) recommendedTrack = "AI/ML Engineer";
+  else if (/\b(ai|ml|ai\/ml|machine learning|artificial intelligence)\b/.test(text) && !/\bweb\b/.test(text)) recommendedTrack = "AI/ML Engineer";
   else if (text.includes("web") || text.includes("react") || text.includes("frontend")) recommendedTrack = "Web Development";
   const tracks = [recommendedTrack, "Full Stack Developer", "AI/ML Engineer", "Data Analyst"].filter((item, index, array) => array.indexOf(item) === index).slice(0, 4);
   return {
@@ -814,6 +951,7 @@ function counsellingScreen() {
         <div class="counselling-messages">
           ${counsellingState.messages.map((item) => `<div class="counselling-message ${item.from}"><span>${item.from === "ai" ? icon("bot") : icon("user")}</span><p>${escapeHtml(item.text)}</p></div>`).join("")}
         </div>
+        ${counsellingState.error ? `<div class="counselling-error" role="alert"><strong>Answer mismatch</strong><span>${escapeHtml(counsellingState.error)}</span></div>` : ""}
         ${counsellingState.report ? counsellingReportPanel(counsellingState.report) : ""}
         ${isDone ? `<div class="counselling-actions"><button class="btn primary glow" type="button" data-action="start-career-assessment">Continue to career assignment</button></div>` : `
           <form class="counselling-input-row" data-form="${isSkillStep ? "counselling-skills" : "counselling-education"}">
@@ -856,6 +994,67 @@ function skillCounsellingFeedback(education = "", skills = "") {
     : `Ye skill direction career roadmap ke liye thoda weak lag raha hai. Main suggest karunga ek tech-aligned skill choose karo: Web Development, Data Analytics, AI/ML, Cybersecurity, UI/UX, ya DSA.`;
 }
 
+function normalizeCounsellingAnswer(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9+#.\s/-]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function hasCounsellingSignal(text, signals) {
+  return signals.some((signal) => signal instanceof RegExp ? signal.test(text) : text.includes(signal));
+}
+
+const educationAnswerSignals = [
+  /\b(bca|mca|btech|b\.tech|b\. tech|bsc|b\.sc|bcom|b\.com|ba|b\.a|bba|mba|diploma|iti|polytechnic|engineering|cse|computer science)\b/,
+  /\b(10th|12th|11th|school|college|university|graduation|graduate|undergraduate|degree|semester|sem|year|class|student|fresher|internship|intern|job|working|employed|commerce|science|arts|pcm|pcb)\b/,
+  /\b(studying|study|doing|pursuing|preparing|current|currently|abhi|kar raha|kar rha|kar rahi|padh raha|padh rha|padh rahi|mein hu|me hu|main hu)\b/
+];
+
+const careerSkillSignals = [
+  /\b(web development|full stack|frontend|backend|html|css|javascript|js|react|node|express|mongodb|sql|python|java|c\+\+|cpp|dsa|data analytics|data analyst|machine learning|ai|ml|ai\/ml|artificial intelligence|cybersecurity|cyber security|ethical hacking|ui\/ux|figma|graphic design|cloud|devops|app development|android|flutter|digital marketing|excel|communication|english)\b/,
+  /\b(web|coding|programming|developer|design|analytics|security|database|portfolio|project|skill|skills|course|learning|seekhna|sikhna|karni|krni|interest|interested)\b/
+];
+
+const emptySkillSignals = [/\b(no|nahi|nhi|not sure|confused|decide nahi|decided nahi|blank|skip)\b/];
+const weakCounsellingAnswers = [/^(hi|hello|hey|ok|okay|yes|no|haan|ha|nahi|nhi|thanks|thank you|good|fine)$/];
+
+function validateCounsellingEducationAnswer(answer = "") {
+  const text = normalizeCounsellingAnswer(answer);
+  if (!text) {
+    return { ok: false, message: "Pehle apni current education/status likho, jaise: 'BCA 2nd year', 'B.Tech CSE first year', '12th student', ya 'Diploma final year'." };
+  }
+  if (text.length < 5 || weakCounsellingAnswers.some((pattern) => pattern.test(text))) {
+    return { ok: false, message: "Yeh answer current education/status nahi lag raha. Example likho: 'Main BCA 2nd year kar raha hu' ya 'I am in B.Tech CSE first year'." };
+  }
+  const hasEducation = hasCounsellingSignal(text, educationAnswerSignals);
+  const hasSkillOnly = hasCounsellingSignal(text, careerSkillSignals) && !hasEducation;
+  if (hasSkillOnly) {
+    return { ok: false, message: "Abhi skill nahi puchha hai. Pehle batao aap abhi kya kar rahe ho: course, year, college/school/job status." };
+  }
+  if (!hasEducation) {
+    return { ok: false, message: "Answer question se match nahi hua. Apni current situation clear likho: education/course + year/semester/status." };
+  }
+  return { ok: true };
+}
+
+function validateCounsellingSkillAnswer(answer = "") {
+  const text = normalizeCounsellingAnswer(answer);
+  if (!text || hasCounsellingSignal(text, emptySkillSignals)) return { ok: true };
+  if ((text.length < 3 && !/\b(ai|ml|js)\b/.test(text)) || weakCounsellingAnswers.some((pattern) => pattern.test(text))) {
+    return { ok: false, message: "Yeh skill answer nahi lag raha. Skill ya career interest likho, jaise Web Development, AI/ML, Python, DSA, Data Analytics, Cybersecurity, UI/UX." };
+  }
+  const hasSkill = hasCounsellingSignal(text, careerSkillSignals);
+  const looksEducationOnly = hasCounsellingSignal(text, educationAnswerSignals) && !hasSkill;
+  if (looksEducationOnly) {
+    return { ok: false, message: "Yeh education/status answer lag raha hai. Ab skill interest batao, ya agar decide nahi kiya to blank chhod do." };
+  }
+  if (!hasSkill) {
+    return { ok: false, message: "Answer skill question se match nahi hua. Tech/career skill likho, ya blank chhod do agar abhi decide nahi kiya." };
+  }
+  return { ok: true };
+}
+
+function validateCounsellingStepAnswer(step, answer = "") {
+  return step === "skills" ? validateCounsellingSkillAnswer(answer) : validateCounsellingEducationAnswer(answer);
+}
 async function requestCounsellingAdvice(step, payload, fallbackMessages) {
   try {
     const result = await api("/ai/counselling", {
@@ -1895,6 +2094,7 @@ function adminPage() {
 
 const routeMap = {
   landing: studoxLandingPage,
+  about: aboutUsPage,
   counselling: () => {
     ensureCounsellingStarted();
     return counsellingScreen();
@@ -4277,43 +4477,47 @@ async function handlePasswordReset(event) {
 authPage = function cinematicAuthPage(type) {
   const isLogin = type === "login";
   if (isLogin) {
-    return `<main class="cinematic-auth cinematic-login view">
+    return `<main class="cinematic-auth cinematic-login view dark-login-refresh">
       <div class="auth-sky"><span></span><span></span><span></span><span></span></div>
       <section class="login-frame">
-      <header class="cinematic-auth-head">
+        <header class="cinematic-auth-head">
           ${brand()}
-          <button class="language-pill">${icon("search")} English</button>
+          <a href="#landing" class="language-pill">${icon("home")} Home</a>
         </header>
         <div class="login-main-grid">
           <div class="login-content">
+            <span class="login-dark-kicker">${icon("bot")} AI student cockpit</span>
             <h1>Welcome Back!</h1>
-            <p>Login to continue your learning journey</p>
-            <div class="cinematic-login-card">
+            <p>Login to continue your roadmap, courses, practice streak and AI mentor support.</p>
+            <div class="cinematic-login-card dark-login-card">
               ${loginForm()}
             </div>
           </div>
-          <div class="cinematic-hero-visual">
+          <div class="cinematic-hero-visual dark-login-visual">
             <div class="neon-ring"></div>
             <div class="scan-orbit orbit-a"></div>
             <div class="scan-orbit orbit-b"></div>
             <div class="floating-ui-card card-a">${icon("book")}</div>
             <div class="floating-ui-card card-b">${icon("code")}</div>
             <div class="floating-ui-card card-c">${icon("chart")}</div>
+            <div class="login-status-panel">
+              <strong>Roadmap active</strong>
+              <span>3 tasks ready today</span>
+            </div>
             ${cinematicStudent("boy")}
           </div>
         </div>
-        <div class="cinematic-feature-dock">
+        <div class="cinematic-feature-dock dark-login-dock">
           ${[
-            ["Personalized Learning", "book"],
-            ["Track Progress", "chart"],
-            ["Achieve Goals", "trophy"],
-            ["AI-Powered Mentor", "bot"],
+            ["Personalized Roadmap", "map"],
+            ["Progress Tracking", "chart"],
+            ["AI Mentor", "bot"],
+            ["Career Ready", "trophy"],
           ].map(([label, iconName]) => `<article><span>${icon(iconName)}</span><strong>${label}</strong></article>`).join("")}
         </div>
       </section>
     </main>`;
   }
-
   return `<main class="cinematic-auth cinematic-signup view">
     <div class="auth-sky"><span></span><span></span><span></span><span></span></div>
     <section class="signup-frame">
