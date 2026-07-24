@@ -62,9 +62,10 @@ let firebaseAuthReady = false;
 let firebaseCurrentUser = null;
 let firebaseAuthReadyPromise = null;
 let firebaseSessionSyncPromise = null;
+let firebaseSessionSyncError = null;
 
 function hasDemoSession() {
-  return Boolean(firebaseCurrentUser);
+  return Boolean(firebaseCurrentUser || window.studoxFirebase?.auth?.currentUser);
 }
 
 function clearDemoSession() {
@@ -103,6 +104,7 @@ async function syncStudoxFirebaseSession(user) {
     const result = await authRequest("/auth/firebase", null, token);
     if (!result?.ok || !result.user) throw new Error(result?.message || "Firebase session sync failed.");
     saveAuthSession(result);
+    firebaseSessionSyncError = null;
     return result;
   })();
   try {
@@ -164,8 +166,11 @@ async function waitForFirebaseAuth() {
         if (user) {
           try {
             await syncStudoxFirebaseSession(user);
-          } catch (_error) {
-            firebaseCurrentUser = null;
+          } catch (error) {
+            // Firebase remains the identity authority. A temporary Studox API
+            // sync failure must not turn a valid signed-in user into a guest
+            // and throw them back to the landing page.
+            firebaseSessionSyncError = error;
           }
         }
         firebaseAuthReady = true;
@@ -2402,7 +2407,6 @@ function formatMentorMessage(text = "") {
     .replace(/\\n/g, "<br />");
 }
 
-window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", async () => {
   await waitForFirebaseAuth();
   const route = getRoute();
@@ -2412,7 +2416,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   if (protectedRoutes.has(route)) {
-    setRoute("landing");
+    localStorage.setItem("studox-return-route", route);
+    setRoute("login");
     return;
   }
   window.setTimeout(render, 260);
@@ -3235,6 +3240,7 @@ function bindFunctionalActions() {
   document.querySelectorAll("[data-action='resend-verification']").forEach((button) => button.addEventListener("click", handleResendVerification));
   bindAdminTableActions();
 }
+
 
 function assessmentTimelineWeeks(value = "") {
   if (value.includes("1 month")) return 4;
@@ -4066,6 +4072,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
   </section>`, "dashboard");
 };
 
+
 const protectedRoutes = new Set([
   "dashboard",
   "roadmap",
@@ -4168,8 +4175,21 @@ render = async function configuredRender() {
   }
   const route = requestedRoute;
   if (protectedRoutes.has(route) && !hasDemoSession()) {
-    setRoute("landing");
+    localStorage.setItem("studox-return-route", route);
+    setRoute("login");
     return;
+  }
+  if (protectedRoutes.has(route) && firebaseCurrentUser && firebaseSessionSyncError) {
+    try {
+      await syncStudoxFirebaseSession(firebaseCurrentUser);
+    } catch (error) {
+      firebaseSessionSyncError = error;
+      app.innerHTML = authStatusBlockView("sync_error")
+        .replace("Account access blocked", "Finishing your secure login")
+        .replace("Please contact Studox support.", "Your Firebase login is valid, but Studox could not load the account yet. Refresh once or sign in again.");
+      bindPage();
+      return;
+    }
   }
   if (protectedRoutes.has(route) && currentUser?.status === "pending" && !currentUser.verificationBlockChecked) {
     await api("/auth/me");
@@ -4214,7 +4234,9 @@ handleLogin = async function configuredHandleLogin(event) {
     }
     if (await savePendingRoadmapAfterAuth()) return;
     if (await resumePendingRoadmapGeneration()) return;
-    setRoute("dashboard");
+    const returnRoute = localStorage.getItem("studox-return-route");
+    localStorage.removeItem("studox-return-route");
+    setRoute(returnRoute && protectedRoutes.has(returnRoute) ? returnRoute : "dashboard");
   } catch (error) {
     return showAuthFeedback(feedback, error.message || "Login failed.", true);
   } finally {

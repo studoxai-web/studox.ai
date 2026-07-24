@@ -279,10 +279,23 @@ async function getFirebaseAuthenticatedMongoUser(token) {
     throw error;
   }
   if (!mongoReady()) {
-    const error = new Error("Database is not connected.");
-    error.statusCode = 503;
-    error.authCode = "database_unavailable";
-    throw error;
+    // The application explicitly supports a persistent file-backed demo mode.
+    // Keep Firebase as the identity authority, then resolve/sync the matching
+    // Studox user in that store instead of rejecting every protected request.
+    const memoryUser = await syncFirebaseUser(decoded);
+    if (!memoryUser) {
+      const error = new Error("No Studox account is linked to this Firebase user.");
+      error.statusCode = 401;
+      error.authCode = "unknown_firebase_uid";
+      throw error;
+    }
+    if (memoryUser.status === "disabled" || memoryUser.status === "scheduled_for_deletion") {
+      const error = new Error(memoryUser.status === "disabled" ? "Account is disabled." : "Account is scheduled for deletion.");
+      error.statusCode = 403;
+      error.authCode = memoryUser.status === "disabled" ? "account_disabled" : "account_scheduled_for_deletion";
+      throw error;
+    }
+    return memoryUser;
   }
 
   // firebaseUid is canonical. The backend never trusts frontend identity or token role claims.
@@ -2285,6 +2298,7 @@ app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {
   });
 });
 
+
 app.get("/api/courses", async (_req, res) => {
   res.json(await listResource("courses"));
 });
@@ -2746,6 +2760,10 @@ app.delete("/api/admin/:resource/:id", authRequired, requireAdmin, async (req, r
   const item = await deleteResource(req.params.resource, req.params.id);
   if (!item) return res.status(404).json({ message: "Resource item not found." });
   res.json({ message: "Deleted.", item });
+});
+
+app.use("/api", (_req, res) => {
+  res.status(404).json({ message: "API endpoint not found." });
 });
 
 app.get("*", (_req, res) => {
