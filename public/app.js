@@ -220,7 +220,7 @@ const icons = {
 const sideLinks = [
   ["dashboard", "Dashboard", "home"],
   ["roadmap", "Roadmap", "map"],
-  ["courses", "Courses", "book"],
+  ["courses", "Journey", "book"],
   ["tests", "Tests", "test"],
   ["dsa", "DSA Practice", "code"],
   ["resume", "Resume Builder", "resume"],
@@ -2430,6 +2430,15 @@ const functionalState = {
   roadmaps: [],
   courses: [],
   courseDetail: null,
+  journey: null,
+  journeyTopicSlug: "",
+  journeyFollowups: {},
+  journeyTyping: false,
+  journeyAiError: "",
+  journeyCheckResults: {},
+  journeyLessonAnswers: {},
+  journeyLessonLoading: false,
+  journeyLessonError: "",
   tests: [],
   testResults: [],
   testSession: null,
@@ -2567,6 +2576,21 @@ async function loadFunctionalData(route) {
       functionalState.courses = await api("/courses") || [];
       const first = functionalState.courses[0];
       functionalState.courseDetail = first ? await api(`/courses/${first.id || first._id || first.slug}`) : null;
+      functionalState.journey = await api("/journey/web-and-internet-architecture");
+      functionalState.journeyLessonAnswers = {};
+      functionalState.journeyFollowups = (functionalState.journey?.chats || []).reduce((groups, chat) => {
+        if (chat.metadata?.kind === "lesson") return groups;
+        const question = (chat.messages || []).find((message) => message.role === "user")?.content;
+        const answer = (chat.messages || []).find((message) => message.role === "assistant")?.content;
+        if (!chat.topicSlug || !question || !answer) return groups;
+        groups[chat.topicSlug] = [...(groups[chat.topicSlug] || []), { question, answer }];
+        return groups;
+      }, {});
+      if (!functionalState.journeyTopicSlug) {
+        functionalState.journeyTopicSlug = functionalState.journey?.progress?.currentTopicSlug
+          || functionalState.journey?.module?.topics?.[0]?.slug
+          || "";
+      }
     },
     tests: async () => {
       functionalState.tests = await api("/tests") || [];
@@ -2733,14 +2757,15 @@ routeMap.roadmap = function functionalRoadmapPage() {
   const roadmap = functionalState.roadmaps[0] || {};
   const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
   const liveModules = roadmapItems.map((item, index) => ({
-    title: item.title,
+    title: index === 0 ? "Module 1: Web and Internet Architecture" : item.title,
     status: item.status === "in-progress" ? "active" : item.status || (index === 0 ? "active" : "locked"),
     progress: item.progress || 0,
-    desc: item.description || "",
+    desc: index === 0 ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications." : item.description || "",
     estimatedHours: item.estimatedHours || 0,
     tasks: item.tasks || [],
     skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
     resources: item.resources || [],
+    isModuleOne: index === 0,
   }));
   const completedModules = liveModules.filter((item) => item.status === "completed").length;
   const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
@@ -2753,15 +2778,76 @@ routeMap.roadmap = function functionalRoadmapPage() {
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
       ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
     ])}
-    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card"><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.estimatedHours ? `${item.estimatedHours}h` : item.status}</span></header>${progress("Module progress", item.progress)}<h4>Tasks</h4><div class="skills-row">${item.tasks.length ? item.tasks.map((task) => `<span class="chip">${task.title || task}</span>`).join("") : item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("") || `<span class="chip">No resources yet</span>`}</div></div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Create your roadmap to start."}</p><a class="btn primary" href="${hasRoadmap ? "#courses" : "#assessment"}" ${hasRoadmap ? "" : "data-action=\"start-assessment\""}>${hasRoadmap ? "Continue Course" : "Create Roadmap"}</a></aside></div>`, "roadmap");
+    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card ${item.isModuleOne ? "journey-module-card" : ""}" ${item.isModuleOne ? "data-action=\"open-module-journey\" role=\"button\" tabindex=\"0\"" : ""}><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.estimatedHours ? `${item.estimatedHours}h` : item.status}</span></header>${progress("Module progress", item.progress)}${item.isModuleOne ? `<div class="roadmap-topic-preview">${["What is Web Development?", "Frontend Development", "Backend Development", "Full-Stack Development", "Website vs Web Application"].map((topic, topicIndex) => `<span><b>${topicIndex + 1}</b>${topic}</span>`).join("")}</div><div class="module-card-cta">Click to start your Journey ${icon("plus")}</div>` : `<h4>Tasks</h4><div class="skills-row">${item.tasks.length ? item.tasks.map((task) => `<span class="chip">${task.title || task}</span>`).join("") : item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("") || `<span class="chip">No resources yet</span>`}</div>`}</div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Create your roadmap to start."}</p><a class="btn primary" href="${hasRoadmap ? "#courses" : "#assessment"}" ${hasRoadmap ? "" : "data-action=\"start-assessment\""}>${hasRoadmap ? "Journey" : "Create Roadmap"}</a></aside></div>`, "roadmap");
 };
 
 routeMap.courses = function functionalCoursesPage() {
-  const course = functionalState.courseDetail || functionalState.courses[0] || {};
-  const modulesList = course.modules || [];
-  return appLayout(`<div class="course-layout"><div><div class="hero-card"><span class="chip">${course.level || "Course"}</span><h1>${course.title || "Course"}</h1><p>${course.description || "Continue your course and save progress to backend."}</p><div class="hero-actions"><button class="btn primary" data-action="continue-course" data-course-id="${dataId(course)}">Continue Learning</button><button class="btn dark" data-action="bookmark-course">Bookmark</button><button class="btn dark" data-action="share-course">Share</button></div></div>
-      <div class="panel" style="margin-top:16px"><div class="tabs"><button class="active">Course Content</button><button>Projects</button><button>Tests</button><button>Notes</button><button>Discussions</button><button>Resources</button></div><div class="module-list" style="margin-top:16px">${modulesList.map((item, index) => `<div class="module-row"><span class="status-dot ${item.status === "completed" ? "completed" : item.status === "locked" ? "locked" : "progress"}">${item.status === "completed" ? "OK" : item.status === "locked" ? "L" : index + 1}</span><div><h4>${item.title}</h4><p>${item.lessons || 0} lessons - ${item.progress || 0}%</p></div><span class="chip ${item.status === "completed" ? "green" : "purple"}">${item.status}</span></div>`).join("") || emptyState("No modules", "Admin panel se modules add kar sakte ho.")}</div></div></div>
-      <aside class="panel"><div class="circle-progress" style="--percent:${course.progress || 0}" data-label="${course.progress || 0}%"></div>${progress("Course completion", course.progress || 0)}<h3 style="margin-top:18px">Instructor</h3><div class="list-item"><div class="list-main"><span class="avatar">${(course.instructor || "AI").split(" ").map((w) => w[0]).join("").slice(0, 2)}</span><div><h4>${course.instructor || "Studox Mentor"}</h4><p>${course.category || "Learning"} mentor</p></div></div></div><div class="hero-card" style="padding:18px;margin-top:16px"><h2>Progress saves now</h2><p>Continue button click karte hi course aur XP update hota hai.</p></div></aside></div>`, "courses");
+  const journey = functionalState.journey || {};
+  const module = journey.module || {};
+  const savedProgress = journey.progress || {};
+  const topics = module.topics || [];
+  const completed = new Set(savedProgress.completedTopicSlugs || []);
+  const activeSlug = functionalState.journeyTopicSlug || savedProgress.currentTopicSlug || topics[0]?.slug;
+  const activeIndex = Math.max(0, topics.findIndex((topic) => topic.slug === activeSlug));
+  const activeTopic = topics[activeIndex] || {};
+  const percent = Number(savedProgress.percent || 0);
+  const allDone = topics.length > 0 && completed.size >= topics.length;
+  const lessonAnswer = functionalState.journeyLessonAnswers[activeTopic.slug] || "";
+  const explanationComplete = Boolean(lessonAnswer);
+  const followups = functionalState.journeyFollowups[activeTopic.slug] || [];
+  const checkResult = functionalState.journeyCheckResults[activeTopic.slug];
+  const checkPassed = completed.has(activeTopic.slug) || (savedProgress.passedCheckTopicSlugs || []).includes(activeTopic.slug) || checkResult?.correct;
+  return appLayout(`<section class="journey-page">
+    <div class="journey-ambient" aria-hidden="true"><span></span><span></span><span></span><i></i><i></i></div>
+    <header class="journey-hero">
+      <div class="journey-hero-copy"><span class="ai-pill"><i></i> STUDOX INTELLIGENCE LAYER</span><h1>${module.title || "Module 1: Web and Internet Architecture"}</h1><p>${module.description || "Learn one topic at a time with your AI guide."}</p><div class="journey-hero-signals"><span>${icon("bot")} Adaptive AI Tutor</span><span>${icon("chart")} Live mastery tracking</span><span>${icon("star")} Personalized concepts</span></div></div>
+      <div class="journey-hero-orbit" aria-hidden="true"><div><span>${icon("bot")}</span><i></i><i></i><i></i></div><small>NEURAL GUIDE</small></div>
+      <div class="journey-score"><strong>${percent}%</strong><span>${completed.size}/${topics.length} topics complete</span></div>
+    </header>
+    <div class="journey-progress-track"><span style="width:${percent}%"></span></div>
+    <div class="journey-layout">
+      <aside class="panel journey-topic-rail">
+        <div class="journey-rail-status"><span><i></i> LEARNING PATH ACTIVE</span><b>${percent}%</b></div>
+        <div class="panel-head"><div><small>YOUR PATH</small><h2>Knowledge nodes</h2></div><span class="chip purple">${topics.length} lessons</span></div>
+        <div class="journey-topic-list">${topics.map((topic, index) => {
+          const isCompleted = completed.has(topic.slug);
+          const isActive = topic.slug === activeTopic.slug;
+          return `<button class="journey-topic ${isCompleted ? "completed" : ""} ${isActive ? "active" : ""}" type="button" data-action="select-journey-topic" data-topic-slug="${topic.slug}"><span>${isCompleted ? "✓" : index + 1}</span><div><strong>${topic.shortTitle || topic.title}</strong><small>${isCompleted ? "Completed" : isActive ? "Learning now" : "Ready to learn"}</small></div>${icon("plus")}</button>`;
+        }).join("")}</div>
+        <a class="btn ghost journey-back" href="#roadmap">← Back to roadmap</a>
+      </aside>
+      <main class="panel journey-chat-panel">
+        <div class="journey-chat-head"><div class="mentor-orb"><span></span><i></i></div><div><strong>Studox Journey Intelligence</strong><small><i></i> Neural tutor online • Knowledge node ${activeIndex + 1}/${topics.length}</small></div><div class="journey-head-badges"><span>LIVE</span><b>AI Guided</b></div></div>
+        <div class="journey-conversation" id="journeyConversation">
+          ${lessonAnswer ? journeyVisualLesson(lessonAnswer) : ""}
+          ${functionalState.journeyLessonLoading ? `<div class="journey-lesson-loading"><div class="mentor-orb"><span></span></div><div><strong>Opening your visual lesson</strong><p>Loading concepts, examples, and the knowledge check...</p><span class="typing"><span></span><span></span><span></span></span></div></div>` : ""}
+          ${!lessonAnswer && !functionalState.journeyLessonLoading ? `<div class="journey-lesson-start"><div class="lesson-start-core"><span>${icon("bot")}</span><i></i><i></i><b></b></div><span class="lesson-ready-label">KNOWLEDGE NODE READY</span><h2>Explore ${activeTopic.shortTitle || activeTopic.title}</h2><p>Open a structured visual lesson with a practical example, architecture view, key ideas and a mastery check.</p><div class="lesson-start-features"><span>Visual explanation</span><span>Practical example</span><span>Zero AI credits</span></div>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-launch-btn" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}"><span>Start visual lesson</span>${icon("plus")}</button></div>` : ""}
+          ${functionalState.journeyTyping ? `<div class="message ai journey-live-typing"><span class="typing"><span></span><span></span><span></span></span><small>Studox AI is thinking...</small></div>` : ""}
+          ${followups.map((item) => `<div class="message user journey-followup-question">${escapeHtml(item.question)}</div><div class="message ai journey-followup-answer"><span class="ai-answer-label">${icon("bot")} Live answer</span>${formatMentorMessage(item.answer)}</div>`).join("")}
+          ${functionalState.journeyAiError ? `<div class="journey-ai-error"><strong>Live AI is unavailable</strong><p>${escapeHtml(functionalState.journeyAiError)}</p></div>` : ""}
+          ${explanationComplete ? `<form class="journey-concept-check" data-form="journey-check" data-topic-slug="${activeTopic.slug}">
+            <div class="concept-check-head"><span>${icon("test")}</span><div><small>CONCEPT CHECK</small><strong>${escapeHtml(activeTopic.check?.question || "Choose the correct answer")}</strong></div></div>
+            <div class="concept-options">${(activeTopic.check?.options || []).map((option, optionIndex) => `<label class="${checkResult?.selectedIndex === optionIndex ? "selected" : ""}"><input type="radio" name="selectedIndex" value="${optionIndex}" ${checkResult?.selectedIndex === optionIndex ? "checked" : ""} ${checkPassed ? "disabled" : ""} required /><span>${String.fromCharCode(65 + optionIndex)}</span><p>${escapeHtml(option)}</p></label>`).join("")}</div>
+            ${checkResult ? `<div class="concept-feedback ${checkResult.correct ? "correct" : "incorrect"}"><strong>${checkResult.correct ? "Correct — concept clear!" : "Let us fix that"}</strong><p>${escapeHtml(checkResult.explanation)}</p></div>` : ""}
+            ${checkPassed ? `<span class="concept-passed">✓ Check passed</span>` : `<button class="btn primary" type="submit">Check my answer</button>`}
+          </form>` : ""}
+          ${explanationComplete ? `<div class="journey-checkpoint"><span>${allDone ? "🏆" : "✨"}</span><div><strong>${allDone ? "Module completed!" : "You reached the topic checkpoint"}</strong><p>${allDone ? "You completed all five topics in Web and Internet Architecture." : "Ask a doubt below or complete this topic to continue automatically."}</p></div></div>` : ""}
+        </div>
+        <div class="journey-suggestions">
+          ${["Give me a real example", "Why is this important?", "Explain it more simply"].map((prompt) => `<button type="button" data-action="journey-suggestion" data-prompt="${prompt}">${prompt}</button>`).join("")}
+        </div>
+        <form class="journey-composer" data-form="journey-question">
+          <span class="composer-bot">${icon("bot")}</span>
+          <input name="message" autocomplete="off" placeholder="Ask Studox AI anything about ${activeTopic.shortTitle || "this topic"}..." required />
+          <button class="btn primary" type="submit" aria-label="Send question">${icon("plus")}</button>
+        </form>
+        <footer class="journey-actions">
+          <span>${completed.has(activeTopic.slug) ? "✓ This topic is completed" : checkPassed ? "Concept check passed • Earn +20 XP" : "Pass the concept check to continue"}</span>
+          <button class="btn primary glow" type="button" data-action="complete-journey-topic" data-topic-slug="${activeTopic.slug}" ${!activeTopic.slug || (!completed.has(activeTopic.slug) && !checkPassed) ? "disabled" : ""}>${completed.has(activeTopic.slug) ? (activeIndex < topics.length - 1 ? "Continue to Next Topic" : "Review Completed Module") : "Complete Topic & Continue"} ${icon("plus")}</button>
+        </footer>
+      </main>
+    </div>
+  </section>`, "courses");
 };
 
 routeMap.tests = function functionalTestsPage() {
@@ -3167,7 +3253,176 @@ bindPage = function functionalBindPage() {
 
 };
 
+async function requestJourneyLesson(topicSlug) {
+  if (!topicSlug || functionalState.journeyLessonLoading) return;
+  if (functionalState.journeyLessonAnswers[topicSlug]) {
+    await render();
+    return;
+  }
+  functionalState.journeyLessonError = "";
+  functionalState.journeyLessonLoading = true;
+  await render();
+  const result = await api("/journey/web-and-internet-architecture/explain", {
+    method: "POST",
+    body: JSON.stringify({ topicSlug }),
+  });
+  functionalState.journeyLessonLoading = false;
+  if (result?.lesson) {
+    functionalState.journeyLessonAnswers[topicSlug] = result.lesson;
+  } else {
+    functionalState.journeyLessonError = "This lesson could not be opened. Please try again.";
+  }
+  await render();
+  document.getElementById("journeyConversation")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function parseJourneyLesson(content = "") {
+  if (content && typeof content === "object") return content;
+  try {
+    return JSON.parse(String(content || ""));
+  } catch (_error) {
+    const text = String(content || "");
+    return { title: "AI Lesson", intro: text, definition: text, example: "", takeaway: text, visualType: "concept", flow: [], comparison: [], keyPoints: [] };
+  }
+}
+
+function journeyVisualLesson(lesson = {}) {
+  const flow = Array.isArray(lesson.flow) ? lesson.flow : [];
+  const comparison = Array.isArray(lesson.comparison) ? lesson.comparison : [];
+  const keyPoints = Array.isArray(lesson.keyPoints) ? lesson.keyPoints : [];
+  const visual = lesson.visualType === "comparison" && comparison.length
+    ? `<div class="ai-comparison"><div class="comparison-head"><span>Website</span><span>Web Application</span></div>${comparison.map((row) => `<div class="comparison-row"><strong>${escapeHtml(row.label || "")}</strong><p>${escapeHtml(row.left || "")}</p><p>${escapeHtml(row.right || "")}</p></div>`).join("")}</div>`
+    : flow.length
+      ? `<div class="ai-flow-map">${flow.map((step, index) => `<div class="flow-step"><span>${index + 1}</span><strong>${escapeHtml(step)}</strong></div>${index < flow.length - 1 ? `<i>${icon("plus")}</i>` : ""}`).join("")}</div>`
+      : `<div class="ai-concept-orbit"><span>${icon("bot")}</span><i></i><i></i><strong>${escapeHtml(lesson.title || "Core concept")}</strong></div>`;
+  return `<section class="visual-ai-lesson">
+    <div class="visual-lesson-intro"><span class="ai-answer-label">${icon("book")} Studox visual lesson</span><h2>${escapeHtml(lesson.title || "Lesson")}</h2><p>${escapeHtml(lesson.intro || "")}</p></div>
+    <div class="visual-lesson-grid">
+      <article class="lesson-block definition-block"><span>${icon("book")}</span><small>CORE IDEA</small><p>${escapeHtml(lesson.definition || "")}</p></article>
+      <article class="lesson-block example-block"><span>${icon("code")}</span><small>REAL EXAMPLE</small><p>${escapeHtml(lesson.example || "")}</p></article>
+    </div>
+    <div class="lesson-visual-stage">${visual}</div>
+    ${keyPoints.length ? `<div class="lesson-key-points">${keyPoints.map((point) => `<span>${icon("star")}${escapeHtml(point)}</span>`).join("")}</div>` : ""}
+    <div class="lesson-takeaway"><span>✨</span><div><small>KEY TAKEAWAY</small><p>${escapeHtml(lesson.takeaway || "")}</p></div></div>
+  </section>`;
+}
+
 function bindFunctionalActions() {
+  document.querySelectorAll("[data-action='open-module-journey']").forEach((card) => {
+    const openJourney = () => setRoute("courses");
+    card.addEventListener("click", openJourney);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openJourney();
+      }
+    });
+  });
+  document.querySelectorAll("[data-action='select-journey-topic']").forEach((button) => button.addEventListener("click", async () => {
+    functionalState.journeyTopicSlug = button.dataset.topicSlug;
+    await requestJourneyLesson(button.dataset.topicSlug);
+  }));
+  document.querySelectorAll("[data-action='generate-journey-lesson']").forEach((button) => button.addEventListener("click", () => {
+    requestJourneyLesson(button.dataset.topicSlug);
+  }));
+  document.querySelectorAll("[data-action='journey-suggestion']").forEach((button) => button.addEventListener("click", () => {
+    const input = document.querySelector("[data-form='journey-question'] input");
+    if (!input) return;
+    input.value = button.dataset.prompt || "";
+    input.focus();
+  }));
+  document.querySelectorAll("[data-form='journey-question']").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = form.querySelector("input[name='message']");
+    const question = String(input?.value || "").trim();
+    const topic = functionalState.journey?.module?.topics?.find((item) => item.slug === functionalState.journeyTopicSlug);
+    if (!question || !topic || functionalState.journeyTyping) return;
+    input.value = "";
+    functionalState.journeyAiError = "";
+    functionalState.journeyTyping = true;
+    await render();
+    const result = await api("/journey/web-and-internet-architecture/ask", {
+      method: "POST",
+      body: JSON.stringify({
+        topicSlug: topic.slug,
+        question,
+      }),
+    });
+    functionalState.journeyTyping = false;
+    if (result?.reply) {
+      functionalState.journeyFollowups[topic.slug] = [
+        ...(functionalState.journeyFollowups[topic.slug] || []),
+        { question, answer: result.reply },
+      ];
+    } else {
+      functionalState.journeyAiError = "Your question was not answered by a live provider. Check the AI API configuration and retry.";
+    }
+    await render();
+    const conversation = document.getElementById("journeyConversation");
+    if (conversation) conversation.scrollTo({ top: conversation.scrollHeight, behavior: "smooth" });
+  }));
+  document.querySelectorAll("[data-form='journey-check']").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const selected = form.querySelector("input[name='selectedIndex']:checked");
+    if (!selected) return toast("Choose an answer first.");
+    const button = form.querySelector("button[type='submit']");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Checking...";
+    }
+    const result = await api("/journey/web-and-internet-architecture/check", {
+      method: "POST",
+      body: JSON.stringify({
+        topicSlug: form.dataset.topicSlug,
+        selectedIndex: Number(selected.value),
+      }),
+    });
+    if (!result) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Check my answer";
+      }
+      return;
+    }
+    functionalState.journeyCheckResults[form.dataset.topicSlug] = {
+      ...result,
+      selectedIndex: Number(selected.value),
+    };
+    if (result.correct) {
+      functionalState.journey.progress.passedCheckTopicSlugs = Array.from(new Set([
+        ...(functionalState.journey.progress.passedCheckTopicSlugs || []),
+        form.dataset.topicSlug,
+      ]));
+      toast("Correct! Topic completion unlocked.");
+    }
+    await render();
+    document.querySelector(".journey-concept-check")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  document.querySelectorAll("[data-action='complete-journey-topic']").forEach((button) => button.addEventListener("click", async () => {
+    const topics = functionalState.journey?.module?.topics || [];
+    const completed = new Set(functionalState.journey?.progress?.completedTopicSlugs || []);
+    const currentIndex = topics.findIndex((topic) => topic.slug === button.dataset.topicSlug);
+    if (completed.has(button.dataset.topicSlug)) {
+      functionalState.journeyTopicSlug = topics[currentIndex + 1]?.slug || topics[0]?.slug || "";
+      await render();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Saving progress...";
+    const result = await api("/journey/web-and-internet-architecture/progress", {
+      method: "PUT",
+      body: JSON.stringify({ topicSlug: button.dataset.topicSlug }),
+    });
+    if (!result?.progress) {
+      button.disabled = false;
+      button.textContent = "Mark Complete & Continue";
+      return;
+    }
+    functionalState.journey.progress = result.progress;
+    functionalState.journeyTopicSlug = result.progress.currentTopicSlug;
+    toast(result.message || "Topic completed.");
+    await render();
+  }));
   document.querySelectorAll("[data-action='continue-course']").forEach((button) => button.addEventListener("click", async () => {
     const result = await api(`/courses/${button.dataset.courseId}/continue`, { method: "POST", body: "{}" });
     toast(result?.message || "Progress updated.");

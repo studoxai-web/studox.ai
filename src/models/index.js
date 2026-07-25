@@ -156,6 +156,26 @@ const Module = model(
   ),
 );
 
+const LearningProgress = model(
+  "LearningProgress",
+  new Schema(
+    {
+      user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      moduleSlug: { type: String, required: true, trim: true },
+      currentTopicSlug: String,
+      completedTopicSlugs: [String],
+      passedCheckTopicSlugs: [String],
+      percent: { type: Number, default: 0, min: 0, max: 100 },
+      startedAt: Date,
+      completedAt: Date,
+      lastAccessedAt: Date,
+    },
+    { timestamps: true },
+  ),
+);
+
+LearningProgress.schema.index({ user: 1, moduleSlug: 1 }, { unique: true });
+
 const Test = model(
   "Test",
   new Schema(
@@ -323,6 +343,22 @@ const AIMentorChat = model(
   ),
 );
 
+const JourneyMentorChat = model(
+  "JourneyMentorChat",
+  new Schema(
+    {
+      user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      moduleSlug: { type: String, required: true, trim: true },
+      topicSlug: { type: String, required: true, trim: true },
+      messages: [{ role: String, content: String, createdAt: { type: Date, default: Date.now } }],
+      metadata: Schema.Types.Mixed,
+    },
+    { timestamps: true },
+  ),
+);
+
+JourneyMentorChat.schema.index({ user: 1, moduleSlug: 1, topicSlug: 1, createdAt: -1 });
+
 const Notification = model(
   "Notification",
   new Schema(
@@ -374,6 +410,7 @@ module.exports = {
   Roadmap,
   Course,
   Module,
+  LearningProgress,
   Test,
   Question,
   TestResult,
@@ -384,6 +421,7 @@ module.exports = {
   Hackathon,
   Certificate,
   AIMentorChat,
+  JourneyMentorChat,
   Notification,
   UserSettings,
   Admin,

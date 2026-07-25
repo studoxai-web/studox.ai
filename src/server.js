@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 const connectDatabase = require("./config/db");
 const models = require("./models");
 const mockData = require("./data/mockData");
+const moduleOneJourney = require("./data/moduleOneJourney");
 
 const {
   User,
@@ -17,6 +18,7 @@ const {
   Roadmap,
   Course,
   Module: CourseModule,
+  LearningProgress,
   Test,
   Question,
   TestResult,
@@ -27,6 +29,7 @@ const {
   Hackathon,
   Certificate,
   AIMentorChat,
+  JourneyMentorChat,
   Notification,
   UserSettings,
   Admin,
@@ -51,6 +54,7 @@ const resourceMap = {
   roadmaps: { model: Roadmap, key: "roadmaps" },
   courses: { model: Course, key: "courses" },
   modules: { model: CourseModule, key: "modules" },
+  "learning-progress": { model: LearningProgress, key: "learningProgress" },
   tests: { model: Test, key: "tests" },
   questions: { model: Question, key: "questions" },
   "test-results": { model: TestResult, key: "testResults" },
@@ -61,6 +65,7 @@ const resourceMap = {
   hackathons: { model: Hackathon, key: "hackathons" },
   certificates: { model: Certificate, key: "certificates" },
   "ai-mentor": { model: AIMentorChat, key: "chats" },
+  "journey-mentor": { model: JourneyMentorChat, key: "journeyChats" },
   notifications: { model: Notification, key: "notifications" },
   settings: { model: UserSettings, key: "settings" },
   admins: { model: Admin, key: "admins" },
@@ -791,7 +796,7 @@ function extractOpenAiText(data) {
     || "";
 }
 
-async function callOpenAiMentor(messages) {
+async function callOpenAiMentor(messages, options = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY missing");
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -807,6 +812,7 @@ async function callOpenAiMentor(messages) {
       messages,
       temperature: 0.35,
       max_tokens: 5000,
+      ...(options.responseMimeType === "application/json" ? { response_format: { type: "json_object" } } : {}),
     }),
   });
   const data = await response.json();
@@ -816,7 +822,7 @@ async function callOpenAiMentor(messages) {
   return { reply, provider: "openai", model, fallback: false };
 }
 
-async function callGeminiMentor(messages) {
+async function callGeminiMentor(messages, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY missing");
   const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
@@ -827,7 +833,11 @@ async function callGeminiMentor(messages) {
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text }] }],
-        generationConfig: { temperature: 0.45, maxOutputTokens },
+        generationConfig: {
+          temperature: 0.45,
+          maxOutputTokens,
+          ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
+        },
       }),
     });
     const data = await response.json();
@@ -859,21 +869,27 @@ async function callGeminiMentor(messages) {
   return { reply, provider: "gemini", model, fallback: false, finishReason };
 }
 
-async function generateMentorReply(message, userId) {
+async function generateMentorReply(message, userId, options = {}) {
   const context = await mentorUserContext(userId);
-  const history = await recentMentorMessages(userId);
+  const history = options.history || await recentMentorMessages(userId);
   const messages = [
-    { role: "system", content: mentorSystemPrompt(context) },
+    { role: "system", content: options.systemPrompt || mentorSystemPrompt(context) },
     ...history,
     { role: "user", content: message },
   ];
   const provider = String(process.env.AI_PROVIDER || "").toLowerCase();
   try {
-    if (provider === "gemini") return await callGeminiMentor(messages);
-    if (provider === "openai" || process.env.OPENAI_API_KEY) return await callOpenAiMentor(messages);
-    if (process.env.GEMINI_API_KEY) return await callGeminiMentor(messages);
+    if (provider === "gemini") return await callGeminiMentor(messages, options);
+    if (provider === "openai" || process.env.OPENAI_API_KEY) return await callOpenAiMentor(messages, options);
+    if (process.env.GEMINI_API_KEY) return await callGeminiMentor(messages, options);
   } catch (error) {
     console.warn(`AI mentor provider failed: ${error.message}`);
+    if (options.requireLiveProvider) throw error;
+  }
+  if (options.requireLiveProvider) {
+    const error = new Error("No live AI provider is configured. Add GEMINI_API_KEY or OPENAI_API_KEY.");
+    error.statusCode = 503;
+    throw error;
   }
   return {
     reply: localMentorReply(message, context),
@@ -2295,6 +2311,327 @@ app.get("/api/roadmaps/:id/progress", authRequired, async (req, res) => {
     overallProgress: roadmap?.overallProgress || 0,
     modules: roadmap?.modules || [],
     nextMilestone: roadmap?.nextMilestone || "Start your first milestone",
+  });
+});
+
+function defaultJourneyProgress() {
+  return {
+    moduleSlug: moduleOneJourney.slug,
+    currentTopicSlug: moduleOneJourney.topics[0].slug,
+    completedTopicSlugs: [],
+    passedCheckTopicSlugs: [],
+    percent: 0,
+  };
+}
+
+function publicJourneyModule() {
+  return {
+    ...moduleOneJourney,
+    topics: moduleOneJourney.topics.map((topic) => {
+      const { segments: _internalSourceNotes, lesson: _curatedLesson, ...publicTopic } = topic;
+      return {
+        ...publicTopic,
+        check: {
+          question: topic.check.question,
+          options: topic.check.options,
+        },
+      };
+    }),
+  };
+}
+
+async function journeyMentorChats(userId, topicSlug = "") {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const query = { user: userId, moduleSlug: moduleOneJourney.slug };
+    if (topicSlug) query.topicSlug = topicSlug;
+    return JourneyMentorChat.find(query).sort({ createdAt: 1 }).limit(40).lean();
+  }
+  memory.journeyChats = memory.journeyChats || [];
+  return memory.journeyChats
+    .filter((item) => String(item.user) === String(userId)
+      && item.moduleSlug === moduleOneJourney.slug
+      && (!topicSlug || item.topicSlug === topicSlug))
+    .slice(-40);
+}
+
+app.get("/api/journey/:moduleSlug", authRequired, async (req, res) => {
+  if (req.params.moduleSlug !== moduleOneJourney.slug) {
+    return res.status(404).json({ message: "Learning module not found." });
+  }
+
+  let progressData = defaultJourneyProgress();
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const saved = await LearningProgress.findOne({
+      user: req.user.id,
+      moduleSlug: moduleOneJourney.slug,
+    }).lean();
+    if (saved) progressData = { ...progressData, ...saved };
+  } else {
+    memory.learningProgress = memory.learningProgress || [];
+    const saved = memory.learningProgress.find(
+      (item) => String(item.user) === String(req.user.id) && item.moduleSlug === moduleOneJourney.slug,
+    );
+    if (saved) progressData = { ...progressData, ...saved };
+  }
+
+  const chats = await journeyMentorChats(req.user.id);
+  res.json({ module: publicJourneyModule(), progress: progressData, chats });
+});
+
+app.post("/api/journey/:moduleSlug/check", authRequired, async (req, res) => {
+  if (req.params.moduleSlug !== moduleOneJourney.slug) {
+    return res.status(404).json({ message: "Learning module not found." });
+  }
+  const topicSlug = String(req.body?.topicSlug || "").trim();
+  const selectedIndex = Number(req.body?.selectedIndex);
+  const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
+  if (!topic || !Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= topic.check.options.length) {
+    return res.status(400).json({ message: "Valid topic and answer are required." });
+  }
+
+  const correct = selectedIndex === topic.check.answerIndex;
+  if (correct) {
+    if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+      await LearningProgress.findOneAndUpdate(
+        { user: req.user.id, moduleSlug: moduleOneJourney.slug },
+        {
+          $addToSet: { passedCheckTopicSlugs: topicSlug },
+          $setOnInsert: {
+            user: req.user.id,
+            moduleSlug: moduleOneJourney.slug,
+            currentTopicSlug: topicSlug,
+            completedTopicSlugs: [],
+            percent: 0,
+            startedAt: new Date(),
+          },
+          $set: { lastAccessedAt: new Date() },
+        },
+        { upsert: true, new: true, runValidators: true },
+      );
+    } else {
+      memory.learningProgress = memory.learningProgress || [];
+      let saved = memory.learningProgress.find(
+        (item) => String(item.user) === String(req.user.id) && item.moduleSlug === moduleOneJourney.slug,
+      );
+      if (!saved) {
+        saved = { id: memoryId("learning"), user: req.user.id, ...defaultJourneyProgress() };
+        memory.learningProgress.push(saved);
+      }
+      saved.passedCheckTopicSlugs = saved.passedCheckTopicSlugs || [];
+      if (!saved.passedCheckTopicSlugs.includes(topicSlug)) saved.passedCheckTopicSlugs.push(topicSlug);
+      persistMemory();
+    }
+  }
+
+  res.json({
+    correct,
+    explanation: correct
+      ? topic.check.explanation
+      : `Not quite. ${topic.check.explanation}`,
+  });
+});
+
+app.put("/api/journey/:moduleSlug/progress", authRequired, async (req, res) => {
+  if (req.params.moduleSlug !== moduleOneJourney.slug) {
+    return res.status(404).json({ message: "Learning module not found." });
+  }
+
+  const topicSlug = String(req.body?.topicSlug || "").trim();
+  const topicIndex = moduleOneJourney.topics.findIndex((topic) => topic.slug === topicSlug);
+  if (topicIndex < 0) return res.status(400).json({ message: "Valid topic is required." });
+
+  const now = new Date();
+  let progressData;
+  let newlyCompleted = false;
+
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    let saved = await LearningProgress.findOne({ user: req.user.id, moduleSlug: moduleOneJourney.slug });
+    if (!saved) {
+      saved = new LearningProgress({
+        user: req.user.id,
+        moduleSlug: moduleOneJourney.slug,
+        completedTopicSlugs: [],
+        startedAt: now,
+      });
+    }
+    if (!saved.completedTopicSlugs.includes(topicSlug) && !(saved.passedCheckTopicSlugs || []).includes(topicSlug)) {
+      return res.status(409).json({ message: "Pass the topic concept check before continuing." });
+    }
+    newlyCompleted = !saved.completedTopicSlugs.includes(topicSlug);
+    if (newlyCompleted) saved.completedTopicSlugs.push(topicSlug);
+    const completed = new Set(saved.completedTopicSlugs);
+    const nextTopic = moduleOneJourney.topics.find((topic) => !completed.has(topic.slug));
+    saved.currentTopicSlug = nextTopic?.slug || topicSlug;
+    saved.percent = Math.round((completed.size / moduleOneJourney.topics.length) * 100);
+    saved.lastAccessedAt = now;
+    saved.completedAt = saved.percent === 100 ? now : undefined;
+    await saved.save();
+    progressData = saved.toObject();
+
+    if (newlyCompleted) {
+      await StudentProfile.findOneAndUpdate({ user: req.user.id }, { $inc: { xp: 20 } });
+      const roadmap = await Roadmap.findOne(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 });
+      if (roadmap) {
+        if (roadmap.modules?.length) {
+          roadmap.modules[0].progress = progressData.percent;
+          roadmap.modules[0].status = progressData.percent === 100 ? "completed" : "in-progress";
+          roadmap.markModified("modules");
+        }
+        roadmap.overallProgress = Math.round(average((roadmap.modules || []).map((item) => Number(item.progress || 0))));
+        roadmap.nextMilestone = progressData.percent === 100
+          ? roadmap.modules?.[1]?.title || "Module 1 completed"
+          : moduleOneJourney.topics.find((topic) => topic.slug === progressData.currentTopicSlug)?.title;
+        await roadmap.save();
+      }
+    }
+  } else {
+    memory.learningProgress = memory.learningProgress || [];
+    let saved = memory.learningProgress.find(
+      (item) => String(item.user) === String(req.user.id) && item.moduleSlug === moduleOneJourney.slug,
+    );
+    if (!saved) {
+      saved = { id: memoryId("learning"), user: req.user.id, ...defaultJourneyProgress(), startedAt: now.toISOString() };
+      memory.learningProgress.push(saved);
+    }
+    saved.passedCheckTopicSlugs = saved.passedCheckTopicSlugs || [];
+    if (!saved.completedTopicSlugs.includes(topicSlug) && !saved.passedCheckTopicSlugs.includes(topicSlug)) {
+      return res.status(409).json({ message: "Pass the topic concept check before continuing." });
+    }
+    newlyCompleted = !saved.completedTopicSlugs.includes(topicSlug);
+    if (newlyCompleted) saved.completedTopicSlugs.push(topicSlug);
+    const completed = new Set(saved.completedTopicSlugs);
+    const nextTopic = moduleOneJourney.topics.find((topic) => !completed.has(topic.slug));
+    saved.currentTopicSlug = nextTopic?.slug || topicSlug;
+    saved.percent = Math.round((completed.size / moduleOneJourney.topics.length) * 100);
+    saved.lastAccessedAt = now.toISOString();
+    saved.completedAt = saved.percent === 100 ? now.toISOString() : null;
+    progressData = saved;
+    if (newlyCompleted) {
+      const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
+      if (profile) profile.xp = Number(profile.xp || 0) + 20;
+    }
+    persistMemory();
+  }
+
+  res.json({
+    message: newlyCompleted ? "Topic completed. Next topic is ready." : "Topic was already completed.",
+    progress: progressData,
+  });
+});
+
+app.post("/api/journey/:moduleSlug/ask", authRequired, async (req, res) => {
+  if (req.params.moduleSlug !== moduleOneJourney.slug) {
+    return res.status(404).json({ message: "Learning module not found." });
+  }
+  const topicSlug = String(req.body?.topicSlug || "").trim();
+  const question = String(req.body?.question || "").trim();
+  const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
+  if (!topic) return res.status(400).json({ message: "Valid journey topic is required." });
+  if (!question || question.length > 1200) {
+    return res.status(400).json({ message: "Question must be between 1 and 1200 characters." });
+  }
+
+  try {
+    const context = await mentorUserContext(req.user.id);
+    const previousJourneyChats = await journeyMentorChats(req.user.id, topicSlug);
+    const journeyHistory = previousJourneyChats
+      .flatMap((item) => item.messages || [])
+      .slice(-10)
+      .map((item) => ({ role: item.role === "assistant" ? "assistant" : "user", content: String(item.content || "").slice(0, 1200) }));
+    const journeySystemPrompt = [
+      "You are Studox Journey Tutor, a focused learning assistant separate from the general Studox AI Mentor.",
+      `You are teaching "${topic.title}" inside "${moduleOneJourney.title}".`,
+      "Stay focused on this module and the student's current doubt. Do not bring in resume, jobs, internships, or unrelated career planning.",
+      "Use the student's language and tone. Explain naturally in short paragraphs and include one practical example when helpful.",
+      "Do not use a numbered list unless the student explicitly asks for steps.",
+      `Student level: ${context.level}. Known skills: ${(context.skills || []).join(", ") || "not provided"}.`,
+    ].join("\n");
+    const mentor = await generateMentorReply(question, req.user.id, {
+      requireLiveProvider: true,
+      history: journeyHistory,
+      systemPrompt: journeySystemPrompt,
+    });
+    const chat = await createResource("journey-mentor", {
+      user: req.user.id,
+      moduleSlug: moduleOneJourney.slug,
+      topicSlug,
+      messages: [
+        { role: "user", content: question, createdAt: new Date() },
+        { role: "assistant", content: mentor.reply, createdAt: new Date() },
+      ],
+      metadata: {
+        provider: mentor.provider,
+        model: mentor.model,
+        fallback: false,
+      },
+    });
+    return res.status(201).json({
+      reply: mentor.reply,
+      provider: mentor.provider,
+      model: mentor.model,
+      fallback: false,
+      chatId: chat?._id || chat?.id,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 502).json({
+      message: error.statusCode === 503
+        ? error.message
+        : "Live AI could not answer right now. Please try again.",
+    });
+  }
+});
+
+function normalizeStructuredJourneyLesson(value, topic) {
+  const source = value && typeof value === "object" ? value : {};
+  const cleanList = (items, limit = 6) => (Array.isArray(items) ? items : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, limit);
+  const visualTypes = new Set(["flow", "comparison", "stack", "concept"]);
+  return {
+    title: String(source.title || topic.shortTitle || topic.title).slice(0, 120),
+    intro: String(source.intro || "").slice(0, 500),
+    definition: String(source.definition || source.intro || "").slice(0, 1200),
+    example: String(source.example || "").slice(0, 1000),
+    takeaway: String(source.takeaway || "").slice(0, 500),
+    visualType: visualTypes.has(source.visualType) ? source.visualType : "concept",
+    flow: cleanList(source.flow),
+    comparison: (Array.isArray(source.comparison) ? source.comparison : []).slice(0, 6).map((item) => ({
+      label: String(item?.label || "").slice(0, 80),
+      left: String(item?.left || "").slice(0, 240),
+      right: String(item?.right || "").slice(0, 240),
+    })).filter((item) => item.label && item.left && item.right),
+    keyPoints: cleanList(source.keyPoints, 4),
+  };
+}
+
+function parseStoredJourneyLesson(content, topic) {
+  try {
+    return normalizeStructuredJourneyLesson(JSON.parse(String(content || "")), topic);
+  } catch (_error) {
+    const text = String(content || "");
+    return normalizeStructuredJourneyLesson({
+      intro: text,
+      definition: text,
+      example: "",
+      takeaway: text,
+      visualType: "concept",
+    }, topic);
+  }
+}
+
+app.post("/api/journey/:moduleSlug/explain", authRequired, async (req, res) => {
+  if (req.params.moduleSlug !== moduleOneJourney.slug) {
+    return res.status(404).json({ message: "Learning module not found." });
+  }
+  const topicSlug = String(req.body?.topicSlug || "").trim();
+  const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
+  if (!topic) return res.status(400).json({ message: "Valid journey topic is required." });
+
+  return res.json({
+    lesson: normalizeStructuredJourneyLesson(topic.lesson, topic),
+    cached: true,
+    source: "curated",
   });
 });
 
