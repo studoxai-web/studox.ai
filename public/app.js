@@ -2760,21 +2760,41 @@ const moduleOneLessonTitles = [
   "CORS Introduction",
 ];
 
+const moduleTwoHtmlLessonTitles = [
+  "Introduction to HTML",
+  "HTML Document Structure",
+  "Elements, Tags and Attributes",
+  "Headings and Paragraphs",
+  "Text Formatting Elements",
+  "Links and Navigation",
+  "Images and Alternative Text",
+  "Ordered and Unordered Lists",
+  "Tables and Structured Data",
+  "Forms and Input Elements",
+  "Semantic HTML",
+  "Build a Complete HTML Page",
+];
+
 function roadmapModulesFromData(roadmap = {}) {
   const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
   return roadmapItems.map((item, index) => {
     const status = item.status === "in-progress" ? "active" : item.status === "upcoming" ? "locked" : item.status || (index === 0 ? "active" : "locked");
     return {
-      title: index === 0 ? "Web & Internet Architecture" : item.title || `Module ${index + 1}`,
+      title: index === 0 ? "Web & Internet Architecture" : index === 1 ? "HTML" : item.title || `Module ${index + 1}`,
       label: `Module ${index + 1}`,
       status,
       progress: Number(item.progress ?? (status === "completed" ? 100 : index === 0 ? 25 : 0)),
-      desc: index === 0 ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications." : item.description || "",
+      desc: index === 0
+        ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications."
+        : index === 1
+          ? "Build a strong HTML foundation with document structure, semantic elements, links, media, tables, and forms."
+          : item.description || "",
       estimatedHours: item.estimatedHours || 0,
       tasks: item.tasks || [],
       skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
       resources: item.resources || [],
       isModuleOne: index === 0,
+      isModuleTwo: index === 1,
     };
   });
 }
@@ -2786,6 +2806,18 @@ function roadmapLessonsForModule(module, moduleIndex) {
       duration: [20, 25, 25, 30, 20, 20, 20, 25, 25, 25, 25, 20, 20, 20, 25, 20, 25, 20, 20, 25, 25, 25][index] || 20,
       status: module.status === "completed" ? "completed" : index === 0 && module.status === "active" ? "active" : module.status === "locked" ? "locked" : "locked",
       icon: ["book", "code", "test", "map", "star", "book", "user", "chart", "search", "book", "arrow-right", "map", "map", "briefcase", "code", "lock", "plus", "code", "settings", "user", "lock", "arrow-right"][index] || "book",
+    }));
+  }
+  if (module.isModuleTwo || moduleIndex === 1) {
+    return moduleTwoHtmlLessonTitles.map((title, index) => ({
+      title,
+      duration: [15, 20, 20, 20, 15, 20, 20, 15, 25, 30, 25, 45][index] || 20,
+      status: module.status === "completed"
+        ? "completed"
+        : module.status === "active" && index === 0
+          ? "active"
+          : "locked",
+      icon: index === 11 ? "code" : index === 9 ? "test" : "html5",
     }));
   }
   const taskLessons = (module.tasks || []).slice(0, 5).map((task, index) => ({
@@ -3042,10 +3074,10 @@ routeMap.courses = function functionalCoursesPage() {
   const checkResult = functionalState.journeyCheckResults[activeTopic.slug];
   const checkPassed = completed.has(activeTopic.slug) || (savedProgress.passedCheckTopicSlugs || []).includes(activeTopic.slug) || checkResult?.correct;
   const learnerName = escapeHtml(String(currentUser?.name || "Learner").split(" ")[0]);
-  return appLayout(`<section class="journey-page journey-v2">
+  return appLayout(`<section class="journey-page journey-v2 journey-reference">
     <div class="journey-ambient" aria-hidden="true"><span></span><span></span><span></span><i></i><i></i></div>
     <header class="journey-v2-topbar">
-      <div class="journey-v2-title"><span>${icon("book")}</span><div><small>ACTIVE LEARNING JOURNEY</small><strong>${module.title || "Module 1: Web and Internet Architecture"}</strong></div><b>${topics.length} topics</b></div>
+      <div class="journey-v2-title"><span>${icon("book")}</span><div><small>LEARNING JOURNEY</small><strong>${module.title || "Module 1: Web and Internet Architecture"}</strong></div><b>${percent}% completed</b></div>
       <div class="journey-v2-top-actions"><button type="button" aria-label="Search">${icon("search")}<span>Search</span></button><button type="button" aria-label="Notifications">${icon("bell")}</button><div class="journey-streak">🔥 <strong>${Math.max(1, completed.size * 4 + 4)}</strong></div><div class="journey-profile-dot">${learnerName.charAt(0)}</div></div>
     </header>
     <div class="journey-layout">
@@ -3059,11 +3091,11 @@ routeMap.courses = function functionalCoursesPage() {
         <a class="btn ghost journey-back" href="#roadmap">← Back to roadmap</a>
       </aside>
       <main class="panel journey-chat-panel">
-        <div class="journey-v2-welcome"><div class="mentor-orb"><span></span><i></i></div><div><strong>👋 Hi ${learnerName}!</strong><p>Let’s understand <b>${escapeHtml(activeTopic.shortTitle || activeTopic.title || "this concept")}</b> today. Ready to continue?</p></div><span>Topic ${activeIndex + 1} of ${topics.length}</span></div>
+        <div class="journey-v2-welcome"><div class="mentor-orb"><span></span><i></i></div><div><strong>AI Mentor</strong><p>Let’s learn in a smart, interactive way.</p></div><span>Topic ${activeIndex + 1} of ${topics.length}</span></div>
         <div class="journey-conversation" id="journeyConversation">
           ${lessonAnswer ? journeyVisualLesson(lessonAnswer) : ""}
           ${functionalState.journeyLessonLoading ? `<div class="journey-lesson-loading"><div class="mentor-orb"><span></span></div><div><strong>Opening your visual lesson</strong><p>Loading concepts, examples, and the knowledge check...</p><span class="typing"><span></span><span></span><span></span></span></div></div>` : ""}
-          ${!lessonAnswer && !functionalState.journeyLessonLoading ? `<div class="journey-lesson-start"><div class="lesson-start-core"><span>${icon("bot")}</span><i></i><i></i><b></b></div><span class="lesson-ready-label">KNOWLEDGE NODE READY</span><h2>Explore ${activeTopic.shortTitle || activeTopic.title}</h2><p>Open a structured visual lesson with a practical example, architecture view, key ideas and a mastery check.</p><div class="lesson-start-features"><span>Visual explanation</span><span>Practical example</span><span>Zero AI credits</span></div>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-launch-btn" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}"><span>Start visual lesson</span>${icon("plus")}</button></div>` : ""}
+          ${!lessonAnswer && !functionalState.journeyLessonLoading ? `<div class="journey-reference-start"><div class="journey-reference-copy"><span>TOPIC ${activeIndex + 1} · GUIDED LEARNING</span><h2>${escapeHtml(activeTopic.shortTitle || activeTopic.title || "Web Development Basics")}</h2><p>We’ll break this down step by step with simple explanations, real-world examples, visuals and hands-on practice.</p><div class="journey-reference-features"><span>${icon("book")} Easy Explanation</span><span>${icon("briefcase")} Real World Example</span><span>${icon("code")} Live Practice</span><span>${icon("test")} Quick Quiz</span></div>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-reference-launch" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}">Start Learning ${icon("arrow-right")}</button></div><div class="journey-reference-bot" aria-hidden="true"><i></i><div><span></span><span></span><b></b></div><em></em><small></small></div></div>` : ""}
           ${functionalState.journeyTyping ? `<div class="message ai journey-live-typing"><span class="typing"><span></span><span></span><span></span></span><small>Studox AI is thinking...</small></div>` : ""}
           ${followups.map((item) => `<div class="message user journey-followup-question">${escapeHtml(item.question)}</div><div class="message ai journey-followup-answer"><span class="ai-answer-label">${icon("bot")} Live answer</span>${formatMentorMessage(item.answer)}</div>`).join("")}
           ${functionalState.journeyAiError ? `<div class="journey-ai-error"><strong>Live AI is unavailable</strong><p>${escapeHtml(functionalState.journeyAiError)}</p></div>` : ""}
@@ -3075,25 +3107,11 @@ routeMap.courses = function functionalCoursesPage() {
           </form>` : ""}
 ${explanationComplete ? `<div class="journey-checkpoint"><span>${allDone ? "🏆" : "✨"}</span><div><strong>${allDone ? "Module completed!" : "You reached the topic checkpoint"}</strong><p>${allDone ? `You completed all ${topics.length} topics in Web and Internet Architecture.` : "Ask a doubt below or complete this topic to continue automatically."}</p></div></div>` : ""}
         </div>
-        <div class="journey-suggestions">
-          ${["Give me a real example", "Why is this important?", "Explain it more simply"].map((prompt) => `<button type="button" data-action="journey-suggestion" data-prompt="${prompt}">${prompt}</button>`).join("")}
-        </div>
-        <form class="journey-composer" data-form="journey-question">
-          <span class="composer-bot">${icon("bot")}</span>
-          <input name="message" autocomplete="off" placeholder="Ask Studox AI anything about ${activeTopic.shortTitle || "this topic"}..." required />
-          <button class="btn primary" type="submit" aria-label="Send question">${icon("plus")}</button>
-        </form>
-        <footer class="journey-actions">
-          <button class="btn ghost" type="button" data-action="journey-previous" ${activeIndex <= 0 ? "disabled" : ""}>← Previous</button>
-          <div class="journey-bottom-progress"><span>Progress</span><div><i style="width:${percent}%"></i></div><b>${percent}%</b></div>
-          <button class="btn primary glow" type="button" data-action="complete-journey-topic" data-topic-slug="${activeTopic.slug}" ${!activeTopic.slug || (!completed.has(activeTopic.slug) && !checkPassed) ? "disabled" : ""}>${completed.has(activeTopic.slug) ? (activeIndex < topics.length - 1 ? "Continue to Next Topic" : "Review Completed Module") : "Complete Topic & Continue"} ${icon("plus")}</button>
-        </footer>
       </main>
       <aside class="journey-insight-rail">
         <section class="panel journey-progress-card"><small>YOUR PROGRESS</small><div class="journey-progress-ring" style="--journey-percent:${percent}"><div><strong>${percent}%</strong><span>Overall</span></div></div><div class="journey-progress-stats"><span><strong>${completed.size} / ${topics.length}</strong>Topics completed</span><span><strong>${Math.max(4, completed.size * 6 + 4)}m</strong>Time learned</span></div></section>
-        <section class="panel journey-goal-card"><small>🔥 TODAY'S GOAL</small><strong>${Math.min(30, Math.max(4, completed.size * 6 + 4))} min <span>/ 30 min</span></strong><div><i style="width:${Math.min(100, Math.round((Math.max(4, completed.size * 6 + 4) / 30) * 100))}%"></i></div><p>Keep going — your learning streak is active.</p></section>
+        <section class="panel journey-goal-card"><small>TIME LEARNED</small><strong>${Math.max(4, completed.size * 6 + 4)} min</strong><div><i style="width:${Math.min(100, Math.round((Math.max(4, completed.size * 6 + 4) / 30) * 100))}%"></i></div><p>Today’s focused learning time</p></section>
         <section class="panel journey-concepts-card"><small>KEY CONCEPTS</small><ul>${(lessonAnswer?.keyPoints || ["Core idea", "Practical example", "How it works", "Knowledge check"]).slice(0, 5).map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>
-        <section class="panel journey-study-card"><small>AI STUDY ASSISTANT</small>${["Summarise this topic", "Explain like I’m 5", "Give a real-world analogy", "Ask anything…"].map((prompt) => `<button type="button" data-action="journey-suggestion" data-prompt="${prompt}">${icon("bot")}<span>${prompt}</span>${icon("plus")}</button>`).join("")}</section>
       </aside>
     </div>
   </section>`, "courses");
