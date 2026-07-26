@@ -2428,6 +2428,8 @@ const functionalState = {
   generatedRoadmaps: [],
   previewRoadmapIndex: 0,
   roadmaps: [],
+  roadmapView: "tree",
+  expandedRoadmapModuleIndex: null,
   courses: [],
   courseDetail: null,
   journey: null,
@@ -2439,6 +2441,12 @@ const functionalState = {
   journeyLessonAnswers: {},
   journeyLessonLoading: false,
   journeyLessonError: "",
+  journeyStoryScene: 0,
+  journeyVoiceGuideOn: false,
+  journeyVoiceStatus: "idle",
+  journeyVoiceSpeed: 1,
+  journeyVoiceText: "",
+  journeyQuickCheck: {},
   tests: [],
   testResults: [],
   testSession: null,
@@ -2726,6 +2734,251 @@ function courseCardFromApi(course) {
   });
 }
 
+const moduleOneLessonTitles = [
+  "What is Web Development?",
+  "Frontend Development",
+  "Backend Development",
+  "Full Stack Development",
+  "Website vs Web Application",
+  "Static vs Dynamic Websites",
+  "Client and Server Introduction",
+  "Basic Client-Server Architecture",
+  "How a Browser Works",
+  "Browser Rendering Basics",
+  "Request-Response Cycle",
+  "Introduction to DNS",
+  "Domain Name Basics",
+  "Hosting Basics",
+  "HTTP Introduction",
+  "HTTPS Introduction",
+  "API Introduction",
+  "JSON Introduction",
+  "Cookies Introduction",
+  "Sessions Introduction",
+  "JWT Introduction",
+  "CORS Introduction",
+];
+
+function roadmapModulesFromData(roadmap = {}) {
+  const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
+  return roadmapItems.map((item, index) => {
+    const status = item.status === "in-progress" ? "active" : item.status === "upcoming" ? "locked" : item.status || (index === 0 ? "active" : "locked");
+    return {
+      title: index === 0 ? "Web & Internet Architecture" : item.title || `Module ${index + 1}`,
+      label: `Module ${index + 1}`,
+      status,
+      progress: Number(item.progress ?? (status === "completed" ? 100 : index === 0 ? 25 : 0)),
+      desc: index === 0 ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications." : item.description || "",
+      estimatedHours: item.estimatedHours || 0,
+      tasks: item.tasks || [],
+      skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
+      resources: item.resources || [],
+      isModuleOne: index === 0,
+    };
+  });
+}
+
+function roadmapLessonsForModule(module, moduleIndex) {
+  if (module.isModuleOne) {
+    return moduleOneLessonTitles.map((title, index) => ({
+      title,
+      duration: [20, 25, 25, 30, 20, 20, 20, 25, 25, 25, 25, 20, 20, 20, 25, 20, 25, 20, 20, 25, 25, 25][index] || 20,
+      status: module.status === "completed" ? "completed" : index === 0 && module.status === "active" ? "active" : module.status === "locked" ? "locked" : "locked",
+      icon: ["book", "code", "test", "map", "star", "book", "user", "chart", "search", "book", "arrow-right", "map", "map", "briefcase", "code", "lock", "plus", "code", "settings", "user", "lock", "arrow-right"][index] || "book",
+    }));
+  }
+  const taskLessons = (module.tasks || []).slice(0, 5).map((task, index) => ({
+    title: task.title || `Lesson ${index + 1}`,
+    duration: Math.max(15, Math.round(Number(task.estimatedTimeMinutes || 25))),
+    status: module.status === "completed" ? "completed" : module.status === "active" && index === 0 ? "active" : "locked",
+    icon: "book",
+  }));
+  if (taskLessons.length) return taskLessons;
+  return Array.from({ length: 5 }, (_item, index) => ({
+    title: index === 0 ? `Introduction to ${module.title}` : `${module.title} Part ${index + 1}`,
+    duration: 20 + (index % 2) * 5,
+    status: module.status === "completed" ? "completed" : module.status === "active" && index === 0 ? "active" : "locked",
+    icon: "book",
+  }));
+}
+
+function roadmapTreeView(roadmap, liveModules) {
+  if (!liveModules.length) {
+    return `<div class="roadmap-tree-empty">${emptyState("No roadmap yet", "Create your personalized roadmap from here.")}<button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div>`;
+  }
+  const totalLessons = liveModules.reduce((sum, module, index) => sum + roadmapLessonsForModule(module, index).length, 0);
+  const progressValue = Math.round(Number(roadmap.overallProgress || liveModules.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, liveModules.length) || 0));
+  const completedModules = liveModules.filter((module) => module.status === "completed").length;
+  const completedLessons = liveModules.reduce((sum, module, index) => sum + roadmapLessonsForModule(module, index).filter((lesson) => lesson.status === "completed").length, 0);
+  const activeLessons = liveModules.reduce((sum, module, index) => sum + roadmapLessonsForModule(module, index).filter((lesson) => lesson.status === "active").length, 0);
+  const lockedLessons = Math.max(0, totalLessons - completedLessons - activeLessons);
+  const activeModule = liveModules.find((module) => module.status === "active") || liveModules.find((module) => module.status !== "locked") || liveModules[0];
+  const activeModuleIndex = Math.max(0, liveModules.indexOf(activeModule));
+  const nextLesson = roadmapLessonsForModule(activeModule, activeModuleIndex).find((lesson) => lesson.status !== "completed")
+    || roadmapLessonsForModule(liveModules[0], 0)[0];
+  return `<section class="roadmap-tree-shell roadmap-tree-modern">
+    <div class="roadmap-tree-summary">
+      <div class="tree-summary-item primary"><span>${icon("chart")}</span><small>Overall Progress</small><strong>${progressValue}%</strong><div class="mini-progress"><i style="width:${progressValue}%"></i></div></div>
+      <div class="tree-summary-item"><span>${icon("map")}</span><small>Modules</small><strong>${liveModules.length}</strong><em>Total</em></div>
+      <div class="tree-summary-item"><span>${icon("book")}</span><small>Lessons</small><strong>${totalLessons}</strong><em>Total</em></div>
+      <div class="tree-summary-item"><span>${icon("sun")}</span><small>Time to Goal</small><strong>${roadmap.timeToGoalWeeks || roadmap.estimatedDurationWeeks || 0} weeks</strong><em>6-8 hrs / week</em></div>
+      <div class="tree-summary-item"><span>${icon("trophy")}</span><small>Current Streak</small><strong>${functionalState.dashboard?.studyStreak || 0} days</strong><em>Keep it up!</em></div>
+    </div>
+    <div class="roadmap-tree-main">
+      <div class="roadmap-learning-path">
+        <h2>Your Learning Path</h2>
+        <div class="roadmap-module-list">
+          ${liveModules.map((module, moduleIndex) => {
+            const lessons = roadmapLessonsForModule(module, moduleIndex);
+            const isLocked = module.status === "locked";
+            const isCompleted = module.status === "completed";
+            const isActive = module.status === "active";
+            const expanded = moduleIndex === 0 || isCompleted || isActive;
+            return `<article class="roadmap-module-row ${expanded ? "expanded" : ""} ${isLocked ? "locked" : ""} ${isCompleted ? "completed" : ""} ${isActive ? "active" : ""}">
+              <div class="roadmap-step-marker"><span>${isCompleted ? "✓" : isLocked ? icon("lock") : moduleIndex + 1}</span></div>
+              <div class="tree-module-card ${module.isModuleOne ? "journey-module-card" : ""}" ${module.isModuleOne ? "data-action=\"open-module-journey\" role=\"button\" tabindex=\"0\"" : ""}>
+                <span class="tree-module-icon">${icon(moduleIndex === 0 ? "map" : moduleIndex === 1 ? "code" : moduleIndex === 2 ? "js" : moduleIndex === 3 ? "react" : "node")}</span>
+                <div class="tree-module-copy"><small>${module.label}</small><h3>${module.title}</h3>${expanded ? `<p>${module.desc || "Continue this module to unlock the next step."}</p>` : ""}</div>
+                <span class="module-status ${isCompleted ? "completed" : isActive ? "active" : "locked"}">${isLocked ? "Locked" : isCompleted ? "Completed" : "In Progress"}</span>
+                <strong>${Math.round(module.progress)}%</strong>
+                <div class="tree-progress"><i style="width:${Math.min(100, Math.max(0, module.progress))}%"></i></div>
+                <button class="module-chevron" type="button" aria-label="Module details">⌄</button>
+                ${expanded ? `<div class="tree-lesson-list">
+                  ${lessons.map((lesson, lessonIndex) => `<div class="tree-lesson-line ${lesson.status}">
+                    <span>${lesson.status === "completed" ? "✓" : lesson.status === "active" ? lessonIndex + 1 : icon("lock")}</span>
+                    <b>${lessonIndex + 1}</b>
+                    <p>${lesson.title}</p>
+                    <small>${lesson.duration} min</small>
+                    <i>${lesson.status === "completed" ? "✓" : lesson.status === "active" ? "Start" : icon("lock")}</i>
+                  </div>`).join("")}
+                  <div class="module-row-actions"><button class="btn secondary" type="button" data-action="open-module-journey">${icon("map")} Review Module</button><button class="btn primary" type="button" data-action="open-module-journey">Continue Journey ${icon("arrow-right")}</button></div>
+                </div>` : ""}
+              </div>
+            </article>`;
+          }).join("")}
+        </div>
+        <div class="roadmap-tree-footer"><b>Tip: Complete lessons in order to unlock the next ones and track your true progress.</b></div>
+      </div>
+      <aside class="roadmap-tree-aside">
+        <div class="panel">
+          <h3>Your Progress</h3>
+          <div class="circle-progress" style="--percent:${progressValue}" data-label="${progressValue}%"></div>
+          <div class="tree-progress-list">
+            <span><i class="green"></i> Completed Modules <b>${completedModules} / ${liveModules.length}</b></span>
+            <span><i class="purple"></i> Completed Lessons <b>${completedLessons} / ${totalLessons}</b></span>
+            <span><i class="orange"></i> In Progress <b>${activeLessons} / ${totalLessons}</b></span>
+            <span><i></i> Locked <b>${lockedLessons} / ${totalLessons}</b></span>
+          </div>
+        </div>
+        <div class="panel next-up-card">
+          <h3>Next Up</h3>
+          <p>Continue where you left off</p>
+          <div class="next-lesson-card"><span>Lesson ${Math.max(1, roadmapLessonsForModule(activeModule, activeModuleIndex).indexOf(nextLesson) + 1)}</span><h4>${nextLesson?.title || activeModule?.title || "Start your roadmap"}</h4><p>${activeModule?.label || "Roadmap"}</p><small>${nextLesson?.duration || 20} min</small><button class="btn primary" type="button" data-action="open-module-journey">Continue Lesson ${icon("arrow-right")}</button></div>
+        </div>
+        <div class="panel achievements-card">
+          <h3>Achievements</h3>
+          <div><span>${icon("trophy")}</span><p><b>First Steps</b><small>Complete your first lesson</small></p><strong>${completedLessons > 0 ? "✓" : "0/1"}</strong></div>
+          <div><span>${icon("sun")}</span><p><b>Consistency</b><small>Maintain a 7-day streak</small></p><strong>${Math.min(7, functionalState.dashboard?.studyStreak || 0)} / 7</strong></div>
+          <div><span>${icon("book")}</span><p><b>Explorer</b><small>Complete 5 lessons</small></p><strong>${Math.min(5, completedLessons)} / 5</strong></div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function roadmapTimelineView(roadmap, liveModules) {
+  return `<div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card ${item.isModuleOne ? "journey-module-card" : ""}" ${item.isModuleOne ? "data-action=\"open-module-journey\" role=\"button\" tabindex=\"0\"" : ""}><header><div><h3>${item.label}: ${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.estimatedHours ? `${item.estimatedHours}h` : item.status}</span></header>${progress("Module progress", item.progress)}${item.isModuleOne ? `<div class="roadmap-topic-preview">${moduleOneLessonTitles.map((topic, topicIndex) => `<span><b>${topicIndex + 1}</b>${topic}</span>`).join("")}</div><div class="module-card-cta">Click to start your Journey ${icon("plus")}</div>` : `<h4>Tasks</h4><div class="skills-row">${item.tasks.length ? item.tasks.map((task) => `<span class="chip">${task.title || task}</span>`).join("") : item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("") || `<span class="chip">No resources yet</span>`}</div>`}</div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Create your roadmap to start."}</p><a class="btn primary" href="${liveModules.length ? "#courses" : "#assessment"}" ${liveModules.length ? "" : "data-action=\"start-assessment\""}>${liveModules.length ? "Journey" : "Create Roadmap"}</a></aside></div>`;
+}
+
+function roadmapAccordionView(roadmap, liveModules) {
+  if (!liveModules.length) {
+    return `<div class="roadmap-tree-empty">${emptyState("No roadmap yet", "Create your personalized roadmap from here.")}<button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div>`;
+  }
+  const lessonGroups = liveModules.map((module, index) => roadmapLessonsForModule(module, index));
+  const totalLessons = lessonGroups.reduce((sum, lessons) => sum + lessons.length, 0);
+  const completedModules = liveModules.filter((module) => module.status === "completed").length;
+  const completedLessons = lessonGroups.reduce((sum, lessons) => sum + lessons.filter((lesson) => lesson.status === "completed").length, 0);
+  const currentLessons = lessonGroups.reduce((sum, lessons) => sum + lessons.filter((lesson) => lesson.status === "active").length, 0);
+  const lockedLessons = Math.max(0, totalLessons - completedLessons - currentLessons);
+  const progressValue = Math.round(Number(roadmap.overallProgress || liveModules.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, liveModules.length) || 0));
+  const activeModule = liveModules.find((module) => module.status === "active") || liveModules.find((module) => module.status !== "locked") || liveModules[0];
+  const activeModuleIndex = Math.max(0, liveModules.indexOf(activeModule));
+  const activeModuleLessons = lessonGroups[activeModuleIndex] || [];
+  const nextLesson = activeModuleLessons.find((lesson) => lesson.status !== "completed") || activeModuleLessons[0];
+  const expandedModuleIndex = Number.isInteger(functionalState.expandedRoadmapModuleIndex)
+    ? Math.min(Math.max(functionalState.expandedRoadmapModuleIndex, 0), liveModules.length - 1)
+    : -1;
+
+  return `<section class="roadmap-accordion">
+    <div class="roadmap-tree-summary">
+      <div class="tree-summary-item primary"><span>${icon("chart")}</span><small>Overall Progress</small><strong>${progressValue}%</strong><div class="mini-progress"><i style="width:${progressValue}%"></i></div></div>
+      <div class="tree-summary-item"><span>${icon("map")}</span><small>Modules</small><strong>${liveModules.length}</strong><em>Total</em></div>
+      <div class="tree-summary-item"><span>${icon("book")}</span><small>Lessons</small><strong>${totalLessons}</strong><em>Total</em></div>
+      <div class="tree-summary-item"><span>${icon("sun")}</span><small>Time to Goal</small><strong>${roadmap.timeToGoalWeeks || roadmap.estimatedDurationWeeks || 0} weeks</strong><em>6-8 hrs / week</em></div>
+    </div>
+    <article class="current-lesson-card">
+      <div><span>${icon("book")}</span><small>Continue Learning</small><h2>${nextLesson?.title || "Start your roadmap"}</h2><p><b>Module:</b> ${activeModule?.title || "Roadmap"} · <b>Estimated:</b> ${nextLesson?.duration || 20} min</p></div>
+      <button class="btn primary" type="button" data-action="open-module-journey">Continue Lesson ${icon("arrow-right")}</button>
+    </article>
+    <div class="roadmap-accordion-layout">
+      <div class="roadmap-learning-path">
+        <h2>Module List</h2>
+        <div class="roadmap-module-list">
+          ${liveModules.map((module, moduleIndex) => {
+            const lessons = lessonGroups[moduleIndex] || [];
+            const expanded = moduleIndex === expandedModuleIndex;
+            const isLocked = module.status === "locked";
+            const isCompleted = module.status === "completed";
+            const isActive = module.status === "active";
+            const currentLesson = lessons.find((lesson) => lesson.status !== "completed") || lessons[0];
+            const estimatedDuration = lessons.reduce((sum, lesson) => sum + Number(lesson.duration || 0), 0);
+            return `<article class="roadmap-module-row ${expanded ? "expanded" : ""} ${isLocked ? "locked" : ""} ${isCompleted ? "completed" : ""} ${isActive ? "active" : ""}">
+              <div class="roadmap-step-marker"><span>${isCompleted ? "OK" : isLocked ? icon("lock") : moduleIndex + 1}</span></div>
+              <div class="tree-module-card">
+                <span class="tree-module-icon">${icon(moduleIndex === 0 ? "map" : moduleIndex === 1 ? "code" : moduleIndex === 2 ? "js" : moduleIndex === 3 ? "react" : "node")}</span>
+                <div class="tree-module-copy"><small>${module.label}</small><h3>${module.title}</h3><p>${module.desc || "Continue this module to unlock the next step."}</p><em>Current: ${currentLesson?.title || "No lesson"} · ${estimatedDuration} min total</em></div>
+                <span class="module-status ${isCompleted ? "completed" : isActive ? "active" : "locked"}">${isLocked ? "Locked" : isCompleted ? "Completed" : "In Progress"}</span>
+                <strong>${Math.round(module.progress)}%</strong>
+                <div class="tree-progress"><i style="width:${Math.min(100, Math.max(0, module.progress))}%"></i></div>
+                ${isLocked ? `<button class="btn module-continue" type="button" disabled>Locked</button>` : `<button class="btn primary module-continue" type="button" data-action="open-module-journey">Continue</button>`}
+                <button class="module-chevron" type="button" data-action="roadmap-module-toggle" data-module-index="${moduleIndex}">${expanded ? "Collapse" : "Expand"}</button>
+                ${expanded ? `<div class="tree-lesson-list compact">
+                  ${lessons.map((lesson, lessonIndex) => `<div class="tree-lesson-line ${lesson.status}">
+                    <span>${lesson.status === "completed" ? "OK" : lesson.status === "active" ? lessonIndex + 1 : icon("lock")}</span>
+                    <b>${lessonIndex + 1}</b>
+                    <p>${lesson.title}</p>
+                    <small>${lesson.duration} min</small>
+                    <i>${lesson.status === "completed" ? "Completed" : lesson.status === "active" ? "Current" : "Locked"}</i>
+                  </div>`).join("")}
+                  <div class="module-row-actions"><button class="btn primary" type="button" data-action="open-module-journey">Continue Learning ${icon("arrow-right")}</button></div>
+                </div>` : ""}
+              </div>
+            </article>`;
+          }).join("")}
+        </div>
+      </div>
+      <aside class="roadmap-tree-aside">
+        <div class="panel">
+          <h3>Your Progress</h3>
+          <div class="circle-progress" style="--percent:${progressValue}" data-label="${progressValue}%"></div>
+          <div class="tree-progress-list">
+            <span><i class="green"></i> Completed Modules <b>${completedModules} / ${liveModules.length}</b></span>
+            <span><i class="purple"></i> Completed Lessons <b>${completedLessons} / ${totalLessons}</b></span>
+            <span><i class="orange"></i> Current Lessons <b>${currentLessons} / ${totalLessons}</b></span>
+            <span><i></i> Locked <b>${lockedLessons} / ${totalLessons}</b></span>
+          </div>
+        </div>
+        <div class="panel next-up-card">
+          <h3>Next Up</h3>
+          <p>Continue where you left off</p>
+          <div class="next-lesson-card"><span>Lesson ${Math.max(1, activeModuleLessons.indexOf(nextLesson) + 1)}</span><h4>${nextLesson?.title || activeModule?.title || "Start your roadmap"}</h4><p>${activeModule?.label || "Roadmap"}</p><small>${nextLesson?.duration || 20} min</small><button class="btn primary" type="button" data-action="open-module-journey">Continue Lesson ${icon("arrow-right")}</button></div>
+        </div>
+      </aside>
+    </div>
+    <div class="roadmap-tree-footer"><b>Tip: Expand one module at a time. Complete lessons in order to unlock the next step.</b></div>
+  </section>`;
+}
+
 routeMap.dashboard = function functionalDashboardPage() {
   const data = functionalState.dashboard || {};
   const stats = [
@@ -2755,30 +3008,20 @@ routeMap.dashboard = function functionalDashboardPage() {
 
 routeMap.roadmap = function functionalRoadmapPage() {
   const roadmap = functionalState.roadmaps[0] || {};
-  const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
-  const liveModules = roadmapItems.map((item, index) => ({
-    title: index === 0 ? "Module 1: Web and Internet Architecture" : item.title,
-    status: item.status === "in-progress" ? "active" : item.status || (index === 0 ? "active" : "locked"),
-    progress: item.progress || 0,
-    desc: index === 0 ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications." : item.description || "",
-    estimatedHours: item.estimatedHours || 0,
-    tasks: item.tasks || [],
-    skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
-    resources: item.resources || [],
-    isModuleOne: index === 0,
-  }));
+  const liveModules = roadmapModulesFromData(roadmap);
   const completedModules = liveModules.filter((item) => item.status === "completed").length;
   const activeModule = liveModules.find((item) => item.status === "active") || liveModules[0];
   const hasRoadmap = liveModules.length > 0;
-  return appLayout(`<div class="page-head"><div><h1>${roadmap.title || "My Learning Roadmap"}</h1><p>${hasRoadmap ? roadmap.summary || "Follow your saved roadmap week by week." : "Create your personalized roadmap to start learning."}</p></div><div class="toggle-group"><button class="active">Timeline View</button><button>Tree View</button></div></div>
-    ${statCards([
+  const activeView = functionalState.roadmapView === "timeline" ? "timeline" : "tree";
+  return appLayout(`<div class="page-head roadmap-tree-head"><div><h1>${roadmap.title || "My Learning Roadmap"}</h1><p>${hasRoadmap ? roadmap.summary || "Follow your saved roadmap week by week." : "Create your personalized roadmap to start learning."}</p></div><div class="toggle-group"><button class="${activeView === "tree" ? "active" : ""}" type="button" data-action="roadmap-view" data-roadmap-view="tree">Tree View</button><button class="${activeView === "timeline" ? "active" : ""}" type="button" data-action="roadmap-view" data-roadmap-view="timeline">Timeline View</button></div></div>
+    ${activeView === "timeline" ? statCards([
       ["Total Modules", liveModules.length, "", "map", roadmap.currentLevel || "Beginner"],
       ["Overall Progress", roadmap.overallProgress || 0, "%", "chart", "Live"],
       ["Time to Goal", roadmap.timeToGoalWeeks || roadmap.estimatedDurationWeeks || 0, "w", "map", "Estimated"],
       ["Skills Learned", roadmap.skillsLearned || 0, "", "book", "Profile"],
       ["Completed Modules", completedModules, "", "trophy", activeModule?.title || "Start"],
-    ])}
-    <div class="roadmap-layout"><div class="panel"><div class="timeline">${liveModules.map((item) => `<article class="timeline-item ${item.status === "completed" ? "completed" : item.status === "active" ? "active" : ""}"><span class="node"></span><div class="module-card ${item.isModuleOne ? "journey-module-card" : ""}" ${item.isModuleOne ? "data-action=\"open-module-journey\" role=\"button\" tabindex=\"0\"" : ""}><header><div><h3>${item.title}</h3><p>${item.desc}</p></div><span class="chip ${item.status === "completed" ? "green" : item.status === "active" ? "purple" : ""}">${item.estimatedHours ? `${item.estimatedHours}h` : item.status}</span></header>${progress("Module progress", item.progress)}${item.isModuleOne ? `<div class="roadmap-topic-preview">${["What is Web Development?", "Frontend Development", "Backend Development", "Full-Stack Development", "Website vs Web Application"].map((topic, topicIndex) => `<span><b>${topicIndex + 1}</b>${topic}</span>`).join("")}</div><div class="module-card-cta">Click to start your Journey ${icon("plus")}</div>` : `<h4>Tasks</h4><div class="skills-row">${item.tasks.length ? item.tasks.map((task) => `<span class="chip">${task.title || task}</span>`).join("") : item.skills.map((skill) => `<span class="chip">${skill}</span>`).join("")}</div><h4 style="margin-top:14px">Resources</h4><div class="skills-row">${item.resources.map((resource) => `<a class="chip" href="${resource.url || "#"}" target="_blank" rel="noopener">${resource.title}</a>`).join("") || `<span class="chip">No resources yet</span>`}</div>`}</div></article>`).join("") || `<div class="empty-state"><div><h3>No roadmap yet</h3><p>Create your personalized roadmap from here.</p><button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div></div>`}</div></div><aside class="panel"><div class="circle-progress" style="--percent:${roadmap.overallProgress || 0}" data-label="${roadmap.overallProgress || 0}%"></div><h3>Next milestone</h3><p class="muted">${roadmap.nextMilestone || roadmap.weeks?.[0]?.title || "Create your roadmap to start."}</p><a class="btn primary" href="${hasRoadmap ? "#courses" : "#assessment"}" ${hasRoadmap ? "" : "data-action=\"start-assessment\""}>${hasRoadmap ? "Journey" : "Create Roadmap"}</a></aside></div>`, "roadmap");
+    ]) : ""}
+    ${activeView === "tree" ? roadmapAccordionView(roadmap, liveModules) : roadmapTimelineView(roadmap, liveModules)}`, "roadmap");
 };
 
 routeMap.courses = function functionalCoursesPage() {
@@ -2831,7 +3074,7 @@ routeMap.courses = function functionalCoursesPage() {
             ${checkResult ? `<div class="concept-feedback ${checkResult.correct ? "correct" : "incorrect"}"><strong>${checkResult.correct ? "Correct — concept clear!" : "Let us fix that"}</strong><p>${escapeHtml(checkResult.explanation)}</p></div>` : ""}
             ${checkPassed ? `<span class="concept-passed">✓ Check passed</span>` : `<button class="btn primary" type="submit">Check my answer</button>`}
           </form>` : ""}
-          ${explanationComplete ? `<div class="journey-checkpoint"><span>${allDone ? "🏆" : "✨"}</span><div><strong>${allDone ? "Module completed!" : "You reached the topic checkpoint"}</strong><p>${allDone ? "You completed all five topics in Web and Internet Architecture." : "Ask a doubt below or complete this topic to continue automatically."}</p></div></div>` : ""}
+${explanationComplete ? `<div class="journey-checkpoint"><span>${allDone ? "🏆" : "✨"}</span><div><strong>${allDone ? "Module completed!" : "You reached the topic checkpoint"}</strong><p>${allDone ? `You completed all ${topics.length} topics in Web and Internet Architecture.` : "Ask a doubt below or complete this topic to continue automatically."}</p></div></div>` : ""}
         </div>
         <div class="journey-suggestions">
           ${["Give me a real example", "Why is this important?", "Explain it more simply"].map((prompt) => `<button type="button" data-action="journey-suggestion" data-prompt="${prompt}">${prompt}</button>`).join("")}
@@ -3256,12 +3499,12 @@ bindPage = function functionalBindPage() {
 async function requestJourneyLesson(topicSlug) {
   if (!topicSlug || functionalState.journeyLessonLoading) return;
   if (functionalState.journeyLessonAnswers[topicSlug]) {
-    await render();
+    updateJourneyLessonPanel(topicSlug);
     return;
   }
   functionalState.journeyLessonError = "";
   functionalState.journeyLessonLoading = true;
-  await render();
+  updateJourneyLessonPanel(topicSlug);
   const result = await api("/journey/web-and-internet-architecture/explain", {
     method: "POST",
     body: JSON.stringify({ topicSlug }),
@@ -3272,8 +3515,101 @@ async function requestJourneyLesson(topicSlug) {
   } else {
     functionalState.journeyLessonError = "This lesson could not be opened. Please try again.";
   }
-  await render();
-  document.getElementById("journeyConversation")?.scrollTo({ top: 0, behavior: "smooth" });
+  updateJourneyLessonPanel(topicSlug);
+  document.getElementById("journeyConversation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function updateJourneyLessonPanel(topicSlug) {
+  const panel = document.getElementById("journeyConversation");
+  const module = functionalState.journey?.module || {};
+  const topics = module.topics || [];
+  const activeTopic = topics.find((topic) => topic.slug === topicSlug) || {};
+  const lessonAnswer = functionalState.journeyLessonAnswers[topicSlug] || "";
+  if (!panel) return;
+  if (functionalState.journeyLessonLoading) {
+    panel.innerHTML = `<div class="journey-lesson-loading"><div class="mentor-orb"><span></span></div><div><strong>Opening your lesson</strong><p>Loading the explanation inside this section...</p><span class="typing"><span></span><span></span><span></span></span></div></div>`;
+    return;
+  }
+  if (lessonAnswer) {
+    panel.innerHTML = journeyVisualLesson(lessonAnswer);
+    bindJourneyStoryControls(panel);
+    return;
+  }
+  panel.innerHTML = `<div class="journey-lesson-start"><div class="lesson-start-core"><span>${icon("bot")}</span><i></i><i></i><b></b></div><span class="lesson-ready-label">KNOWLEDGE NODE READY</span><h2>Explore ${activeTopic.shortTitle || activeTopic.title}</h2><p>Open a structured visual lesson with a practical example, architecture view, key ideas and a mastery check.</p>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-launch-btn" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}"><span>Start visual lesson</span>${icon("plus")}</button></div>`;
+  panel.querySelector("[data-action='generate-journey-lesson']")?.addEventListener("click", (event) => {
+    requestJourneyLesson(event.currentTarget.dataset.topicSlug);
+  });
+}
+
+function bindJourneyStoryControls(root = document) {
+  root.querySelectorAll("[data-action='lesson-story-next']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    functionalState.journeyStoryScene = Math.min(4, Number(functionalState.journeyStoryScene || 0) + 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-action='lesson-story-prev']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    functionalState.journeyStoryScene = Math.max(0, Number(functionalState.journeyStoryScene || 0) - 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-action='voice-guide-toggle']").forEach((input) => input.addEventListener("change", (event) => {
+    functionalState.journeyVoiceGuideOn = event.currentTarget.checked;
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+    else {
+      stopJourneyVoice();
+      updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    }
+  }));
+  root.querySelectorAll("[data-action='voice-learn-scene']").forEach((button) => button.addEventListener("click", () => {
+    speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-action='voice-pause']").forEach((button) => button.addEventListener("click", () => {
+    window.speechSynthesis?.pause?.();
+    functionalState.journeyVoiceStatus = "paused";
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  root.querySelectorAll("[data-action='voice-resume']").forEach((button) => button.addEventListener("click", () => {
+    window.speechSynthesis?.resume?.();
+    functionalState.journeyVoiceStatus = "playing";
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  root.querySelectorAll("[data-action='voice-stop']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  root.querySelectorAll("[data-action='voice-speed']").forEach((button) => button.addEventListener("click", () => {
+    const speeds = [1, 1.25, 1.5];
+    const currentIndex = speeds.indexOf(Number(functionalState.journeyVoiceSpeed || 1));
+    functionalState.journeyVoiceSpeed = speeds[(currentIndex + 1) % speeds.length];
+    if (functionalState.journeyVoiceStatus === "playing") speakJourneyScene();
+    else updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  root.querySelectorAll("[data-form='voice-quick-check']").forEach((form) => form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const selected = form.querySelector("input[name='answer']:checked")?.value;
+    const { scene, sceneIndex } = currentJourneyScene();
+    const correct = selected === scene.check?.answer;
+    const key = form.dataset.checkKey || `${functionalState.journeyTopicSlug}:${sceneIndex}`;
+    functionalState.journeyQuickCheck[key] = {
+      correct,
+      message: correct ? "Nice. That idea is clear." : `Close. Think of it as: ${scene.check?.answer}. Try the scene again if needed.`,
+    };
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+}
+
+function updateJourneyTopicRail(topicSlug) {
+  const completed = new Set(functionalState.journey?.progress?.completedTopicSlugs || []);
+  document.querySelectorAll(".journey-topic").forEach((button) => {
+    const isActive = button.dataset.topicSlug === topicSlug;
+    const isCompleted = completed.has(button.dataset.topicSlug);
+    button.classList.toggle("active", isActive);
+    button.classList.toggle("completed", isCompleted);
+    const label = button.querySelector("small");
+    if (label) label.textContent = isCompleted ? "Completed" : isActive ? "Learning now" : "Ready to learn";
+  });
 }
 
 function parseJourneyLesson(content = "") {
@@ -3290,24 +3626,168 @@ function journeyVisualLesson(lesson = {}) {
   const flow = Array.isArray(lesson.flow) ? lesson.flow : [];
   const comparison = Array.isArray(lesson.comparison) ? lesson.comparison : [];
   const keyPoints = Array.isArray(lesson.keyPoints) ? lesson.keyPoints : [];
+  const scenes = lessonStoryScenes(lesson, flow);
+  const sceneIndex = Math.min(Math.max(functionalState.journeyStoryScene || 0, 0), scenes.length - 1);
+  const scene = scenes[sceneIndex] || scenes[0];
+  const voiceStatus = functionalState.journeyVoiceStatus || "idle";
+  const quickCheckKey = `${functionalState.journeyTopicSlug}:${sceneIndex}`;
+  const quickCheckResult = functionalState.journeyQuickCheck?.[quickCheckKey];
   const visual = lesson.visualType === "comparison" && comparison.length
-    ? `<div class="ai-comparison"><div class="comparison-head"><span>Website</span><span>Web Application</span></div>${comparison.map((row) => `<div class="comparison-row"><strong>${escapeHtml(row.label || "")}</strong><p>${escapeHtml(row.left || "")}</p><p>${escapeHtml(row.right || "")}</p></div>`).join("")}</div>`
+    ? `<div class="lesson-room-comparison">${comparison.slice(0, 2).map((row) => `<article><strong>${escapeHtml(row.label || "")}</strong><div><b>${escapeHtml(row.left || "")}</b><span>${icon("arrow-right")}</span><b>${escapeHtml(row.right || "")}</b></div></article>`).join("")}</div>`
     : flow.length
-      ? `<div class="ai-flow-map">${flow.map((step, index) => `<div class="flow-step"><span>${index + 1}</span><strong>${escapeHtml(step)}</strong></div>${index < flow.length - 1 ? `<i>${icon("plus")}</i>` : ""}`).join("")}</div>`
+      ? `<div class="lesson-room-flow">${flow.map((step, index) => `<article><span>${index + 1}</span><strong>${escapeHtml(step)}</strong></article>${index < flow.length - 1 ? `<i>${icon("arrow-right")}</i>` : ""}`).join("")}</div>`
       : `<div class="ai-concept-orbit"><span>${icon("bot")}</span><i></i><i></i><strong>${escapeHtml(lesson.title || "Core concept")}</strong></div>`;
-  return `<section class="visual-ai-lesson">
-    <div class="visual-lesson-intro"><span class="ai-answer-label">${icon("book")} Studox visual lesson</span><h2>${escapeHtml(lesson.title || "Lesson")}</h2><p>${escapeHtml(lesson.intro || "")}</p></div>
-    <div class="visual-lesson-grid">
-      <article class="lesson-block definition-block"><span>${icon("book")}</span><small>CORE IDEA</small><p>${escapeHtml(lesson.definition || "")}</p></article>
-      <article class="lesson-block example-block"><span>${icon("code")}</span><small>REAL EXAMPLE</small><p>${escapeHtml(lesson.example || "")}</p></article>
+  return `<section class="lesson-room-learn">
+    <div class="lesson-room-topbar">
+      <div><small>Lesson progress</small><span><i style="width:25%"></i></span></div><b>120 XP</b>
+      <label class="voice-guide-toggle"><span>Voice Guide</span><input type="checkbox" data-action="voice-guide-toggle" ${functionalState.journeyVoiceGuideOn ? "checked" : ""}/><i></i></label>
     </div>
-    <div class="lesson-visual-stage">${visual}</div>
-    ${keyPoints.length ? `<div class="lesson-key-points">${keyPoints.map((point) => `<span>${icon("star")}${escapeHtml(point)}</span>`).join("")}</div>` : ""}
-    <div class="lesson-takeaway"><span>✨</span><div><small>KEY TAKEAWAY</small><p>${escapeHtml(lesson.takeaway || "")}</p></div></div>
+    <div class="lesson-stepper">
+      <div class="active"><span>1</span><strong>Learn</strong><small>Understand the concept</small></div>
+      <div><span>2</span><strong>Lock It In</strong><small>Notes & key points</small></div>
+      <div><span>3</span><strong>Prove It</strong><small>Quiz & practice</small></div>
+      <div><span>4</span><strong>Level Up</strong><small>Unlock next step</small></div>
+    </div>
+    <div class="lesson-room-content">
+      <div class="lesson-room-main">
+        <article class="lesson-story-card">
+          <div class="story-progress"><span>Scene ${sceneIndex + 1} of ${scenes.length}</span><i style="width:${Math.round(((sceneIndex + 1) / scenes.length) * 100)}%"></i></div>
+          <div class="story-voice-row">
+            <button class="voice-learn-btn" type="button" data-action="voice-learn-scene" data-scene-index="${sceneIndex}">Learn with AI</button>
+            ${voiceStatus !== "idle" ? `<div class="voice-controls"><button type="button" data-action="voice-pause">Pause</button><button type="button" data-action="voice-resume">Resume</button><button type="button" data-action="voice-stop">Stop</button><button type="button" data-action="voice-speed">Speed ${functionalState.journeyVoiceSpeed}x</button></div>` : ""}
+          </div>
+          <div class="story-scene">
+            <span class="story-icon">${icon(scene.icon || "book")}</span>
+            <small>${escapeHtml(scene.label)}</small>
+            <h2>${escapeHtml(scene.title)}</h2>
+            <p>${escapeHtml(scene.body)}</p>
+            ${scene.visual === "flow" ? `<div class="lesson-room-flow compact">${flow.length ? flow.map((step, index) => `<article><span>${index + 1}</span><strong>${escapeHtml(step)}</strong></article>${index < flow.length - 1 ? `<i>${icon("arrow-right")}</i>` : ""}`).join("") : scenes.slice(0, 5).map((item, index) => `<article><span>${index + 1}</span><strong>${escapeHtml(item.title)}</strong></article>${index < 4 ? `<i>${icon("arrow-right")}</i>` : ""}`).join("")}</div>` : ""}
+            ${scene.visual === "mental" ? visual : ""}
+          </div>
+          ${voiceStatus === "ended" ? `<form class="voice-quick-check" data-form="voice-quick-check" data-check-key="${quickCheckKey}"><strong>Quick Check</strong><p>${escapeHtml(scene.check?.question || "Which part is responsible for showing the YouTube interface?")}</p><div>${(scene.check?.options || ["Frontend", "Backend", "Database"]).map((option) => `<label><input type="radio" name="answer" value="${escapeHtml(option)}" required ${quickCheckResult ? "disabled" : ""}/><span>${escapeHtml(option)}</span></label>`).join("")}</div>${quickCheckResult ? `<small class="${quickCheckResult.correct ? "correct" : "retry"}">${quickCheckResult.message}</small>` : `<button class="btn" type="submit">Check</button>`}</form>` : ""}
+          <div class="story-actions">
+            <button class="btn" type="button" data-action="lesson-story-prev" ${sceneIndex === 0 ? "disabled" : ""}>Back</button>
+            <button class="btn primary glow" type="button" data-action="lesson-story-next">${sceneIndex < scenes.length - 1 ? scene.cta || "Next" : "Continue to Lock It In"} ${icon("arrow-right")}</button>
+          </div>
+        </article>
+      </div>
+      <aside class="lesson-room-side">
+        <section class="lesson-side-card"><h3>Flash Preview</h3>${keyPoints.length ? keyPoints.slice(0, 5).map((point) => `<p>${icon("star")} ${escapeHtml(point)}</p>`).join("") : `<p>${escapeHtml(lesson.takeaway || "Key ideas will appear here.")}</p>`}</section>
+        <section class="lesson-tip-card"><strong>Tip for you</strong><p>Focus on the big picture first. Details will come naturally later.</p></section>
+      </aside>
+    </div>
   </section>`;
 }
 
+function lessonStoryScenes(lesson = {}, flow = []) {
+  const title = lesson.title || "Web Development";
+  return [
+    {
+      label: "Real life example",
+      title: "You open YouTube",
+      body: "Imagine you search for a video. In seconds, YouTube shows thumbnails, titles, comments, likes, and recommendations. That complete experience is made through web development.",
+      icon: "search",
+      cta: "What happens first?",
+      check: { question: "What real app are we using to understand web development?", answer: "YouTube", options: ["YouTube", "Calculator", "Camera"] },
+    },
+    {
+      label: "Frontend",
+      title: "First, you see the screen",
+      body: "The buttons, search box, video cards, colors, and layout are the frontend. It is the visible part people touch and use.",
+      icon: "code",
+      cta: "What works behind it?",
+      check: { question: "Which part shows the YouTube interface?", answer: "Frontend", options: ["Frontend", "Backend", "Database"] },
+    },
+    {
+      label: "Backend",
+      title: "Then, the hidden system responds",
+      body: "When you search, YouTube has to find matching videos, check data, and prepare a response. That hidden work is handled by the backend.",
+      icon: "node",
+      cta: "Where does data fit?",
+      check: { question: "Which part does hidden processing behind the screen?", answer: "Backend", options: ["Frontend", "Backend", "CSS"] },
+    },
+    {
+      label: "Data",
+      title: "The product remembers things",
+      body: "Video titles, views, likes, comments, users, and recommendations must be stored somewhere. Web development connects the visible screen to that useful data.",
+      icon: "book",
+      cta: "Show the full picture",
+      check: { question: "Where do video titles, likes, and comments live?", answer: "Data", options: ["Data", "Button", "Color"] },
+    },
+    {
+      label: "Full picture",
+      title,
+      body: lesson.takeaway || lesson.intro || "Web development means building the complete experience people open in a browser: the interface, the logic behind it, and the data that keeps it useful.",
+      icon: "map",
+      visual: flow.length ? "flow" : "mental",
+      cta: "Lock it in",
+      check: { question: "Web development combines which pieces?", answer: "Interface, logic, and data", options: ["Only design", "Only code", "Interface, logic, and data"] },
+    },
+  ];
+}
+
+function currentJourneyScene() {
+  const lesson = functionalState.journeyLessonAnswers[functionalState.journeyTopicSlug];
+  const flow = Array.isArray(lesson?.flow) ? lesson.flow : [];
+  const scenes = lessonStoryScenes(lesson || {}, flow);
+  const index = Math.min(Math.max(functionalState.journeyStoryScene || 0, 0), scenes.length - 1);
+  return { scene: scenes[index], sceneIndex: index, scenes };
+}
+
+function voiceGuideText(scene = {}) {
+  const body = scene.body || "";
+  if (scene.label === "Real life example") {
+    return `${body} Think of web development as the full journey from your click to the final screen. You are not learning random tools. You are learning how that experience is built.`;
+  }
+  if (scene.label === "Frontend") {
+    return `${body} In simple words, frontend is the customer-facing side. If you can see it, click it, type into it, or scroll through it, a frontend developer helped create it.`;
+  }
+  if (scene.label === "Backend") {
+    return `${body} Imagine the kitchen of a restaurant. You do not see it, but it prepares what you asked for. Backend does that for an app.`;
+  }
+  if (scene.label === "Data") {
+    return `${body} Without data, YouTube would forget everything. Data is what lets the product remember videos, users, history, and recommendations.`;
+  }
+  return `${body} So the big idea is simple: web development connects what users see, what the system does, and what the product remembers.`;
+}
+
+function stopJourneyVoice() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  functionalState.journeyVoiceStatus = "idle";
+}
+
+function speakJourneyScene() {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    toast("Voice guide is not supported in this browser.");
+    return;
+  }
+  const { scene } = currentJourneyScene();
+  const text = voiceGuideText(scene);
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = Number(functionalState.journeyVoiceSpeed || 1);
+  utterance.pitch = 0.92;
+  utterance.onend = () => {
+    functionalState.journeyVoiceStatus = "ended";
+    functionalState.journeyVoiceText = text;
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  };
+  functionalState.journeyVoiceStatus = "playing";
+  functionalState.journeyVoiceText = text;
+  window.speechSynthesis.speak(utterance);
+  updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+}
+
 function bindFunctionalActions() {
+  document.querySelectorAll("[data-action='roadmap-view']").forEach((button) => button.addEventListener("click", async () => {
+    functionalState.roadmapView = button.dataset.roadmapView || "tree";
+    await render();
+  }));
+  document.querySelectorAll("[data-action='roadmap-module-toggle']").forEach((button) => button.addEventListener("click", async () => {
+    const moduleIndex = Number(button.dataset.moduleIndex);
+    functionalState.expandedRoadmapModuleIndex = functionalState.expandedRoadmapModuleIndex === moduleIndex ? null : moduleIndex;
+    await render();
+  }));
   document.querySelectorAll("[data-action='open-module-journey']").forEach((card) => {
     const openJourney = () => setRoute("courses");
     card.addEventListener("click", openJourney);
@@ -3320,10 +3800,21 @@ function bindFunctionalActions() {
   });
   document.querySelectorAll("[data-action='select-journey-topic']").forEach((button) => button.addEventListener("click", async () => {
     functionalState.journeyTopicSlug = button.dataset.topicSlug;
+    functionalState.journeyStoryScene = 0;
+    updateJourneyTopicRail(button.dataset.topicSlug);
     await requestJourneyLesson(button.dataset.topicSlug);
   }));
   document.querySelectorAll("[data-action='generate-journey-lesson']").forEach((button) => button.addEventListener("click", () => {
+    functionalState.journeyStoryScene = 0;
     requestJourneyLesson(button.dataset.topicSlug);
+  }));
+  document.querySelectorAll("[data-action='lesson-story-next']").forEach((button) => button.addEventListener("click", () => {
+    functionalState.journeyStoryScene = Math.min(4, Number(functionalState.journeyStoryScene || 0) + 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  document.querySelectorAll("[data-action='lesson-story-prev']").forEach((button) => button.addEventListener("click", () => {
+    functionalState.journeyStoryScene = Math.max(0, Number(functionalState.journeyStoryScene || 0) - 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
   }));
   document.querySelectorAll("[data-action='journey-suggestion']").forEach((button) => button.addEventListener("click", () => {
     const input = document.querySelector("[data-form='journey-question'] input");

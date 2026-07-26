@@ -2324,6 +2324,29 @@ function defaultJourneyProgress() {
   };
 }
 
+function normalizeJourneyProgress(progress = {}) {
+  const validTopicSlugs = new Set(moduleOneJourney.topics.map((topic) => topic.slug));
+  const completedTopicSlugs = Array.isArray(progress.completedTopicSlugs)
+    ? progress.completedTopicSlugs.filter((slug) => validTopicSlugs.has(slug))
+    : [];
+  const passedCheckTopicSlugs = Array.isArray(progress.passedCheckTopicSlugs)
+    ? progress.passedCheckTopicSlugs.filter((slug) => validTopicSlugs.has(slug))
+    : [];
+  const completed = new Set(completedTopicSlugs);
+  const nextTopic = moduleOneJourney.topics.find((topic) => !completed.has(topic.slug));
+  const currentTopicStillValid = validTopicSlugs.has(progress.currentTopicSlug) && !completed.has(progress.currentTopicSlug);
+
+  return {
+    ...progress,
+    moduleSlug: moduleOneJourney.slug,
+    completedTopicSlugs,
+    passedCheckTopicSlugs,
+    currentTopicSlug: currentTopicStillValid ? progress.currentTopicSlug : nextTopic?.slug || moduleOneJourney.topics[0].slug,
+    percent: Math.round((completed.size / moduleOneJourney.topics.length) * 100),
+    completedAt: completed.size === moduleOneJourney.topics.length ? progress.completedAt : null,
+  };
+}
+
 function publicJourneyModule() {
   return {
     ...moduleOneJourney,
@@ -2374,6 +2397,7 @@ app.get("/api/journey/:moduleSlug", authRequired, async (req, res) => {
     if (saved) progressData = { ...progressData, ...saved };
   }
 
+  progressData = normalizeJourneyProgress(progressData);
   const chats = await journeyMentorChats(req.user.id);
   res.json({ module: publicJourneyModule(), progress: progressData, chats });
 });
