@@ -2,9 +2,16 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const moduleOneJourney = require("../src/data/moduleOneJourney");
 
-test("Module 1 contains five valid concept checks", () => {
-  assert.equal(moduleOneJourney.topics.length, 5);
+test("Module 1 contains its core topics and valid concept checks", () => {
+  assert.ok(moduleOneJourney.topics.length >= 5);
   const slugs = new Set();
+  const coreSlugs = [
+    "what-is-web-development",
+    "frontend-development",
+    "backend-development",
+    "full-stack-development",
+    "website-vs-web-application",
+  ];
 
   moduleOneJourney.topics.forEach((topic) => {
     assert.ok(topic.slug);
@@ -24,4 +31,6 @@ test("Module 1 contains five valid concept checks", () => {
     assert.ok(["flow", "comparison", "stack", "concept"].includes(topic.lesson.visualType));
     assert.ok(topic.lesson.keyPoints.length >= 3);
   });
+
+  coreSlugs.forEach((slug) => assert.ok(slugs.has(slug), `Missing core topic: ${slug}`));
 });

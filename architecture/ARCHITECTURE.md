@@ -794,7 +794,41 @@ If no roadmap exists, it returns:
 
 Every returned roadmap is normalized before reaching the frontend.
 
-The frontend maps saved `weeks` into the existing timeline UI.
+The roadmap page now supports:
+
+```text
+Tree View -> default MVP learning journey view
+Timeline View -> existing saved-roadmap week timeline
+```
+
+Tree View presents the saved roadmap as a learning journey. Module 1 is `Web and Internet Architecture` and currently contains 22 ordered lessons:
+
+```text
+What is Web Development?
+Frontend Development
+Backend Development
+Full Stack Development
+Website vs Web Application
+Static vs Dynamic Websites
+Client and Server Introduction
+Basic Client-Server Architecture
+How a Browser Works
+Browser Rendering Basics
+Request-Response Cycle
+Introduction to DNS
+Domain Name Basics
+Hosting Basics
+HTTP Introduction
+HTTPS Introduction
+API Introduction
+JSON Introduction
+Cookies Introduction
+Sessions Introduction
+JWT Introduction
+CORS Introduction
+```
+
+Timeline View maps saved `weeks` into the existing timeline UI.
 
 Mapping:
 
@@ -1029,7 +1063,8 @@ Implemented:
 - App-coming-soon gating for unfinished sidebar routes
 - Roadmap selection and saving
 - Dashboard active roadmap loading
-- Roadmap page mapping AI weeks into timeline
+- Roadmap page Tree View for the Module 1 learning journey
+- Roadmap page Timeline View mapping saved weeks into timeline
 - User.activeRoadmapId
 - MongoDB Roadmap schema
 - Admin generic CRUD base
