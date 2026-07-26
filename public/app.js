@@ -221,6 +221,7 @@ const sideLinks = [
   ["dashboard", "Dashboard", "home"],
   ["roadmap", "Roadmap", "map"],
   ["courses", "Journey", "book"],
+  ["coding", "Coding Session", "code"],
   ["tests", "Tests", "test"],
   ["dsa", "DSA Practice", "code"],
   ["resume", "Resume Builder", "resume"],
@@ -233,7 +234,7 @@ const sideLinks = [
   ["settings", "Settings", "settings"],
   ["admin", "Admin Panel", "admin"],
 ];
-const webAvailableFeatureRoutes = new Set(["dashboard", "roadmap", "courses", "mentor", "profile", "settings", "admin"]);
+const webAvailableFeatureRoutes = new Set(["dashboard", "roadmap", "courses", "coding", "mentor", "profile", "settings", "admin"]);
 const appComingSoonRoutes = new Set(sideLinks.map(([key]) => key).filter((key) => !webAvailableFeatureRoutes.has(key)));
 const appComingSoonLabels = Object.fromEntries(sideLinks.map(([key, label]) => [key, label]));
 
@@ -1583,7 +1584,7 @@ function premiumPlanBadge() {
   return `<span class="premium-name-badge">${icon("star")} ${plan === "elite" ? "Elite" : "Premium"}</span>`;
 }
 function appLayout(content, route) {
-  const dark = isDarkTheme() || route === "profile" || route === "settings";
+  const dark = isDarkTheme() || route === "profile" || route === "settings" || route === "courses" || route === "coding";
   const premium = isPremiumPlan(getCurrentPlan());
   return `<div class="${dark ? "dark-page" : ""} view app-view" data-current-theme="${isDarkTheme() ? "dark" : "light"}">
     <div class="mobile-backdrop" data-mobile-close></div>
@@ -2797,18 +2798,16 @@ routeMap.courses = function functionalCoursesPage() {
   const followups = functionalState.journeyFollowups[activeTopic.slug] || [];
   const checkResult = functionalState.journeyCheckResults[activeTopic.slug];
   const checkPassed = completed.has(activeTopic.slug) || (savedProgress.passedCheckTopicSlugs || []).includes(activeTopic.slug) || checkResult?.correct;
-  return appLayout(`<section class="journey-page">
+  const learnerName = escapeHtml(String(currentUser?.name || "Learner").split(" ")[0]);
+  return appLayout(`<section class="journey-page journey-v2">
     <div class="journey-ambient" aria-hidden="true"><span></span><span></span><span></span><i></i><i></i></div>
-    <header class="journey-hero">
-      <div class="journey-hero-copy"><span class="ai-pill"><i></i> STUDOX INTELLIGENCE LAYER</span><h1>${module.title || "Module 1: Web and Internet Architecture"}</h1><p>${module.description || "Learn one topic at a time with your AI guide."}</p><div class="journey-hero-signals"><span>${icon("bot")} Adaptive AI Tutor</span><span>${icon("chart")} Live mastery tracking</span><span>${icon("star")} Personalized concepts</span></div></div>
-      <div class="journey-hero-orbit" aria-hidden="true"><div><span>${icon("bot")}</span><i></i><i></i><i></i></div><small>NEURAL GUIDE</small></div>
-      <div class="journey-score"><strong>${percent}%</strong><span>${completed.size}/${topics.length} topics complete</span></div>
+    <header class="journey-v2-topbar">
+      <div class="journey-v2-title"><span>${icon("book")}</span><div><small>ACTIVE LEARNING JOURNEY</small><strong>${module.title || "Module 1: Web and Internet Architecture"}</strong></div><b>${topics.length} topics</b></div>
+      <div class="journey-v2-top-actions"><button type="button" aria-label="Search">${icon("search")}<span>Search</span></button><button type="button" aria-label="Notifications">${icon("bell")}</button><div class="journey-streak">🔥 <strong>${Math.max(1, completed.size * 4 + 4)}</strong></div><div class="journey-profile-dot">${learnerName.charAt(0)}</div></div>
     </header>
-    <div class="journey-progress-track"><span style="width:${percent}%"></span></div>
     <div class="journey-layout">
       <aside class="panel journey-topic-rail">
-        <div class="journey-rail-status"><span><i></i> LEARNING PATH ACTIVE</span><b>${percent}%</b></div>
-        <div class="panel-head"><div><small>YOUR PATH</small><h2>Knowledge nodes</h2></div><span class="chip purple">${topics.length} lessons</span></div>
+        <div class="journey-map-head"><div><small>JOURNEY MAP</small><strong>${percent}%</strong></div><div><span style="width:${percent}%"></span></div></div>
         <div class="journey-topic-list">${topics.map((topic, index) => {
           const isCompleted = completed.has(topic.slug);
           const isActive = topic.slug === activeTopic.slug;
@@ -2817,7 +2816,7 @@ routeMap.courses = function functionalCoursesPage() {
         <a class="btn ghost journey-back" href="#roadmap">← Back to roadmap</a>
       </aside>
       <main class="panel journey-chat-panel">
-        <div class="journey-chat-head"><div class="mentor-orb"><span></span><i></i></div><div><strong>Studox Journey Intelligence</strong><small><i></i> Neural tutor online • Knowledge node ${activeIndex + 1}/${topics.length}</small></div><div class="journey-head-badges"><span>LIVE</span><b>AI Guided</b></div></div>
+        <div class="journey-v2-welcome"><div class="mentor-orb"><span></span><i></i></div><div><strong>👋 Hi ${learnerName}!</strong><p>Let’s understand <b>${escapeHtml(activeTopic.shortTitle || activeTopic.title || "this concept")}</b> today. Ready to continue?</p></div><span>Topic ${activeIndex + 1} of ${topics.length}</span></div>
         <div class="journey-conversation" id="journeyConversation">
           ${lessonAnswer ? journeyVisualLesson(lessonAnswer) : ""}
           ${functionalState.journeyLessonLoading ? `<div class="journey-lesson-loading"><div class="mentor-orb"><span></span></div><div><strong>Opening your visual lesson</strong><p>Loading concepts, examples, and the knowledge check...</p><span class="typing"><span></span><span></span><span></span></span></div></div>` : ""}
@@ -2842,12 +2841,24 @@ routeMap.courses = function functionalCoursesPage() {
           <button class="btn primary" type="submit" aria-label="Send question">${icon("plus")}</button>
         </form>
         <footer class="journey-actions">
-          <span>${completed.has(activeTopic.slug) ? "✓ This topic is completed" : checkPassed ? "Concept check passed • Earn +20 XP" : "Pass the concept check to continue"}</span>
+          <button class="btn ghost" type="button" data-action="journey-previous" ${activeIndex <= 0 ? "disabled" : ""}>← Previous</button>
+          <div class="journey-bottom-progress"><span>Progress</span><div><i style="width:${percent}%"></i></div><b>${percent}%</b></div>
           <button class="btn primary glow" type="button" data-action="complete-journey-topic" data-topic-slug="${activeTopic.slug}" ${!activeTopic.slug || (!completed.has(activeTopic.slug) && !checkPassed) ? "disabled" : ""}>${completed.has(activeTopic.slug) ? (activeIndex < topics.length - 1 ? "Continue to Next Topic" : "Review Completed Module") : "Complete Topic & Continue"} ${icon("plus")}</button>
         </footer>
       </main>
+      <aside class="journey-insight-rail">
+        <section class="panel journey-progress-card"><small>YOUR PROGRESS</small><div class="journey-progress-ring" style="--journey-percent:${percent}"><div><strong>${percent}%</strong><span>Overall</span></div></div><div class="journey-progress-stats"><span><strong>${completed.size} / ${topics.length}</strong>Topics completed</span><span><strong>${Math.max(4, completed.size * 6 + 4)}m</strong>Time learned</span></div></section>
+        <section class="panel journey-goal-card"><small>🔥 TODAY'S GOAL</small><strong>${Math.min(30, Math.max(4, completed.size * 6 + 4))} min <span>/ 30 min</span></strong><div><i style="width:${Math.min(100, Math.round((Math.max(4, completed.size * 6 + 4) / 30) * 100))}%"></i></div><p>Keep going — your learning streak is active.</p></section>
+        <section class="panel journey-concepts-card"><small>KEY CONCEPTS</small><ul>${(lessonAnswer?.keyPoints || ["Core idea", "Practical example", "How it works", "Knowledge check"]).slice(0, 5).map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>
+        <section class="panel journey-study-card"><small>AI STUDY ASSISTANT</small>${["Summarise this topic", "Explain like I’m 5", "Give a real-world analogy", "Ask anything…"].map((prompt) => `<button type="button" data-action="journey-suggestion" data-prompt="${prompt}">${icon("bot")}<span>${prompt}</span>${icon("plus")}</button>`).join("")}</section>
+      </aside>
     </div>
   </section>`, "courses");
+};
+
+routeMap.coding = function codingSessionPage() {
+  const workspace = window.StudoxCodingWorkspace;
+  return appLayout(workspace ? workspace.render() : `<div class="panel"><h2>Coding Session</h2><p>The learning workspace could not be loaded. Refresh the page and try again.</p></div>`, "coding");
 };
 
 routeMap.tests = function functionalTestsPage() {
@@ -3308,6 +3319,7 @@ function journeyVisualLesson(lesson = {}) {
 }
 
 function bindFunctionalActions() {
+  window.StudoxCodingWorkspace?.bind();
   document.querySelectorAll("[data-action='open-module-journey']").forEach((card) => {
     const openJourney = () => setRoute("courses");
     card.addEventListener("click", openJourney);
@@ -3397,6 +3409,14 @@ function bindFunctionalActions() {
     }
     await render();
     document.querySelector(".journey-concept-check")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  document.querySelectorAll("[data-action='journey-previous']").forEach((button) => button.addEventListener("click", async () => {
+    const topics = functionalState.journey?.module?.topics || [];
+    const currentIndex = topics.findIndex((topic) => topic.slug === functionalState.journeyTopicSlug);
+    const previousTopic = topics[currentIndex - 1];
+    if (!previousTopic) return;
+    functionalState.journeyTopicSlug = previousTopic.slug;
+    await requestJourneyLesson(previousTopic.slug);
   }));
   document.querySelectorAll("[data-action='complete-journey-topic']").forEach((button) => button.addEventListener("click", async () => {
     const topics = functionalState.journey?.module?.topics || [];
@@ -4332,6 +4352,7 @@ const protectedRoutes = new Set([
   "dashboard",
   "roadmap",
   "courses",
+  "coding",
   "tests",
   "dsa",
   "resume",
