@@ -2103,6 +2103,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   let userCertificates = [];
   let dsa = {};
   let hasActiveRoadmap = false;
+  let journeyProgress = defaultJourneyProgress();
 
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
     const user = await User.findById(userId).select("activeRoadmapId").lean();
@@ -2133,13 +2134,14 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
     userCertificates = byUser(memory.certificates, userId);
     dsa = memory.dsaProgress.find((item) => String(item.user || item.userId) === String(userId)) || {};
   }
+  journeyProgress = await loadJourneyProgressForUser(userId);
 
   profile = profile || {};
   roadmap = roadmap || {};
   userResults = Array.isArray(userResults) ? userResults : [];
   userProjects = Array.isArray(userProjects) ? userProjects : [];
   userCertificates = Array.isArray(userCertificates) ? userCertificates : [];
-  roadmap = hasActiveRoadmap ? normalizeRoadmapShape(roadmap) : {};
+  roadmap = hasActiveRoadmap ? attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress) : {};
   dsa = dsa || {};
   const appliedInternships = (memory.internships || []).filter((item) => (item.applicants || []).includes(userId));
   const registeredHackathons = (memory.hackathons || []).filter((item) => (item.registrations || []).includes(userId));
@@ -2163,6 +2165,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
     upcomingTests: tests,
     recentActivity: buildActivity(userId),
     recommendedCourses: courses,
+    learningJourney: journeyProgressSummary(journeyProgress),
     profile,
     roadmap,
     dsa,
@@ -2189,6 +2192,7 @@ function buildActivity(userId) {
 }
 
 app.get("/api/roadmaps", authRequired, async (req, res) => {
+  const journeyProgress = await loadJourneyProgressForUser(req.user.id);
   if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
     const user = await User.findById(req.user.id).select("activeRoadmapId").lean();
     let activeRoadmap = null;
@@ -2203,12 +2207,12 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
       ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap._id) !== String(activeRoadmap._id))]
       : roadmaps;
     if (!orderedRoadmaps.length) return res.json([]);
-    return res.json(orderedRoadmaps.map(normalizeRoadmapShape));
+    return res.json(orderedRoadmaps.map((roadmap) => attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress)));
   }
   let roadmaps = byUser(memory.roadmaps || [], req.user.id);
   const activeRoadmap = roadmaps.find((roadmap) => roadmap.status === "active") || roadmaps[0];
   roadmaps = activeRoadmap ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap.id || roadmap._id) !== String(activeRoadmap.id || activeRoadmap._id))] : [];
-  res.json(roadmaps.map(normalizeRoadmapShape));
+  res.json(roadmaps.map((roadmap) => attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress)));
 });
 
 app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
@@ -2347,6 +2351,72 @@ function normalizeJourneyProgress(progress = {}) {
   };
 }
 
+async function loadJourneyProgressForUser(userId) {
+  let progressData = defaultJourneyProgress();
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const saved = await LearningProgress.findOne({
+      user: userId,
+      moduleSlug: moduleOneJourney.slug,
+    }).lean();
+    if (saved) progressData = { ...progressData, ...saved };
+  } else {
+    memory.learningProgress = memory.learningProgress || [];
+    const saved = memory.learningProgress.find(
+      (item) => String(item.user) === String(userId) && item.moduleSlug === moduleOneJourney.slug,
+    );
+    if (saved) progressData = { ...progressData, ...saved };
+  }
+  return normalizeJourneyProgress(progressData);
+}
+
+function journeyProgressSummary(progressData = {}) {
+  const completed = new Set(progressData.completedTopicSlugs || []);
+  const currentTopic = moduleOneJourney.topics.find((topic) => topic.slug === progressData.currentTopicSlug)
+    || moduleOneJourney.topics.find((topic) => !completed.has(topic.slug))
+    || moduleOneJourney.topics[0];
+  return {
+    moduleSlug: moduleOneJourney.slug,
+    title: moduleOneJourney.title,
+    totalTopics: moduleOneJourney.topics.length,
+    completedTopics: completed.size,
+    completedTopicSlugs: [...completed],
+    passedCheckTopicSlugs: progressData.passedCheckTopicSlugs || [],
+    currentTopicSlug: currentTopic?.slug || "",
+    currentTopicTitle: currentTopic?.shortTitle || currentTopic?.title || "",
+    percent: Math.round(Number(progressData.percent || 0)),
+    completedAt: progressData.completedAt || null,
+  };
+}
+
+function attachJourneyProgressToRoadmap(roadmap = {}, progressData = {}) {
+  if (!roadmap || !Object.keys(roadmap).length) return roadmap;
+  const journey = journeyProgressSummary(progressData);
+  const modules = Array.isArray(roadmap.modules) ? roadmap.modules.map((module) => ({ ...module })) : [];
+  if (modules.length) {
+    modules[0] = {
+      ...modules[0],
+      progress: journey.percent,
+      status: journey.percent === 100 ? "completed" : "in-progress",
+      currentLessonTitle: journey.currentTopicTitle,
+      completedLessons: journey.completedTopics,
+      totalLessons: journey.totalTopics,
+      moduleSlug: journey.moduleSlug,
+    };
+  }
+  const nextMilestone = journey.percent === 100
+    ? modules[1]?.title || "Module 1 completed"
+    : journey.currentTopicTitle || roadmap.nextMilestone;
+  return {
+    ...roadmap,
+    modules,
+    learningJourney: journey,
+    nextMilestone,
+    overallProgress: modules.length
+      ? Math.round(average(modules.map((module) => Number(module.progress || 0))))
+      : journey.percent,
+  };
+}
+
 function publicJourneyModule() {
   return {
     ...moduleOneJourney,
@@ -2382,22 +2452,7 @@ app.get("/api/journey/:moduleSlug", authRequired, async (req, res) => {
     return res.status(404).json({ message: "Learning module not found." });
   }
 
-  let progressData = defaultJourneyProgress();
-  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
-    const saved = await LearningProgress.findOne({
-      user: req.user.id,
-      moduleSlug: moduleOneJourney.slug,
-    }).lean();
-    if (saved) progressData = { ...progressData, ...saved };
-  } else {
-    memory.learningProgress = memory.learningProgress || [];
-    const saved = memory.learningProgress.find(
-      (item) => String(item.user) === String(req.user.id) && item.moduleSlug === moduleOneJourney.slug,
-    );
-    if (saved) progressData = { ...progressData, ...saved };
-  }
-
-  progressData = normalizeJourneyProgress(progressData);
+  const progressData = await loadJourneyProgressForUser(req.user.id);
   const chats = await journeyMentorChats(req.user.id);
   res.json({ module: publicJourneyModule(), progress: progressData, chats });
 });
@@ -2494,7 +2549,10 @@ app.put("/api/journey/:moduleSlug/progress", authRequired, async (req, res) => {
 
     if (newlyCompleted) {
       await StudentProfile.findOneAndUpdate({ user: req.user.id }, { $inc: { xp: 20 } });
-      const roadmap = await Roadmap.findOne(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 });
+      const user = await User.findById(req.user.id).select("activeRoadmapId");
+      let roadmap = user?.activeRoadmapId ? await Roadmap.findById(user.activeRoadmapId) : null;
+      if (!roadmap) roadmap = await Roadmap.findOne({ userId: req.user.id, status: "active" }).sort({ createdAt: -1 });
+      if (!roadmap) roadmap = await Roadmap.findOne(roadmapOwnerQuery(req.user.id)).sort({ createdAt: -1 });
       if (roadmap) {
         if (roadmap.modules?.length) {
           roadmap.modules[0].progress = progressData.percent;
@@ -2533,6 +2591,19 @@ app.put("/api/journey/:moduleSlug/progress", authRequired, async (req, res) => {
     if (newlyCompleted) {
       const profile = memory.profiles.find((item) => String(item.user) === String(req.user.id));
       if (profile) profile.xp = Number(profile.xp || 0) + 20;
+      const roadmap = byUser(memory.roadmaps || [], req.user.id).find((item) => item.status === "active")
+        || byUser(memory.roadmaps || [], req.user.id)[0];
+      if (roadmap) {
+        roadmap.modules = roadmap.modules || normalizeRoadmapShape(roadmap).modules || [];
+        if (roadmap.modules.length) {
+          roadmap.modules[0].progress = saved.percent;
+          roadmap.modules[0].status = saved.percent === 100 ? "completed" : "in-progress";
+        }
+        roadmap.overallProgress = Math.round(average((roadmap.modules || []).map((item) => Number(item.progress || 0))));
+        roadmap.nextMilestone = saved.percent === 100
+          ? roadmap.modules?.[1]?.title || "Module 1 completed"
+          : moduleOneJourney.topics.find((topic) => topic.slug === saved.currentTopicSlug)?.title;
+      }
     }
     persistMemory();
   }
@@ -2611,6 +2682,34 @@ function normalizeStructuredJourneyLesson(value, topic) {
     .map((item) => String(item || "").trim())
     .filter(Boolean)
     .slice(0, limit);
+  const cleanFlashCards = (items) => (Array.isArray(items) ? items : [])
+    .slice(0, 10)
+    .map((item) => ({
+      type: String(item?.type || "").slice(0, 40),
+      eyebrow: String(item?.eyebrow || "").slice(0, 80),
+      title: String(item?.title || "").slice(0, 140),
+      goal: String(item?.goal || "").slice(0, 500),
+      question: String(item?.question || "").slice(0, 300),
+      content: String(item?.content || "").slice(0, 1200),
+      highlight: String(item?.highlight || "").slice(0, 400),
+      estimatedTime: String(item?.estimatedTime || "").slice(0, 40),
+      button: String(item?.button || "").slice(0, 80),
+      next: String(item?.next || "").slice(0, 160),
+      badgeLabel: String(item?.badgeLabel || "").slice(0, 80),
+      steps: cleanList(item?.steps, 8),
+      flow: cleanList(item?.flow, 8),
+      tasks: cleanList(item?.tasks, 8),
+      correct: cleanList(item?.correct, 8),
+      incorrect: cleanList(item?.incorrect, 8),
+      options: cleanList(item?.options, 6),
+      quiz: (Array.isArray(item?.quiz) ? item.quiz : []).slice(0, 3).map((quizItem) => ({
+        question: String(quizItem?.question || "").slice(0, 300),
+        options: cleanList(quizItem?.options, 6),
+        answerIndex: Number.isInteger(quizItem?.answerIndex) ? quizItem.answerIndex : 0,
+        explanation: String(quizItem?.explanation || "").slice(0, 400),
+      })),
+    }))
+    .filter((item) => item.type && item.title);
   const visualTypes = new Set(["flow", "comparison", "stack", "concept"]);
   return {
     title: String(source.title || topic.shortTitle || topic.title).slice(0, 120),
@@ -2626,6 +2725,7 @@ function normalizeStructuredJourneyLesson(value, topic) {
       right: String(item?.right || "").slice(0, 240),
     })).filter((item) => item.label && item.left && item.right),
     keyPoints: cleanList(source.keyPoints, 4),
+    flashCards: cleanFlashCards(source.flashCards),
   };
 }
 

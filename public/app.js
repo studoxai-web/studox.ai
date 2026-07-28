@@ -2443,6 +2443,8 @@ const functionalState = {
   journeyLessonLoading: false,
   journeyLessonError: "",
   journeyStoryScene: 0,
+  journeyFlashCardIndex: 0,
+  journeyFlashCardSaving: false,
   journeyVoiceGuideOn: false,
   journeyVoiceStatus: "idle",
   journeyVoiceSpeed: 1,
@@ -2742,22 +2744,29 @@ const moduleOneLessonTitles = [
   "Full Stack Development",
   "Website vs Web Application",
   "Static vs Dynamic Websites",
-  "Client and Server Introduction",
-  "Basic Client-Server Architecture",
-  "How a Browser Works",
-  "Browser Rendering Basics",
-  "Request-Response Cycle",
-  "Introduction to DNS",
-  "Domain Name Basics",
-  "Hosting Basics",
-  "HTTP Introduction",
-  "HTTPS Introduction",
-  "API Introduction",
-  "JSON Introduction",
-  "Cookies Introduction",
-  "Sessions Introduction",
-  "JWT Introduction",
-  "CORS Introduction",
+  "Client & Server",
+  "Browser, Domain, DNS & Hosting",
+  "Request -> Response Cycle",
+  "HTTP vs HTTPS",
+  "APIs & JSON",
+  "Cookies, Sessions & JWT",
+  "CORS",
+];
+
+const moduleOneLessonSlugs = [
+  "what-is-web-development",
+  "frontend-development",
+  "backend-development",
+  "full-stack-development",
+  "website-vs-web-application",
+  "static-vs-dynamic-websites",
+  "client-and-server-introduction",
+  "how-a-browser-works",
+  "request-response-cycle",
+  "introduction-to-dns",
+  "api-introduction",
+  "cookies-introduction",
+  "cors-introduction",
 ];
 
 const moduleTwoHtmlLessonTitles = [
@@ -2777,13 +2786,19 @@ const moduleTwoHtmlLessonTitles = [
 
 function roadmapModulesFromData(roadmap = {}) {
   const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
+  const journeyProgress = roadmap.learningJourney || functionalState.dashboard?.learningJourney || functionalState.journey?.progress || {};
   return roadmapItems.map((item, index) => {
     const status = item.status === "in-progress" ? "active" : item.status === "upcoming" ? "locked" : item.status || (index === 0 ? "active" : "locked");
+    const moduleProgress = index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
+      ? Number(journeyProgress.percent || 0)
+      : Number(item.progress ?? (status === "completed" ? 100 : index === 0 ? 25 : 0));
     return {
       title: index === 0 ? "Web & Internet Architecture" : index === 1 ? "HTML" : item.title || `Module ${index + 1}`,
       label: `Module ${index + 1}`,
-      status,
-      progress: Number(item.progress ?? (status === "completed" ? 100 : index === 0 ? 25 : 0)),
+      status: index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
+        ? moduleProgress >= 100 ? "completed" : "active"
+        : status,
+      progress: moduleProgress,
       desc: index === 0
         ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications."
         : index === 1
@@ -2795,16 +2810,29 @@ function roadmapModulesFromData(roadmap = {}) {
       resources: item.resources || [],
       isModuleOne: index === 0,
       isModuleTwo: index === 1,
+      journeyProgress: index === 0 ? journeyProgress : null,
     };
   });
 }
 
 function roadmapLessonsForModule(module, moduleIndex) {
   if (module.isModuleOne) {
+    const journeyProgress = module.journeyProgress || {};
+    const completed = new Set(journeyProgress.completedTopicSlugs || []);
+    const currentSlug = journeyProgress.currentTopicSlug || "";
+    const topics = functionalState.journey?.module?.topics || moduleOneLessonSlugs.map((slug, index) => ({ slug, title: moduleOneLessonTitles[index] }));
     return moduleOneLessonTitles.map((title, index) => ({
       title,
       duration: [20, 25, 25, 30, 20, 20, 20, 25, 25, 25, 25, 20, 20, 20, 25, 20, 25, 20, 20, 25, 25, 25][index] || 20,
-      status: module.status === "completed" ? "completed" : index === 0 && module.status === "active" ? "active" : module.status === "locked" ? "locked" : "locked",
+      status: completed.has(topics[index]?.slug)
+        ? "completed"
+        : topics[index]?.slug === currentSlug
+          ? "active"
+          : module.status === "completed"
+            ? "completed"
+            : module.status === "locked"
+              ? "locked"
+              : "locked",
       icon: ["book", "code", "test", "map", "star", "book", "user", "chart", "search", "book", "arrow-right", "map", "map", "briefcase", "code", "lock", "plus", "code", "settings", "user", "lock", "arrow-right"][index] || "book",
     }));
   }
@@ -3561,11 +3589,13 @@ function updateJourneyLessonPanel(topicSlug) {
   }
   if (lessonAnswer) {
     panel.innerHTML = journeyVisualLesson(lessonAnswer);
+    bindFlashLessonControls(panel);
     bindJourneyStoryControls(panel);
     return;
   }
   panel.innerHTML = `<div class="journey-lesson-start"><div class="lesson-start-core"><span>${icon("bot")}</span><i></i><i></i><b></b></div><span class="lesson-ready-label">KNOWLEDGE NODE READY</span><h2>Explore ${activeTopic.shortTitle || activeTopic.title}</h2><p>Open a structured visual lesson with a practical example, architecture view, key ideas and a mastery check.</p>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-launch-btn" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}"><span>Start visual lesson</span>${icon("plus")}</button></div>`;
   panel.querySelector("[data-action='generate-journey-lesson']")?.addEventListener("click", (event) => {
+    stopJourneyVoice();
     requestJourneyLesson(event.currentTarget.dataset.topicSlug);
   });
 }
@@ -3652,6 +3682,343 @@ function parseJourneyLesson(content = "") {
 }
 
 function journeyVisualLesson(lesson = {}) {
+  return renderFlashLesson(lesson);
+}
+
+function renderFlashLesson(rawLesson = {}) {
+  const lesson = parseJourneyLesson(rawLesson);
+  const topic = (functionalState.journey?.module?.topics || []).find((item) => item.slug === functionalState.journeyTopicSlug) || {};
+  const cards = buildFlashLessonCards(lesson, topic);
+  const total = cards.length;
+  const index = Math.min(Math.max(Number(functionalState.journeyFlashCardIndex || 0), 0), total - 1);
+  functionalState.journeyFlashCardIndex = index;
+  const card = cards[index];
+  const progressPercent = Math.round(((index + 1) / total) * 100);
+  const voiceStatus = functionalState.journeyVoiceStatus || "idle";
+  return `<section class="flash-lesson-shell" aria-live="polite">
+    <div class="flash-lesson-progress">
+      <span>Scene ${index + 1} of ${total}</span>
+      <i><b style="width:${progressPercent}%"></b></i>
+    </div>
+    <div class="flash-voice-guide">
+      <label class="voice-guide-toggle"><span>Voice Guide</span><input type="checkbox" data-action="voice-guide-toggle" ${functionalState.journeyVoiceGuideOn ? "checked" : ""}/><i></i></label>
+      <button class="voice-learn-btn" type="button" data-action="voice-learn-scene">${voiceStatus === "playing" ? "Explaining..." : "Learn with AI"}</button>
+      ${voiceStatus !== "idle" ? `<div class="voice-controls"><button type="button" data-action="voice-pause">Pause</button><button type="button" data-action="voice-resume">Resume</button><button type="button" data-action="voice-stop">Stop</button><button type="button" data-action="voice-speed">Speed ${functionalState.journeyVoiceSpeed}x</button></div>` : ""}
+    </div>
+    <div class="flash-card-stage">
+      <button class="flash-ai-float" type="button" data-action="voice-learn-scene">${voiceStatus === "playing" ? "Explaining..." : "Learn with AI"}</button>
+      ${renderFlashCard(card, index, total)}
+    </div>
+  </section>`;
+}
+
+function currentFlashCard() {
+  const lesson = parseJourneyLesson(functionalState.journeyLessonAnswers[functionalState.journeyTopicSlug] || {});
+  const topic = (functionalState.journey?.module?.topics || []).find((item) => item.slug === functionalState.journeyTopicSlug) || {};
+  const cards = buildFlashLessonCards(lesson, topic);
+  const index = Math.min(Math.max(Number(functionalState.journeyFlashCardIndex || 0), 0), Math.max(0, cards.length - 1));
+  return { card: cards[index] || {}, cardIndex: index, cards, topic };
+}
+
+function buildFlashLessonCards(lesson = {}, topic = {}) {
+  if (Array.isArray(lesson.flashCards) && lesson.flashCards.length) {
+    return lesson.flashCards.map((card, index, cards) => ({
+      ...card,
+      type: card.type || card.sceneType || "concept",
+      button: card.button || (index === cards.length - 1 ? "Start Next Topic" : "Next"),
+    }));
+  }
+  const title = lesson.title || topic.title || "What is Web Development?";
+  const estimatedTime = topic.duration || lesson.estimatedTime || "20 min";
+  const keyPoints = Array.isArray(lesson.keyPoints) ? lesson.keyPoints.filter(Boolean) : [];
+  const flow = Array.isArray(lesson.flow) && lesson.flow.length ? lesson.flow : [
+    "You open a website in the browser",
+    "The screen shows the interface",
+    "The hidden system handles the request",
+    "Useful data returns to the screen",
+  ];
+  const quiz = lesson.quiz || topic.check || {
+    question: "What does web development usually connect?",
+    options: ["Interface, logic, and data", "Only colors and fonts", "Only mobile apps"],
+    answerIndex: 0,
+  };
+  return [
+    {
+      type: "aiIntro",
+      eyebrow: "AI Mentor",
+      title: "Hi, let's learn this step by step.",
+      goal: `Today we're going to discover ${title.toLowerCase()} without getting lost in technical details.`,
+      question: "Ready to build the big picture first?",
+      estimatedTime,
+      button: "Let's Go",
+    },
+    {
+      type: "concept",
+      title,
+      content: lesson.definition || lesson.intro || "Web development is the work of creating websites and web applications that people can open in a browser.",
+      highlight: lesson.takeaway || "The big idea: web development connects what users see, what the system does, and what the product remembers.",
+      button: "Next",
+    },
+    {
+      type: "example",
+      title: "Real World Example: YouTube",
+      content: lesson.example || "When you open YouTube, search for a video, click a result, and start watching, many web-development pieces work together. The page shows buttons and videos, the hidden system finds the right video, and saved data keeps likes, comments, and recommendations useful.",
+      steps: ["Search for a video", "See video results", "Open a video", "Watch, like, comment, and share"],
+      button: "Continue",
+    },
+    {
+      type: "visual",
+      title: "Visual Diagram",
+      content: "Think of the web as a simple loop: your browser asks, a server works, data comes back, and the browser shows the result.",
+      flow,
+      button: "Practice Time",
+    },
+    {
+      type: "practice",
+      title: "Practice",
+      content: "Open any familiar website in your mind and separate what you see from what happens behind the scenes.",
+      tasks: [
+        "Name one thing the user can see or click.",
+        "Name one hidden action the system must perform.",
+        "Name one piece of data the product must remember.",
+      ],
+      button: "I Tried This",
+    },
+    {
+      type: "quiz",
+      title: "Quick Quiz",
+      question: quiz.question,
+      options: Array.isArray(quiz.options) ? quiz.options : [],
+      button: "Submit",
+    },
+    {
+      type: "feedback",
+      title: "AI Feedback",
+      content: flashQuizFeedback(topic.slug),
+      keyPoints,
+      passed: Boolean(functionalState.journeyCheckResults?.[topic.slug]?.correct),
+      button: functionalState.journeyCheckResults?.[topic.slug]?.correct ? "Finish Topic" : "Try Quiz Again",
+    },
+    {
+      type: "complete",
+      title: "Topic Complete",
+      content: `Nice. You now have a cleaner mental model for ${title}.`,
+      next: nextJourneyTopicTitle(topic.slug),
+      button: "Start Next Topic",
+    },
+  ];
+}
+
+function renderFlashCard(card = {}, index = 0, total = 8) {
+  if (card.type === "aiIntro") {
+    return `<article class="flash-card flash-card-intro">
+      <div class="flash-ai-avatar">${icon("bot")}</div>
+      <span>${escapeHtml(card.eyebrow || "AI Mentor")}</span>
+      <h2>${escapeHtml(card.title || "Hi!")}</h2>
+      <p>${escapeHtml(card.goal || "")}</p>
+      <div class="flash-question">${escapeHtml(card.question || "")}</div>
+      <small>Estimated time: ${escapeHtml(card.estimatedTime || "20 min")}</small>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Let's Go")}</button>
+    </article>`;
+  }
+  if (card.type === "concept") {
+    return `<article class="flash-card">
+      <span>Concept Explanation</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      ${paragraphs(card.content).slice(0, 5).map((text) => `<p>${escapeHtml(text)}</p>`).join("")}
+      <div class="flash-highlight">${escapeHtml(card.highlight || "")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Next")}</button>
+    </article>`;
+  }
+  if (card.type === "example") {
+    return `<article class="flash-card">
+      <span>Real World Example</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-example-steps">${(card.steps || []).map((step, stepIndex) => `<div><b>${stepIndex + 1}</b><strong>${escapeHtml(step)}</strong></div>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "visual") {
+    return `<article class="flash-card">
+      <span>Visual Diagram</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-diagram">${(card.flow || []).slice(0, 6).map((step, stepIndex, list) => `<div><b>${stepIndex + 1}</b><strong>${escapeHtml(step)}</strong></div>${stepIndex < list.length - 1 ? `<i>${icon("arrow-right")}</i>` : ""}`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Practice Time")}</button>
+    </article>`;
+  }
+  if (card.type === "practice") {
+    return `<article class="flash-card">
+      <span>Practice</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-task-list">${(card.tasks || []).map((task) => `<div>${icon("check")}<strong>${escapeHtml(task)}</strong></div>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "I Tried This")}</button>
+    </article>`;
+  }
+  if (card.type === "interactiveVisual") {
+    const badgeLabel = card.badgeLabel || "Frontend";
+    return `<article class="flash-card">
+      <span>Interactive Visual</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-youtube-mock">${(card.steps || []).map((step, stepIndex) => `<button type="button"><b>${stepIndex + 1}</b><strong>${escapeHtml(step)}</strong><small>${escapeHtml(badgeLabel)}</small></button>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "observation") {
+    return `<article class="flash-card">
+      <span>Observation Challenge</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-observation-grid">
+        ${(card.correct || []).map((item) => `<button type="button" class="correct">${icon("check")}<strong>${escapeHtml(item)}</strong></button>`).join("")}
+        ${(card.incorrect || []).map((item) => `<button type="button">${icon("x")}<strong>${escapeHtml(item)}</strong></button>`).join("")}
+      </div>
+      <div class="flash-highlight">${escapeHtml(card.highlight || "Visible and clickable screen elements belong to the frontend.")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "quiz") {
+    const topicSlug = functionalState.journeyTopicSlug || "";
+    return `<form class="flash-card flash-quiz-card" data-form="flash-quiz" data-topic-slug="${escapeHtml(topicSlug)}">
+      <span>Quick Quiz</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.question || "Choose the best answer.")}</p>
+      <div class="flash-options">${(card.options || []).map((option, optionIndex) => `<label><input type="radio" name="selectedIndex" value="${optionIndex}" required/><strong>${escapeHtml(option)}</strong></label>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="submit" ${functionalState.journeyFlashCardSaving ? "disabled" : ""}>${functionalState.journeyFlashCardSaving ? "Checking..." : escapeHtml(card.button || "Submit")}</button>
+    </form>`;
+  }
+  if (card.type === "feedback") {
+    return `<article class="flash-card">
+      <span>AI Feedback</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-note-list">${(card.keyPoints || []).slice(0, 4).map((point) => `<div>${icon("star")}<strong>${escapeHtml(point)}</strong></div>`).join("") || `<div>${icon("star")}<strong>Keep the big picture clear before details.</strong></div>`}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="${card.passed ? "flash-next" : "flash-retry-quiz"}">${escapeHtml(card.button || "Finish Topic")}</button>
+    </article>`;
+  }
+  return `<article class="flash-card flash-card-complete">
+    <div class="flash-ai-avatar complete">${icon("trophy")}</div>
+    <span>Feature Unlocked</span>
+    <h2>${escapeHtml(card.title || "Topic Complete")}</h2>
+    <p>${escapeHtml(card.content || "")}</p>
+    <div class="flash-highlight">Next up: ${escapeHtml(card.next || "Continue your learning path")}</div>
+    <button class="btn primary glow flash-primary" type="button" data-action="flash-complete-topic" data-topic-slug="${escapeHtml(functionalState.journeyTopicSlug || "")}">${escapeHtml(card.button || "Start Next Topic")}</button>
+  </article>`;
+}
+
+function paragraphs(content = "") {
+  return String(content || "").split(/\n+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function flashQuizFeedback(topicSlug = "") {
+  const result = functionalState.journeyCheckResults?.[topicSlug];
+  if (!result) return "Good effort. The point of this check is to make sure the idea is clear before moving forward.";
+  if (result.correct) return result.explanation || "Correct. You understood the key idea and can move to the next step.";
+  return result.explanation || "Not quite yet. Review the example once more, then keep the simple mental model in mind.";
+}
+
+function nextJourneyTopicTitle(topicSlug = "") {
+  const topics = functionalState.journey?.module?.topics || [];
+  const index = topics.findIndex((topic) => topic.slug === topicSlug);
+  return topics[index + 1]?.shortTitle || topics[index + 1]?.title || "the next topic";
+}
+
+async function completeJourneyTopic(topicSlug = "") {
+  const topics = functionalState.journey?.module?.topics || [];
+  const completed = new Set(functionalState.journey?.progress?.completedTopicSlugs || []);
+  const currentIndex = topics.findIndex((topic) => topic.slug === topicSlug);
+  if (completed.has(topicSlug)) {
+    functionalState.journeyTopicSlug = topics[currentIndex + 1]?.slug || topics[0]?.slug || "";
+    functionalState.journeyFlashCardIndex = 0;
+    await render();
+    return;
+  }
+  const result = await api("/journey/web-and-internet-architecture/progress", {
+    method: "PUT",
+    body: JSON.stringify({ topicSlug }),
+  });
+  if (!result?.progress) {
+    toast("Progress could not be saved. Try again.");
+    return;
+  }
+  functionalState.journey.progress = result.progress;
+  functionalState.journeyTopicSlug = result.progress.currentTopicSlug;
+  functionalState.journeyFlashCardIndex = 0;
+  toast(result.message || "Topic completed.");
+  await render();
+}
+
+function bindFlashLessonControls(root = document) {
+  root.querySelectorAll("[data-action='flash-next']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    const { cards } = currentFlashCard();
+    functionalState.journeyFlashCardIndex = Math.min(Math.max(0, cards.length - 1), Number(functionalState.journeyFlashCardIndex || 0) + 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-action='flash-retry-quiz']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    functionalState.journeyFlashCardIndex = 5;
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-form='flash-quiz']").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const selected = form.querySelector("input[name='selectedIndex']:checked");
+    if (!selected || functionalState.journeyFlashCardSaving) return;
+    functionalState.journeyFlashCardSaving = true;
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    const result = await api("/journey/web-and-internet-architecture/check", {
+      method: "POST",
+      body: JSON.stringify({
+        topicSlug: form.dataset.topicSlug,
+        selectedIndex: Number(selected.value),
+      }),
+    });
+    functionalState.journeyFlashCardSaving = false;
+    if (!result) {
+      toast("Could not check the answer. Try again.");
+      updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+      return;
+    }
+    functionalState.journeyCheckResults[form.dataset.topicSlug] = {
+      ...result,
+      selectedIndex: Number(selected.value),
+    };
+    if (result.correct) {
+      functionalState.journey.progress = functionalState.journey.progress || {};
+      functionalState.journey.progress.passedCheckTopicSlugs = Array.from(new Set([
+        ...(functionalState.journey.progress.passedCheckTopicSlugs || []),
+        form.dataset.topicSlug,
+      ]));
+    }
+    const lesson = functionalState.journeyLessonAnswers[functionalState.journeyTopicSlug] || {};
+    const topic = (functionalState.journey?.module?.topics || []).find((item) => item.slug === functionalState.journeyTopicSlug) || {};
+    const cards = buildFlashLessonCards(parseJourneyLesson(lesson), topic);
+    const nextIndex = Math.min(cards.length - 1, Number(functionalState.journeyFlashCardIndex || 0) + 1);
+    if (result.correct || cards[nextIndex]?.type === "feedback") {
+      stopJourneyVoice();
+      functionalState.journeyFlashCardIndex = nextIndex;
+      updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+      if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+      return;
+    } else {
+      toast(result.explanation || "Not quite. Try that one again.");
+    }
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+  }));
+  root.querySelectorAll("[data-action='flash-complete-topic']").forEach((button) => button.addEventListener("click", async () => {
+    stopJourneyVoice();
+    button.disabled = true;
+    button.textContent = "Saving...";
+    await completeJourneyTopic(button.dataset.topicSlug);
+  }));
+}
+
+function legacyJourneyVisualLesson(lesson = {}) {
   const flow = Array.isArray(lesson.flow) ? lesson.flow : [];
   const comparison = Array.isArray(lesson.comparison) ? lesson.comparison : [];
   const keyPoints = Array.isArray(lesson.keyPoints) ? lesson.keyPoints : [];
@@ -3780,6 +4147,36 @@ function voiceGuideText(scene = {}) {
   return `${body} So the big idea is simple: web development connects what users see, what the system does, and what the product remembers.`;
 }
 
+function flashCardVoiceText(card = {}, topic = {}) {
+  const title = card.title || topic.title || "this idea";
+  if (card.type === "aiIntro") {
+    return `${card.title || ""}. ${card.goal || ""} ${card.question || ""}`.trim();
+  }
+  if (card.type === "concept") {
+    return `${title}. ${paragraphs(card.content).join(" ")} ${card.highlight || ""}`.trim();
+  }
+  if (card.type === "example") {
+    return `${title}. ${card.content || ""} ${(card.steps || []).length ? `Notice the steps: ${(card.steps || []).join(", ")}.` : ""}`.trim();
+  }
+  if (card.type === "visual" || card.type === "interactiveVisual") {
+    const steps = card.flow || card.steps || [];
+    return `${title}. ${card.content || ""} The flow is: ${steps.join(" to ")}.`.trim();
+  }
+  if (card.type === "practice") {
+    return `${title}. ${card.content || ""} Try this: ${(card.tasks || []).join(". ")}.`.trim();
+  }
+  if (card.type === "observation") {
+    return `${title}. ${card.content || ""} Good choices include ${(card.correct || []).join(", ")}. Be careful with ${(card.incorrect || []).join(", ")}. ${card.highlight || ""}`.trim();
+  }
+  if (card.type === "quiz") {
+    return `${title}. ${card.question || ""} Think slowly before choosing. The goal is understanding, not speed.`.trim();
+  }
+  if (card.type === "feedback") {
+    return `${title}. ${card.content || ""} ${(card.keyPoints || []).join(". ")}`.trim();
+  }
+  return `${title}. ${card.content || ""} ${card.next ? `Next, you will move toward ${card.next}.` : ""}`.trim();
+}
+
 function stopJourneyVoice() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   functionalState.journeyVoiceStatus = "idle";
@@ -3790,8 +4187,10 @@ function speakJourneyScene() {
     toast("Voice guide is not supported in this browser.");
     return;
   }
+  const flashLesson = Boolean(functionalState.journeyLessonAnswers[functionalState.journeyTopicSlug]?.flashCards);
+  const { card, topic } = currentFlashCard();
   const { scene } = currentJourneyScene();
-  const text = voiceGuideText(scene);
+  const text = flashLesson ? flashCardVoiceText(card, topic) : voiceGuideText(scene);
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = Number(functionalState.journeyVoiceSpeed || 1);
@@ -3819,7 +4218,10 @@ function bindFunctionalActions() {
     await render();
   }));
   document.querySelectorAll("[data-action='open-module-journey']").forEach((card) => {
-    const openJourney = () => setRoute("courses");
+    const openJourney = () => {
+      stopJourneyVoice();
+      setRoute("courses");
+    };
     card.addEventListener("click", openJourney);
     card.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
@@ -3829,13 +4231,17 @@ function bindFunctionalActions() {
     });
   });
   document.querySelectorAll("[data-action='select-journey-topic']").forEach((button) => button.addEventListener("click", async () => {
+    stopJourneyVoice();
     functionalState.journeyTopicSlug = button.dataset.topicSlug;
     functionalState.journeyStoryScene = 0;
+    functionalState.journeyFlashCardIndex = 0;
     updateJourneyTopicRail(button.dataset.topicSlug);
     await requestJourneyLesson(button.dataset.topicSlug);
   }));
   document.querySelectorAll("[data-action='generate-journey-lesson']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
     functionalState.journeyStoryScene = 0;
+    functionalState.journeyFlashCardIndex = 0;
     requestJourneyLesson(button.dataset.topicSlug);
   }));
   document.querySelectorAll("[data-action='lesson-story-next']").forEach((button) => button.addEventListener("click", () => {
@@ -4712,19 +5118,20 @@ function miniCourseCard(course, index) {
 routeMap.dashboard = function properStudentDashboardPage() {
   const data = functionalState.dashboard || {};
   const roadmap = data.roadmap || {};
+  const journeyProgress = data.learningJourney || roadmap.learningJourney || {};
   const hasActiveRoadmap = Boolean(data.hasActiveRoadmap);
   const roadmapWeeks = roadmap.weeks || roadmap.modules || [];
   const roadmapTitle = hasActiveRoadmap ? roadmap.title || "Roadmap" : "No roadmap selected yet";
   const roadmapSummary = hasActiveRoadmap
     ? roadmap.summary || "Your selected roadmap is ready. Continue from the next milestone."
     : "Create your personalized roadmap from the assessment to unlock your dashboard plan.";
-  const nextMilestone = hasActiveRoadmap ? roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path" : "Create your roadmap";
+  const nextMilestone = hasActiveRoadmap ? journeyProgress.currentTopicTitle || roadmap.nextMilestone || roadmapWeeks[0]?.title || "Open roadmap path" : "Create your roadmap";
   const primaryCtaLabel = hasActiveRoadmap ? "Continue Roadmap" : "Create Roadmap";
   const primaryCtaHref = hasActiveRoadmap ? "#roadmap" : "#assessment";
   const liveCourses = data.recommendedCourses || [];
   const liveTests = data.upcomingTests || [];
   const activity = data.recentActivity || [];
-  const progressValue = hasActiveRoadmap ? Math.max(0, Math.min(100, Number(data.overallProgress || 0))) : 0;
+  const progressValue = hasActiveRoadmap ? Math.max(0, Math.min(100, Number(journeyProgress.percent ?? data.overallProgress ?? 0))) : 0;
   const firstName = currentUser.name.split(" ")[0] || "Student";
   const focusScore = Math.min(100, Math.round(progressValue + Math.min(24, (data.studyStreak || 0) * 2)));
   const readinessScore = Math.min(100, Math.round(progressValue / 2 + (data.projectCount || 0) * 6 + (data.certificatesEarned || 0) * 4));
@@ -4732,7 +5139,7 @@ routeMap.dashboard = function properStudentDashboardPage() {
   const stats = [
     ["Overall Progress", progressValue, "%", "chart", "Roadmap"],
     ["Tests Completed", data.testsCompleted || 0, "", "test", "Saved"],
-    ["Roadmap Weeks", hasActiveRoadmap ? roadmapWeeks.length : 0, "", "map", "Modules"],
+    ["Journey Lessons", hasActiveRoadmap ? journeyProgress.totalTopics || roadmapWeeks.length : 0, "", "map", "Topics"],
     ["Duration", hasActiveRoadmap ? roadmap.estimatedDurationWeeks || 0 : 0, "w", "trophy", "Estimated"],
   ];
 

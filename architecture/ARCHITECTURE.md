@@ -171,6 +171,37 @@ functionalState.profile
 functionalState.settings
 ```
 
+### Journey Lesson Engine
+
+The Journey/Courses learning screen uses the existing hash route and SPA state, but the lesson presentation is now flash-card based:
+
+```text
+Journey topic
+-> requestJourneyLesson(topicSlug)
+-> backend lesson JSON
+-> renderFlashLesson()
+-> one visible flash card at a time
+```
+
+The optional Voice Guide is active on the flash-card lesson layer. It uses the browser speech engine, reads the current flash card's structured JSON content, stops when the learner moves cards or topics, and can auto-play the next card when the learner turns Voice Guide on.
+
+The current flash lesson flow is:
+
+```text
+AI Intro
+-> Concept Explanation
+-> Real World Example
+-> Visual Diagram
+-> Practice
+-> Quick Quiz
+-> AI Feedback
+-> Topic Complete
+```
+
+Only the internal `#journeyConversation` area updates when a learner advances cards. The full SPA page, sidebar, topic rail, route, authentication, and backend APIs remain unchanged.
+
+Future lessons should be driven by lesson JSON. The renderer chooses the correct card UI by `type`, so new topics should not require new layout code unless a new card type is introduced. Topic-specific lesson data can provide `lesson.flashCards`; the backend normalizes and returns this array through `/api/journey/:moduleSlug/explain`.
+
 Assessment answers are stored in:
 
 ```js
@@ -794,6 +825,8 @@ If no roadmap exists, it returns:
 
 Every returned roadmap is normalized before reaching the frontend.
 
+Current sync rule: Dashboard, Roadmap Tree View, and Journey all use the same `LearningProgress` record for Module 1. The backend attaches a `learningJourney` summary to `/api/dashboard/stats` and every `/api/roadmaps` response. That summary contains the current topic, completed topics, total topics, and percent complete. The Roadmap page uses it to mark Module 1 lesson rows as completed/current/locked, and the Dashboard uses it for current milestone and progress.
+
 The roadmap page now supports:
 
 ```text
@@ -801,7 +834,7 @@ Tree View -> default MVP learning journey view
 Timeline View -> existing saved-roadmap week timeline
 ```
 
-Tree View presents the saved roadmap as a learning journey. Module 1 is `Web and Internet Architecture` and currently contains 22 ordered lessons:
+Tree View presents the saved roadmap as a learning journey. Module 1 is `Web and Internet Architecture` and currently contains 13 ordered lessons:
 
 ```text
 What is Web Development?
@@ -810,22 +843,13 @@ Backend Development
 Full Stack Development
 Website vs Web Application
 Static vs Dynamic Websites
-Client and Server Introduction
-Basic Client-Server Architecture
-How a Browser Works
-Browser Rendering Basics
-Request-Response Cycle
-Introduction to DNS
-Domain Name Basics
-Hosting Basics
-HTTP Introduction
-HTTPS Introduction
-API Introduction
-JSON Introduction
-Cookies Introduction
-Sessions Introduction
-JWT Introduction
-CORS Introduction
+Client & Server
+Browser, Domain, DNS & Hosting
+Request -> Response Cycle
+HTTP vs HTTPS
+APIs & JSON
+Cookies, Sessions & JWT
+CORS
 ```
 
 Timeline View maps saved `weeks` into the existing timeline UI.
