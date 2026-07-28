@@ -185,6 +185,8 @@ Journey topic
 
 The optional Voice Guide is active on the flash-card lesson layer. It uses the browser speech engine, reads the current flash card's structured JSON content, stops when the learner moves cards or topics, and can auto-play the next card when the learner turns Voice Guide on.
 
+Flash lessons use a guided card navigation pattern: one centered card is visible, learners move with Previous/Next controls, and cards animate horizontally based on movement direction.
+
 The current flash lesson flow is:
 
 ```text
@@ -201,6 +203,53 @@ AI Intro
 Only the internal `#journeyConversation` area updates when a learner advances cards. The full SPA page, sidebar, topic rail, route, authentication, and backend APIs remain unchanged.
 
 Future lessons should be driven by lesson JSON. The renderer chooses the correct card UI by `type`, so new topics should not require new layout code unless a new card type is introduced. Topic-specific lesson data can provide `lesson.flashCards`; the backend normalizes and returns this array through `/api/journey/:moduleSlug/explain`.
+
+### Coding Workspace
+
+The `#coding` route is a frontend-only beginner practice workspace for now. It uses the existing SPA route and does not add backend APIs.
+
+Current behavior:
+
+```text
+Task card
+-> code editor tabs
+-> Run Code
+-> live preview iframe
+-> Check Answer
+-> local success or guidance message
+```
+
+The first MVP task is `Add a Heading`. The workspace checks the local HTML for a meaningful `<h1>` and requires the learner to run the preview before showing the success card. It intentionally does not mark every checklist item complete by default.
+
+Safety status:
+
+- Student code is stored only in browser `localStorage`.
+- Student code is rendered only inside the preview iframe.
+- The iframe uses browser sandboxing and does not include same-origin access.
+- The generated preview document includes a Content Security Policy that blocks network requests, forms, nested frames, objects, external assets and base URL changes.
+- Code size limits are enforced before preview rendering:
+  - HTML: 12,000 characters
+  - CSS: 12,000 characters
+  - JavaScript: 8,000 characters
+  - Total workspace code: 30,000 characters
+- No Coding Workspace code is sent to the backend in the current MVP.
+
+Privacy pages:
+
+- `#privacy` renders the MVP privacy policy.
+- `#terms` renders the MVP terms page.
+- Signup and landing footer link to these pages.
+
+Account data request flow:
+
+```text
+Settings
+-> Request Export or Request Deletion
+-> POST /api/account/data-request
+-> DataRequest record saved for manual review
+```
+
+This is intentionally request-only. It does not automatically export, delete or mutate account data.
 
 Assessment answers are stored in:
 
@@ -834,22 +883,31 @@ Tree View -> default MVP learning journey view
 Timeline View -> existing saved-roadmap week timeline
 ```
 
-Tree View presents the saved roadmap as a learning journey. Module 1 is `Web and Internet Architecture` and currently contains 13 ordered lessons:
+Tree View presents the saved roadmap as a learning journey. Module 1 is `Web and Internet Architecture` and currently contains 22 ordered lessons:
 
 ```text
 What is Web Development?
 Frontend Development
 Backend Development
-Full Stack Development
+Full-Stack Development
 Website vs Web Application
 Static vs Dynamic Websites
-Client & Server
-Browser, Domain, DNS & Hosting
+Client and Server Introduction
+Basic Client-Server Architecture
+How a Browser Works
+Browser Rendering Basics
 Request -> Response Cycle
-HTTP vs HTTPS
-APIs & JSON
-Cookies, Sessions & JWT
-CORS
+Introduction to DNS
+Domain Name Basics
+Hosting Basics
+HTTP Introduction
+HTTPS Introduction
+API Introduction
+JSON Introduction
+Cookies Introduction
+Sessions Introduction
+JWT Introduction
+CORS Introduction
 ```
 
 Timeline View maps saved `weeks` into the existing timeline UI.
@@ -902,6 +960,7 @@ GET  /api/test-results
 ```text
 GET/PUT  /api/profile
 GET/PUT  /api/settings
+POST     /api/account/data-request
 GET/PUT  /api/dsa/progress
 POST     /api/dsa/solve-challenge
 GET/POST /api/resume

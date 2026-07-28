@@ -390,6 +390,20 @@ const UserSettings = model(
   ),
 );
 
+const DataRequest = model(
+  "DataRequest",
+  new Schema(
+    {
+      user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      email: String,
+      type: { type: String, enum: ["export", "delete"], required: true },
+      message: String,
+      status: { type: String, enum: ["received", "in_review", "completed", "rejected"], default: "received" },
+    },
+    { timestamps: true },
+  ),
+);
+
 
 const Admin = model(
   "Admin",
@@ -424,5 +438,6 @@ module.exports = {
   JourneyMentorChat,
   Notification,
   UserSettings,
+  DataRequest,
   Admin,
 };

@@ -685,6 +685,8 @@ function studoxLandingPage() {
           <a href="#roadmap">Roadmap</a>
           <a href="#courses">Courses</a>
           <a href="#about">About Us</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#terms">Terms</a>
         </nav>
         <div class="college-strip">
           ${["BCA", "B.Tech", "Diploma", "School", "Freshers", "Self learners"].map((item) => `<span>${item}</span>`).join("")}
@@ -1725,7 +1727,7 @@ function dsaPage() {
         <div class="panel-head"><h2>Today's Challenge</h2><span class="chip purple">AI picked</span></div>
         <h3>Longest Repeating Character Replacement</h3>
         <p class="muted">Sliding window pattern. Target time: 24 minutes.</p>
-        <button class="btn primary" data-toast="Opening coding workspace placeholder.">Solve Now</button>
+        <a class="btn primary" href="#coding">Solve Now</a>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Recent Problems</h2></div>
@@ -2163,6 +2165,8 @@ function adminPage() {
 const routeMap = {
   landing: studoxLandingPage,
   about: aboutUsPage,
+  privacy: privacyPolicyPage,
+  terms: termsPage,
   counselling: () => {
     ensureCounsellingStarted();
     return counsellingScreen();
@@ -2450,6 +2454,7 @@ const functionalState = {
   journeyVoiceSpeed: 1,
   journeyVoiceText: "",
   journeyQuickCheck: {},
+  journeyFlashDirection: "next",
   tests: [],
   testResults: [],
   testSession: null,
@@ -2741,16 +2746,25 @@ const moduleOneLessonTitles = [
   "What is Web Development?",
   "Frontend Development",
   "Backend Development",
-  "Full Stack Development",
+  "Full-Stack Development",
   "Website vs Web Application",
   "Static vs Dynamic Websites",
-  "Client & Server",
-  "Browser, Domain, DNS & Hosting",
+  "Client and Server Introduction",
+  "Basic Client-Server Architecture",
+  "How a Browser Works",
+  "Browser Rendering Basics",
   "Request -> Response Cycle",
-  "HTTP vs HTTPS",
-  "APIs & JSON",
-  "Cookies, Sessions & JWT",
-  "CORS",
+  "Introduction to DNS",
+  "Domain Name Basics",
+  "Hosting Basics",
+  "HTTP Introduction",
+  "HTTPS Introduction",
+  "API Introduction",
+  "JSON Introduction",
+  "Cookies Introduction",
+  "Sessions Introduction",
+  "JWT Introduction",
+  "CORS Introduction",
 ];
 
 const moduleOneLessonSlugs = [
@@ -2761,11 +2775,20 @@ const moduleOneLessonSlugs = [
   "website-vs-web-application",
   "static-vs-dynamic-websites",
   "client-and-server-introduction",
+  "basic-client-server-architecture",
   "how-a-browser-works",
+  "browser-rendering-basics",
   "request-response-cycle",
   "introduction-to-dns",
+  "domain-name-basics",
+  "hosting-basics",
+  "http-introduction",
+  "https-introduction",
   "api-introduction",
+  "json-introduction",
   "cookies-introduction",
+  "sessions-introduction",
+  "jwt-introduction",
   "cors-introduction",
 ];
 
@@ -2813,6 +2836,44 @@ function roadmapModulesFromData(roadmap = {}) {
       journeyProgress: index === 0 ? journeyProgress : null,
     };
   });
+}
+
+function privacyPolicyPage() {
+  return `<main class="landing view policy-page">
+    <nav class="landing-nav about-nav">${brand()}<div class="nav-actions"><a href="#landing" class="btn ghost">Home</a><a href="#terms" class="btn">Terms</a></div></nav>
+    <section class="policy-shell">
+      <span class="eyebrow">Student data protection</span>
+      <h1>Privacy Policy</h1>
+      <p>Studox.ai uses student data only to provide learning, roadmap, progress, account and support features.</p>
+      <div class="policy-grid">
+        <article><h2>What We Collect</h2><p>Account details, assessment answers, selected roadmap, learning progress, course activity, profile details, settings, support requests and payment status when payments are used.</p></article>
+        <article><h2>Why We Use It</h2><p>To personalize roadmaps, restore sessions, show progress, protect accounts, provide support, and improve the learning experience.</p></article>
+        <article><h2>User Code</h2><p>Coding Workspace code runs in your browser preview. MVP practice code is stored locally in your browser and is not sent to the backend.</p></article>
+        <article><h2>Access Control</h2><p>Protected app data requires Firebase authentication. Student data endpoints are designed to use the authenticated Studox user, not client-provided identity.</p></article>
+        <article><h2>AI Features</h2><p>When AI help is used, relevant prompts or context may be sent to the configured AI provider. Do not enter secrets, passwords, or private keys into AI prompts.</p></article>
+        <article><h2>Data Requests</h2><p>You can request data export or account data deletion from Settings. Deletion is reviewed before any irreversible action is taken.</p></article>
+      </div>
+    </section>
+  </main>`;
+}
+
+function termsPage() {
+  return `<main class="landing view policy-page">
+    <nav class="landing-nav about-nav">${brand()}<div class="nav-actions"><a href="#landing" class="btn ghost">Home</a><a href="#privacy" class="btn">Privacy</a></div></nav>
+    <section class="policy-shell">
+      <span class="eyebrow">Studox.ai terms</span>
+      <h1>Terms of Service</h1>
+      <p>These MVP terms explain the basic rules for using Studox.ai while the platform is still evolving.</p>
+      <div class="policy-grid">
+        <article><h2>Learning Guidance</h2><p>Studox.ai provides learning guidance, roadmaps and practice support. It does not guarantee jobs, internships, admissions, placements or income.</p></article>
+        <article><h2>Student Responsibility</h2><p>Use the platform honestly, avoid uploading harmful content, and do not enter passwords, API keys or confidential information into lessons, code editors or AI prompts.</p></article>
+        <article><h2>Coding Workspace</h2><p>Browser practice is provided for learning. User code must not be used for abuse, attacks, scraping, phishing or attempts to bypass platform protections.</p></article>
+        <article><h2>Accounts</h2><p>Firebase manages identity. Studox manages role, profile, progress, roadmap, settings and account status. Admin access is internal only.</p></article>
+        <article><h2>Payments</h2><p>If paid plans are enabled, pricing, refunds and access rules must be shown clearly at checkout before payment.</p></article>
+        <article><h2>Changes</h2><p>Studox.ai may update these terms as the MVP becomes production-ready. Continued use means you accept the updated rules.</p></article>
+      </div>
+    </section>
+  </main>`;
 }
 
 function roadmapLessonsForModule(module, moduleIndex) {
@@ -3240,7 +3301,7 @@ routeMap.profile = function functionalProfilePage() {
 routeMap.settings = function functionalSettingsPage() {
   const settings = functionalState.settings || {};
   const selectedTheme = settings.theme || getStoredTheme();
-  return appLayout(`<div class="page-head"><div><h1>Settings</h1><p>Save All Changes se preferences backend mein save hoti hain.</p></div></div><form class="roadmap-layout" data-form="settings-save"><div class="panel dark-card"><h2>Appearance</h2><div class="settings-list" style="margin-top:14px"><div class="setting-row"><div><strong>Theme</strong><p class="muted">Choose light, dark or system mode.</p></div><select name="theme"><option ${selectedTheme === "light" ? "selected" : ""}>light</option><option ${selectedTheme === "dark" ? "selected" : ""}>dark</option><option ${selectedTheme === "system" ? "selected" : ""}>system</option></select></div><div class="setting-row"><div><strong>Accent color</strong><p class="muted">Primary dashboard accent.</p></div><input name="accentColor" value="${settings.accentColor || "#2563eb"}" /></div><div class="setting-row"><div><strong>Language</strong><p class="muted">Interface language.</p></div><select name="language"><option ${settings.language === "English" ? "selected" : ""}>English</option><option ${settings.language === "Hindi" ? "selected" : ""}>Hindi</option><option ${settings.language === "Spanish" ? "selected" : ""}>Spanish</option></select></div></div><h2 style="margin-top:22px">Study Preferences</h2><div class="settings-list" style="margin-top:14px">${["Daily learning reminders", "Weekly test nudges", "DSA challenge alerts", "Internship recommendations"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="pref_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div></div><aside class="panel dark-card"><h2>Notifications</h2><div class="settings-list" style="margin-top:14px">${["Email updates", "Push notifications", "Mentor summaries", "Career alerts"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="note_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div><button class="btn primary" style="margin-top:18px" type="submit">Save All Changes</button></aside></form>`, "settings");
+  return appLayout(`<div class="page-head"><div><h1>Settings</h1><p>Save All Changes se preferences backend mein save hoti hain.</p></div></div><form class="roadmap-layout" data-form="settings-save"><div class="panel dark-card"><h2>Appearance</h2><div class="settings-list" style="margin-top:14px"><div class="setting-row"><div><strong>Theme</strong><p class="muted">Choose light, dark or system mode.</p></div><select name="theme"><option ${selectedTheme === "light" ? "selected" : ""}>light</option><option ${selectedTheme === "dark" ? "selected" : ""}>dark</option><option ${selectedTheme === "system" ? "selected" : ""}>system</option></select></div><div class="setting-row"><div><strong>Accent color</strong><p class="muted">Primary dashboard accent.</p></div><input name="accentColor" value="${settings.accentColor || "#2563eb"}" /></div><div class="setting-row"><div><strong>Language</strong><p class="muted">Interface language.</p></div><select name="language"><option ${settings.language === "English" ? "selected" : ""}>English</option><option ${settings.language === "Hindi" ? "selected" : ""}>Hindi</option><option ${settings.language === "Spanish" ? "selected" : ""}>Spanish</option></select></div></div><h2 style="margin-top:22px">Study Preferences</h2><div class="settings-list" style="margin-top:14px">${["Daily learning reminders", "Weekly test nudges", "DSA challenge alerts", "Internship recommendations"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="pref_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div></div><aside class="panel dark-card"><h2>Notifications</h2><div class="settings-list" style="margin-top:14px">${["Email updates", "Push notifications", "Mentor summaries", "Career alerts"].map((item, i) => `<div class="setting-row"><strong>${item}</strong><label class="switch"><input name="note_${i}" type="checkbox" checked/><span></span></label></div>`).join("")}</div><h2 style="margin-top:22px">Data & Privacy</h2><div class="settings-list" style="margin-top:14px"><div class="setting-row"><div><strong>Privacy documents</strong><p class="muted"><a href="#privacy">Privacy Policy</a> and <a href="#terms">Terms</a></p></div></div><div class="setting-row"><div><strong>Request data export</strong><p class="muted">Ask Studox support to prepare your stored account data.</p></div><button class="btn" type="button" data-action="data-request" data-request-type="export">Request Export</button></div><div class="setting-row"><div><strong>Delete my account/data request</strong><p class="muted">Manual review only. No automatic deletion happens yet.</p></div><button class="btn danger-light" type="button" data-action="data-request" data-request-type="delete">Request Deletion</button></div><p class="muted" data-data-request-status></p></div><button class="btn primary" style="margin-top:18px" type="submit">Save All Changes</button></aside></form>`, "settings");
 };
 
 routeMap.admin = function functionalAdminPage() {
@@ -3695,9 +3756,11 @@ function renderFlashLesson(rawLesson = {}) {
   const card = cards[index];
   const progressPercent = Math.round(((index + 1) / total) * 100);
   const voiceStatus = functionalState.journeyVoiceStatus || "idle";
-  return `<section class="flash-lesson-shell" aria-live="polite">
+  const canUseNext = !["quiz", "complete"].includes(card.type);
+  const direction = functionalState.journeyFlashDirection === "prev" ? "prev" : "next";
+  return `<section class="flash-lesson-shell flash-direction-${direction}" aria-live="polite">
     <div class="flash-lesson-progress">
-      <span>Scene ${index + 1} of ${total}</span>
+      <span>Step ${index + 1} / ${total}</span>
       <i><b style="width:${progressPercent}%"></b></i>
     </div>
     <div class="flash-voice-guide">
@@ -3708,6 +3771,11 @@ function renderFlashLesson(rawLesson = {}) {
     <div class="flash-card-stage">
       <button class="flash-ai-float" type="button" data-action="voice-learn-scene">${voiceStatus === "playing" ? "Explaining..." : "Learn with AI"}</button>
       ${renderFlashCard(card, index, total)}
+    </div>
+    <div class="flash-nav">
+      <button class="btn" type="button" data-action="flash-prev" ${index === 0 ? "disabled" : ""}>Previous</button>
+      <span>${escapeHtml(card.title || "Learning card")}</span>
+      <button class="btn primary" type="button" data-action="flash-next" ${canUseNext ? "" : "disabled"}>${card.type === "quiz" ? "Answer quiz to continue" : card.type === "complete" ? "Complete topic below" : "Next"}</button>
     </div>
   </section>`;
 }
@@ -3955,12 +4023,23 @@ function bindFlashLessonControls(root = document) {
   root.querySelectorAll("[data-action='flash-next']").forEach((button) => button.addEventListener("click", () => {
     stopJourneyVoice();
     const { cards } = currentFlashCard();
+    const current = cards[Number(functionalState.journeyFlashCardIndex || 0)] || {};
+    if (["quiz", "complete"].includes(current.type)) return;
+    functionalState.journeyFlashDirection = "next";
     functionalState.journeyFlashCardIndex = Math.min(Math.max(0, cards.length - 1), Number(functionalState.journeyFlashCardIndex || 0) + 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-action='flash-prev']").forEach((button) => button.addEventListener("click", () => {
+    stopJourneyVoice();
+    functionalState.journeyFlashDirection = "prev";
+    functionalState.journeyFlashCardIndex = Math.max(0, Number(functionalState.journeyFlashCardIndex || 0) - 1);
     updateJourneyLessonPanel(functionalState.journeyTopicSlug);
     if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
   }));
   root.querySelectorAll("[data-action='flash-retry-quiz']").forEach((button) => button.addEventListener("click", () => {
     stopJourneyVoice();
+    functionalState.journeyFlashDirection = "prev";
     functionalState.journeyFlashCardIndex = 5;
     updateJourneyLessonPanel(functionalState.journeyTopicSlug);
     if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
@@ -4001,6 +4080,7 @@ function bindFlashLessonControls(root = document) {
     const nextIndex = Math.min(cards.length - 1, Number(functionalState.journeyFlashCardIndex || 0) + 1);
     if (result.correct || cards[nextIndex]?.type === "feedback") {
       stopJourneyVoice();
+      functionalState.journeyFlashDirection = "next";
       functionalState.journeyFlashCardIndex = nextIndex;
       updateJourneyLessonPanel(functionalState.journeyTopicSlug);
       if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
@@ -4407,6 +4487,7 @@ function bindFunctionalActions() {
   }));
   document.querySelectorAll("[data-form='profile-save']").forEach((form) => form.addEventListener("submit", handleProfileSave));
   document.querySelectorAll("[data-form='settings-save']").forEach((form) => form.addEventListener("submit", handleSettingsSave));
+  document.querySelectorAll("[data-action='data-request']").forEach((button) => button.addEventListener("click", handleDataRequest));
   document.querySelectorAll("[data-form='admin-add']").forEach((form) => form.addEventListener("submit", handleAdminAdd));
   document.querySelectorAll("[data-admin-search]").forEach((input) => input.addEventListener("input", () => {
     adminSearchTerm = input.value;
@@ -4934,6 +5015,26 @@ async function handleSettingsSave(event) {
   applyTheme(data.theme || "light");
   toast("Settings saved.");
   await render();
+}
+
+async function handleDataRequest(event) {
+  const button = event.currentTarget;
+  const type = button.dataset.requestType;
+  const status = document.querySelector("[data-data-request-status]");
+  if (!type) return;
+  button.disabled = true;
+  if (status) status.textContent = "Sending request...";
+  const result = await api("/account/data-request", {
+    method: "POST",
+    body: JSON.stringify({
+      type,
+      message: `User requested account data ${type}.`,
+    }),
+  });
+  button.disabled = false;
+  const message = result?.message || "Could not send the data request.";
+  if (status) status.textContent = message;
+  toast(message);
 }
 
 async function handleAdminAdd(event) {
@@ -5804,7 +5905,7 @@ authPage = function cinematicAuthPage(type) {
           ${signupForm()}
         </section>
       </div>
-      <div class="signup-secure-note">${icon("lock")} <strong>Your data is secure with us</strong><span>We respect your privacy and protect your information.</span></div>
+      <div class="signup-secure-note">${icon("lock")} <strong>Your data is secure with us</strong><span>We respect your <a href="#privacy">Privacy</a> and <a href="#terms">Terms</a>.</span></div>
     </section>
   </main>`;
 };

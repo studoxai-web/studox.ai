@@ -32,6 +32,7 @@ const {
   JourneyMentorChat,
   Notification,
   UserSettings,
+  DataRequest,
   Admin,
 } = models;
 
@@ -68,6 +69,7 @@ const resourceMap = {
   "journey-mentor": { model: JourneyMentorChat, key: "journeyChats" },
   notifications: { model: Notification, key: "notifications" },
   settings: { model: UserSettings, key: "settings" },
+  "data-requests": { model: DataRequest, key: "dataRequests" },
   admins: { model: Admin, key: "admins" },
   reports: { model: null, key: "reports" },
   content: { model: null, key: "content" },
@@ -2092,6 +2094,46 @@ app.put("/api/settings", authRequired, async (req, res) => {
   Object.assign(settings, settingsUpdate, { updatedAt: new Date().toISOString() });
   persistMemory();
   res.json(settings);
+});
+
+app.post("/api/account/data-request", authRequired, async (req, res) => {
+  const errors = [];
+  validateNoDangerousKeys(req.body, errors);
+  validateEnum(req.body, "type", ["export", "delete"], errors, { required: true });
+  validateString(req.body, "message", errors, { max: 1000 });
+  if (errors.length) return validationFailed(res, errors);
+
+  const payload = {
+    user: req.user.id,
+    email: req.user.email,
+    type: req.body.type,
+    message: req.body.message || "",
+    status: "received",
+  };
+
+  if (mongoReady() && mongoose.isValidObjectId(req.user.id)) {
+    const request = await DataRequest.create(payload);
+    return res.status(201).json({
+      message: "Data request received. Studox support will review it before any account data changes.",
+      requestId: request._id,
+      status: request.status,
+    });
+  }
+
+  memory.dataRequests = memory.dataRequests || [];
+  const request = {
+    id: crypto.randomUUID(),
+    ...payload,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  memory.dataRequests.unshift(request);
+  persistMemory();
+  res.status(201).json({
+    message: "Data request received. Studox support will review it before any account data changes.",
+    requestId: request.id,
+    status: request.status,
+  });
 });
 
 app.get("/api/dashboard/stats", authRequired, async (req, res) => {

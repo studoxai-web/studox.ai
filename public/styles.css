@@ -14304,18 +14304,19 @@ html[data-theme="dark"] .journey-composer {
 
 .flash-lesson-shell {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   width: 100%;
-  min-height: 620px;
-  padding: 28px 20px;
+  min-height: auto;
+  padding: 18px 16px;
   align-content: center;
   justify-items: center;
+  overflow: hidden;
 }
 
 .flash-lesson-progress {
   display: grid;
   gap: 9px;
-  width: min(820px, 100%);
+  width: min(900px, 100%);
 }
 
 .flash-lesson-progress span {
@@ -14347,14 +14348,16 @@ html[data-theme="dark"] .journey-composer {
   width: 100%;
   position: relative;
   place-items: center;
+  overflow: hidden;
+  padding: 8px 0;
 }
 
 .flash-ai-float {
+  display: none;
   position: absolute;
   z-index: 3;
   top: 18px;
-  right: max(18px, calc((100% - 820px) / 2 + 18px));
-  display: inline-flex;
+  right: max(18px, calc((100% - 900px) / 2 + 18px));
   align-items: center;
   justify-content: center;
   min-height: 38px;
@@ -14377,7 +14380,7 @@ html[data-theme="dark"] .journey-composer {
 
 .flash-voice-guide {
   display: flex;
-  width: min(820px, 100%);
+  width: min(900px, 100%);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -14395,11 +14398,13 @@ html[data-theme="dark"] .journey-composer {
 
 .flash-card {
   display: grid;
-  width: min(820px, 100%);
-  min-height: 470px;
-  align-content: center;
+  width: min(900px, 100%);
+  min-height: min(430px, calc(100vh - 390px));
+  max-height: calc(100vh - 360px);
+  align-content: start;
   gap: 18px;
-  padding: clamp(26px, 5vw, 48px);
+  padding: clamp(22px, 4vw, 36px);
+  overflow: auto;
   border: 1px solid #e4e9f5;
   border-radius: 28px;
   background:
@@ -14407,7 +14412,12 @@ html[data-theme="dark"] .journey-composer {
     radial-gradient(circle at 8% 90%, rgba(49, 95, 246, 0.08), transparent 24%),
     #ffffff;
   box-shadow: 0 24px 70px rgba(31, 43, 72, 0.12);
-  animation: flashCardIn 300ms ease both;
+  animation: flashCardFromRight 320ms ease-in-out both;
+  scrollbar-width: thin;
+}
+
+.flash-direction-prev .flash-card {
+  animation-name: flashCardFromLeft;
 }
 
 .flash-card > span {
@@ -14435,8 +14445,8 @@ html[data-theme="dark"] .journey-composer {
   max-width: 700px;
   margin: 0;
   color: #475467;
-  font-size: 18px;
-  line-height: 1.72;
+  font-size: clamp(16px, 1.5vw, 18px);
+  line-height: 1.6;
 }
 
 .flash-card small {
@@ -14479,6 +14489,33 @@ html[data-theme="dark"] .journey-composer {
   min-height: 52px;
   justify-content: center;
   margin-top: 6px;
+}
+
+.flash-nav {
+  display: grid;
+  width: min(900px, 100%);
+  grid-template-columns: 140px 1fr 180px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e4e9f5;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 40px rgba(31, 43, 72, 0.08);
+}
+
+.flash-nav span {
+  overflow: hidden;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flash-nav .btn {
+  justify-content: center;
 }
 
 .flash-example-steps,
@@ -14615,10 +14652,21 @@ html[data-theme="dark"] .journey-composer {
   color: #4f46e5;
 }
 
-@keyframes flashCardIn {
+@keyframes flashCardFromRight {
   from {
     opacity: 0;
-    transform: translateX(26px) scale(0.985);
+    transform: translateX(42px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes flashCardFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-42px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -14629,12 +14677,13 @@ html[data-theme="dark"] .journey-composer {
 @media (max-width: 760px) {
   .flash-lesson-shell {
     min-height: auto;
-    padding: 18px 10px;
+    padding: 14px 8px;
   }
 
   .flash-card {
     width: 92vw;
-    min-height: 430px;
+    min-height: 360px;
+    max-height: none;
     border-radius: 22px;
   }
 
@@ -14642,8 +14691,40 @@ html[data-theme="dark"] .journey-composer {
     font-size: 16px;
   }
 
+  .flash-nav {
+    width: 92vw;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .flash-nav span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .flash-nav button:first-child {
+    grid-column: 1;
+  }
+
+  .flash-nav button:last-child {
+    grid-column: 2;
+  }
+
   .flash-primary {
     width: 100%;
+  }
+}
+
+@media (max-width: 1180px) {
+  .lesson-room-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lesson-room-side {
+    display: none;
+  }
+
+  .flash-voice-guide {
+    flex-wrap: wrap;
   }
 }
 
@@ -15168,6 +15249,74 @@ html[data-theme="light"] .journey-v2 .journey-conversation {
   .journey-page.journey-reference .journey-insight-rail {
     position: sticky;
     grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+}
+
+.policy-page {
+  min-height: 100vh;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, .1), transparent 30%),
+    radial-gradient(circle at 90% 15%, rgba(124, 58, 237, .1), transparent 28%),
+    #f8fbff;
+}
+
+.policy-shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 72px 0;
+}
+
+.policy-shell h1 {
+  max-width: 780px;
+  margin: 12px 0;
+  font-size: clamp(36px, 6vw, 72px);
+  line-height: .98;
+  letter-spacing: -1px;
+}
+
+.policy-shell > p {
+  max-width: 760px;
+  color: #53627c;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 34px;
+}
+
+.policy-grid article {
+  padding: 24px;
+  border: 1px solid rgba(147, 163, 194, .35);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, .07);
+}
+
+.policy-grid h2 {
+  margin: 0 0 10px;
+  color: #101828;
+  font-size: 20px;
+}
+
+.policy-grid p {
+  margin: 0;
+  color: #52627a;
+  line-height: 1.65;
+}
+
+@media (max-width: 760px) {
+  .policy-shell {
+    width: min(100% - 28px, 1120px);
+    padding: 44px 0;
+  }
+
+  .policy-grid {
     grid-template-columns: 1fr;
   }
 }
