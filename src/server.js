@@ -404,6 +404,38 @@ function normalizeRoadmapShape(roadmap = {}) {
   };
 }
 
+function isFullStackRoadmap(roadmap = {}) {
+  const text = [
+    roadmap.title,
+    roadmap.careerGoal,
+    roadmap.summary,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /\bfull[\s-]*stack\b/.test(text);
+}
+
+async function loadActiveRoadmapForUser(userId) {
+  if (mongoReady() && mongoose.isValidObjectId(userId)) {
+    const user = await User.findById(userId).select("activeRoadmapId").lean();
+    if (user?.activeRoadmapId) {
+      const active = await Roadmap.findById(user.activeRoadmapId).lean();
+      if (active) return active;
+    }
+    return await Roadmap.findOne({ userId, status: "active" }).sort({ createdAt: -1 }).lean()
+      || await Roadmap.findOne({ userId }).sort({ createdAt: -1 }).lean();
+  }
+  const roadmaps = byUser(memory.roadmaps || [], userId);
+  return roadmaps.find((item) => item.status === "active") || roadmaps[0] || null;
+}
+
+async function requireFullStackJourney(req, res) {
+  const activeRoadmap = await loadActiveRoadmapForUser(req.user.id);
+  if (!activeRoadmap || !isFullStackRoadmap(activeRoadmap)) {
+    res.status(403).json({ message: "Choose a Full Stack roadmap to access this learning journey." });
+    return null;
+  }
+  return activeRoadmap;
+}
+
 
 async function activateUserPlan(userId, plan) {
   let user;
@@ -2145,6 +2177,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
   let userCertificates = [];
   let dsa = {};
   let hasActiveRoadmap = false;
+  let hasFullStackRoadmap = false;
   let journeyProgress = defaultJourneyProgress();
 
   if (mongoReady() && mongoose.isValidObjectId(userId)) {
@@ -2176,14 +2209,19 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
     userCertificates = byUser(memory.certificates, userId);
     dsa = memory.dsaProgress.find((item) => String(item.user || item.userId) === String(userId)) || {};
   }
-  journeyProgress = await loadJourneyProgressForUser(userId);
+  hasFullStackRoadmap = hasActiveRoadmap && isFullStackRoadmap(roadmap);
+  if (hasFullStackRoadmap) journeyProgress = await loadJourneyProgressForUser(userId);
 
   profile = profile || {};
   roadmap = roadmap || {};
   userResults = Array.isArray(userResults) ? userResults : [];
   userProjects = Array.isArray(userProjects) ? userProjects : [];
   userCertificates = Array.isArray(userCertificates) ? userCertificates : [];
-  roadmap = hasActiveRoadmap ? attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress) : {};
+  roadmap = hasActiveRoadmap
+    ? hasFullStackRoadmap
+      ? attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress)
+      : normalizeRoadmapShape(roadmap)
+    : {};
   dsa = dsa || {};
   const appliedInternships = (memory.internships || []).filter((item) => (item.applicants || []).includes(userId));
   const registeredHackathons = (memory.hackathons || []).filter((item) => (item.registrations || []).includes(userId));
@@ -2207,7 +2245,7 @@ app.get("/api/dashboard/stats", authRequired, async (req, res) => {
     upcomingTests: tests,
     recentActivity: buildActivity(userId),
     recommendedCourses: courses,
-    learningJourney: journeyProgressSummary(journeyProgress),
+    learningJourney: hasFullStackRoadmap ? journeyProgressSummary(journeyProgress) : null,
     profile,
     roadmap,
     dsa,
@@ -2249,12 +2287,18 @@ app.get("/api/roadmaps", authRequired, async (req, res) => {
       ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap._id) !== String(activeRoadmap._id))]
       : roadmaps;
     if (!orderedRoadmaps.length) return res.json([]);
-    return res.json(orderedRoadmaps.map((roadmap) => attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress)));
+    return res.json(orderedRoadmaps.map((roadmap) => {
+      const normalized = normalizeRoadmapShape(roadmap);
+      return isFullStackRoadmap(normalized) ? attachJourneyProgressToRoadmap(normalized, journeyProgress) : normalized;
+    }));
   }
   let roadmaps = byUser(memory.roadmaps || [], req.user.id);
   const activeRoadmap = roadmaps.find((roadmap) => roadmap.status === "active") || roadmaps[0];
   roadmaps = activeRoadmap ? [activeRoadmap, ...roadmaps.filter((roadmap) => String(roadmap.id || roadmap._id) !== String(activeRoadmap.id || activeRoadmap._id))] : [];
-  res.json(roadmaps.map((roadmap) => attachJourneyProgressToRoadmap(normalizeRoadmapShape(roadmap), journeyProgress)));
+  res.json(roadmaps.map((roadmap) => {
+    const normalized = normalizeRoadmapShape(roadmap);
+    return isFullStackRoadmap(normalized) ? attachJourneyProgressToRoadmap(normalized, journeyProgress) : normalized;
+  }));
 });
 
 app.post("/api/roadmaps/generate", authRequired, async (req, res) => {
@@ -2493,6 +2537,8 @@ app.get("/api/journey/:moduleSlug", authRequired, async (req, res) => {
   if (req.params.moduleSlug !== moduleOneJourney.slug) {
     return res.status(404).json({ message: "Learning module not found." });
   }
+  const activeRoadmap = await requireFullStackJourney(req, res);
+  if (!activeRoadmap) return;
 
   const progressData = await loadJourneyProgressForUser(req.user.id);
   const chats = await journeyMentorChats(req.user.id);
@@ -2503,6 +2549,8 @@ app.post("/api/journey/:moduleSlug/check", authRequired, async (req, res) => {
   if (req.params.moduleSlug !== moduleOneJourney.slug) {
     return res.status(404).json({ message: "Learning module not found." });
   }
+  const activeRoadmap = await requireFullStackJourney(req, res);
+  if (!activeRoadmap) return;
   const topicSlug = String(req.body?.topicSlug || "").trim();
   const selectedIndex = Number(req.body?.selectedIndex);
   const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
@@ -2556,6 +2604,8 @@ app.put("/api/journey/:moduleSlug/progress", authRequired, async (req, res) => {
   if (req.params.moduleSlug !== moduleOneJourney.slug) {
     return res.status(404).json({ message: "Learning module not found." });
   }
+  const activeRoadmap = await requireFullStackJourney(req, res);
+  if (!activeRoadmap) return;
 
   const topicSlug = String(req.body?.topicSlug || "").trim();
   const topicIndex = moduleOneJourney.topics.findIndex((topic) => topic.slug === topicSlug);
@@ -2660,6 +2710,8 @@ app.post("/api/journey/:moduleSlug/ask", authRequired, async (req, res) => {
   if (req.params.moduleSlug !== moduleOneJourney.slug) {
     return res.status(404).json({ message: "Learning module not found." });
   }
+  const activeRoadmap = await requireFullStackJourney(req, res);
+  if (!activeRoadmap) return;
   const topicSlug = String(req.body?.topicSlug || "").trim();
   const question = String(req.body?.question || "").trim();
   const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
@@ -2790,6 +2842,8 @@ app.post("/api/journey/:moduleSlug/explain", authRequired, async (req, res) => {
   if (req.params.moduleSlug !== moduleOneJourney.slug) {
     return res.status(404).json({ message: "Learning module not found." });
   }
+  const activeRoadmap = await requireFullStackJourney(req, res);
+  if (!activeRoadmap) return;
   const topicSlug = String(req.body?.topicSlug || "").trim();
   const topic = moduleOneJourney.topics.find((item) => item.slug === topicSlug);
   if (!topic) return res.status(400).json({ message: "Valid journey topic is required." });

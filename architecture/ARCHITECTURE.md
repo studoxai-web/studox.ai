@@ -204,6 +204,42 @@ Only the internal `#journeyConversation` area updates when a learner advances ca
 
 Future lessons should be driven by lesson JSON. The renderer chooses the correct card UI by `type`, so new topics should not require new layout code unless a new card type is introduced. Topic-specific lesson data can provide `lesson.flashCards`; the backend normalizes and returns this array through `/api/journey/:moduleSlug/explain`.
 
+### Motion Press UI Layer
+
+Studox uses a small frontend-only Motion press interaction layer:
+
+```text
+public/motion-press.js
+-> watches SPA DOM changes
+-> attaches press micro-interactions to buttons/cards/actions
+-> animates flash-card lesson swaps inside the Journey lesson panel
+-> uses Motion.dev animate when available
+-> falls back to native browser animation if Motion cannot load
+```
+
+This is intentionally presentation-only. It does not change routing, state, backend APIs, authentication, authorization, or business logic.
+
+The Journey flash-card renderer calls `window.StudoxMotionPress.animateFlashLesson(...)` after replacing the internal lesson card. This keeps route rendering intact while making each card feel like a guided step.
+
+Current targets include:
+
+- `.btn`
+- `button`
+- `[data-action]`
+- `[data-coding-action]`
+- `.assessment-roadmap-card`
+- `.tree-module-card[role="button"]`
+- `.journey-topic`
+- `.command-card`
+- `.admin-action-chip`
+- `.coding-check-btn`
+
+Elements can opt out with:
+
+```html
+data-motion-press="off"
+```
+
 ### Coding Workspace
 
 The `#coding` route is a frontend-only beginner practice workspace for now. It uses the existing SPA route and does not add backend APIs.
@@ -812,6 +848,8 @@ MVP note: the current pulled frontend stores the selected pending roadmap in `lo
 
 Phase 2 update: save-after-signup/login is now explicit. After successful authentication, `savePendingRoadmapAfterAuth()` reads `localStorage["studox-pending-roadmap"]`, calls `POST /api/roadmaps/select`, clears the pending roadmap only after a successful save, and redirects to Dashboard.
 
+Update: pending roadmap save is now bound to the current assessment-to-auth browser session with `sessionStorage["studox-pending-roadmap-flow"]`. This prevents an old `localStorage["studox-pending-roadmap"]` from being accidentally saved into a newly created account that did not complete the assessment.
+
 Signup does not collect career goal and does not create a roadmap in the MVP. Firebase creates the identity, then `POST /api/auth/firebase` creates/syncs the Studox user, student profile, and user settings. Career goal comes from Assessment -> selected roadmap and is written to the student profile when `POST /api/roadmaps/select` saves the roadmap. The only endpoint that should create a user roadmap is `POST /api/roadmaps/select`.
 
 ## 10. Dashboard and Roadmap Display
@@ -875,6 +913,17 @@ If no roadmap exists, it returns:
 Every returned roadmap is normalized before reaching the frontend.
 
 Current sync rule: Dashboard, Roadmap Tree View, and Journey all use the same `LearningProgress` record for Module 1. The backend attaches a `learningJourney` summary to `/api/dashboard/stats` and every `/api/roadmaps` response. That summary contains the current topic, completed topics, total topics, and percent complete. The Roadmap page uses it to mark Module 1 lesson rows as completed/current/locked, and the Dashboard uses it for current milestone and progress.
+
+Update: the Module 1 Web and Internet Architecture journey is now gated to Full Stack roadmaps only. A user must have an active saved roadmap whose title/career goal/summary identifies Full Stack before Studox returns or displays the `web-and-internet-architecture` journey.
+
+```text
+Authenticated user
+-> active saved roadmap
+-> careerGoal/title contains Full Stack
+-> Journey module allowed
+```
+
+If the user has no roadmap, or has a non-Full Stack roadmap, the Courses/Journey page shows an empty/create-roadmap state and `/api/journey/:moduleSlug` returns `403`.
 
 The roadmap page now supports:
 

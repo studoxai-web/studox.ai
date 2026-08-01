@@ -8,6 +8,7 @@ const themeKey = "studox-theme";
 const mentorFreeChatLimit = 10;
 const mentorLimitTemporarilyDisabled = true;
 const pendingRoadmapKey = "studox-pending-roadmap";
+const pendingRoadmapFlowKey = "studox-pending-roadmap-flow";
 
 function getStoredTheme() {
   return localStorage.getItem(themeKey) || "light";
@@ -1496,6 +1497,7 @@ function getPendingRoadmap() {
 
 function clearPendingRoadmap() {
   localStorage.removeItem(pendingRoadmapKey);
+  sessionStorage.removeItem(pendingRoadmapFlowKey);
 }
 
 function restorePendingAssessment(pending) {
@@ -2592,6 +2594,15 @@ async function loadFunctionalData(route) {
       functionalState.courses = await api("/courses") || [];
       const first = functionalState.courses[0];
       functionalState.courseDetail = first ? await api(`/courses/${first.id || first._id || first.slug}`) : null;
+      functionalState.roadmaps = await api("/roadmaps") || [];
+      const activeRoadmap = functionalState.roadmaps[0] || functionalState.dashboard?.roadmap || {};
+      if (!isFullStackRoadmap(activeRoadmap)) {
+        functionalState.journey = null;
+        functionalState.journeyLessonAnswers = {};
+        functionalState.journeyFollowups = {};
+        functionalState.journeyTopicSlug = "";
+        return;
+      }
       functionalState.journey = await api("/journey/web-and-internet-architecture");
       functionalState.journeyLessonAnswers = {};
       functionalState.journeyFollowups = (functionalState.journey?.chats || []).reduce((groups, chat) => {
@@ -2807,33 +2818,39 @@ const moduleTwoHtmlLessonTitles = [
   "Build a Complete HTML Page",
 ];
 
+function isFullStackRoadmap(roadmap = {}) {
+  const text = [roadmap.title, roadmap.careerGoal, roadmap.summary].filter(Boolean).join(" ").toLowerCase();
+  return /\bfull[\s-]*stack\b/.test(text);
+}
+
 function roadmapModulesFromData(roadmap = {}) {
   const roadmapItems = roadmap.weeks?.length ? roadmap.weeks : roadmap.modules || [];
   const journeyProgress = roadmap.learningJourney || functionalState.dashboard?.learningJourney || functionalState.journey?.progress || {};
+  const fullStackRoadmap = isFullStackRoadmap(roadmap);
   return roadmapItems.map((item, index) => {
     const status = item.status === "in-progress" ? "active" : item.status === "upcoming" ? "locked" : item.status || (index === 0 ? "active" : "locked");
-    const moduleProgress = index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
+    const moduleProgress = fullStackRoadmap && index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
       ? Number(journeyProgress.percent || 0)
       : Number(item.progress ?? (status === "completed" ? 100 : index === 0 ? 25 : 0));
     return {
-      title: index === 0 ? "Web & Internet Architecture" : index === 1 ? "HTML" : item.title || `Module ${index + 1}`,
+      title: fullStackRoadmap && index === 0 ? "Web & Internet Architecture" : fullStackRoadmap && index === 1 ? "HTML" : item.title || `Module ${index + 1}`,
       label: `Module ${index + 1}`,
-      status: index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
+      status: fullStackRoadmap && index === 0 && journeyProgress.moduleSlug === "web-and-internet-architecture"
         ? moduleProgress >= 100 ? "completed" : "active"
         : status,
       progress: moduleProgress,
-      desc: index === 0
+      desc: fullStackRoadmap && index === 0
         ? "Learn the web, frontend, backend, full-stack, and the difference between websites and web applications."
-        : index === 1
+        : fullStackRoadmap && index === 1
           ? "Build a strong HTML foundation with document structure, semantic elements, links, media, tables, and forms."
-          : item.description || "",
+          : item.description || item.summary || "",
       estimatedHours: item.estimatedHours || 0,
       tasks: item.tasks || [],
       skills: item.skills || (item.tasks || []).map((task) => task.title).slice(0, 4),
       resources: item.resources || [],
-      isModuleOne: index === 0,
-      isModuleTwo: index === 1,
-      journeyProgress: index === 0 ? journeyProgress : null,
+      isModuleOne: fullStackRoadmap && index === 0,
+      isModuleTwo: fullStackRoadmap && index === 1,
+      journeyProgress: fullStackRoadmap && index === 0 ? journeyProgress : null,
     };
   });
 }
@@ -3151,6 +3168,12 @@ routeMap.courses = function functionalCoursesPage() {
   const module = journey.module || {};
   const savedProgress = journey.progress || {};
   const topics = module.topics || [];
+  const activeRoadmap = functionalState.roadmaps?.[0] || functionalState.dashboard?.roadmap || {};
+  if (!isFullStackRoadmap(activeRoadmap) || !topics.length) {
+    const hasRoadmap = Boolean(activeRoadmap.title || activeRoadmap.careerGoal);
+    return appLayout(`<div class="page-head"><div><h1>Learning Journey</h1><p>${hasRoadmap ? "This learning journey is available after choosing the Full Stack roadmap." : "Create a roadmap first to unlock the right learning journey."}</p></div></div>
+      <div class="roadmap-tree-empty">${emptyState(hasRoadmap ? "Full Stack roadmap required" : "No roadmap selected yet", hasRoadmap ? "Your current roadmap is not Full Stack, so Studox will not show the Full Stack module here." : "Complete the assessment and choose a roadmap to start learning.")}<button class="btn primary" type="button" data-action="start-assessment">Create Roadmap</button></div>`, "courses");
+  }
   const completed = new Set(savedProgress.completedTopicSlugs || []);
   const activeSlug = functionalState.journeyTopicSlug || savedProgress.currentTopicSlug || topics[0]?.slug;
   const activeIndex = Math.max(0, topics.findIndex((topic) => topic.slug === activeSlug));
@@ -3652,6 +3675,9 @@ function updateJourneyLessonPanel(topicSlug) {
     panel.innerHTML = journeyVisualLesson(lessonAnswer);
     bindFlashLessonControls(panel);
     bindJourneyStoryControls(panel);
+    requestAnimationFrame(() => {
+      window.StudoxMotionPress?.animateFlashLesson?.(panel, functionalState.journeyFlashDirection || "next");
+    });
     return;
   }
   panel.innerHTML = `<div class="journey-lesson-start"><div class="lesson-start-core"><span>${icon("bot")}</span><i></i><i></i><b></b></div><span class="lesson-ready-label">KNOWLEDGE NODE READY</span><h2>Explore ${activeTopic.shortTitle || activeTopic.title}</h2><p>Open a structured visual lesson with a practical example, architecture view, key ideas and a mastery check.</p>${functionalState.journeyLessonError ? `<div class="journey-ai-error"><strong>Lesson could not be opened</strong><p>${escapeHtml(functionalState.journeyLessonError)}</p></div>` : ""}<button class="btn primary glow journey-launch-btn" type="button" data-action="generate-journey-lesson" data-topic-slug="${activeTopic.slug}"><span>Start visual lesson</span>${icon("plus")}</button></div>`;
@@ -3756,28 +3782,107 @@ function renderFlashLesson(rawLesson = {}) {
   const card = cards[index];
   const progressPercent = Math.round(((index + 1) / total) * 100);
   const voiceStatus = functionalState.journeyVoiceStatus || "idle";
-  const canUseNext = !["quiz", "complete"].includes(card.type);
+  const canUseNext = !["quiz", "quizStack", "complete"].includes(card.type);
   const direction = functionalState.journeyFlashDirection === "prev" ? "prev" : "next";
+  const progressBeads = cards.map((_sceneCard, sceneIndex) => `<i class="${sceneIndex <= index ? "active" : ""}"></i>`).join("");
+  const sceneTitle = flashSceneLabel(card, index);
+  const sceneSubtitle = flashSceneSubtitle(card);
+  const estimatedMinutesLeft = Math.max(1, total - index);
   return `<section class="flash-lesson-shell flash-direction-${direction}" aria-live="polite">
-    <div class="flash-lesson-progress">
-      <span>Step ${index + 1} / ${total}</span>
-      <i><b style="width:${progressPercent}%"></b></i>
-    </div>
-    <div class="flash-voice-guide">
-      <label class="voice-guide-toggle"><span>Voice Guide</span><input type="checkbox" data-action="voice-guide-toggle" ${functionalState.journeyVoiceGuideOn ? "checked" : ""}/><i></i></label>
-      <button class="voice-learn-btn" type="button" data-action="voice-learn-scene">${voiceStatus === "playing" ? "Explaining..." : "Learn with AI"}</button>
-      ${voiceStatus !== "idle" ? `<div class="voice-controls"><button type="button" data-action="voice-pause">Pause</button><button type="button" data-action="voice-resume">Resume</button><button type="button" data-action="voice-stop">Stop</button><button type="button" data-action="voice-speed">Speed ${functionalState.journeyVoiceSpeed}x</button></div>` : ""}
-    </div>
-    <div class="flash-card-stage">
-      <button class="flash-ai-float" type="button" data-action="voice-learn-scene">${voiceStatus === "playing" ? "Explaining..." : "Learn with AI"}</button>
-      ${renderFlashCard(card, index, total)}
-    </div>
-    <div class="flash-nav">
-      <button class="btn" type="button" data-action="flash-prev" ${index === 0 ? "disabled" : ""}>Previous</button>
-      <span>${escapeHtml(card.title || "Learning card")}</span>
-      <button class="btn primary" type="button" data-action="flash-next" ${canUseNext ? "" : "disabled"}>${card.type === "quiz" ? "Answer quiz to continue" : card.type === "complete" ? "Complete topic below" : "Next"}</button>
+    <div class="flash-reference-layout">
+      <main class="flash-reference-main">
+        <div class="flash-scene-heading">
+          <span>Scene ${index + 1} of ${total}</span>
+          <h2>${escapeHtml(sceneTitle)}</h2>
+          <p>${escapeHtml(sceneSubtitle)}</p>
+        </div>
+        <div class="flash-reference-card">
+          <div class="flash-reference-card-head">
+            <span>${index + 1} / ${total}</span>
+            <div class="flash-card-actions">
+              <button class="flash-sound-button" type="button" data-action="voice-learn-scene" title="Learn with AI">${icon("bot")}</button>
+              <button class="btn" type="button">${icon("book")} Bookmarked</button>
+            </div>
+          </div>
+          <div class="flash-card-stage">
+            ${renderFlashCard(card, index, total)}
+          </div>
+          <div class="flash-scene-progress-line">
+            <small>Scene Progress</small>
+            <span>${index + 1} / ${total}</span>
+            <div>${progressBeads}</div>
+          </div>
+          <div class="flash-nav">
+            <span><b>Estimated time left:</b> ${estimatedMinutesLeft} min</span>
+            <button class="btn primary" type="button" data-action="flash-next" ${canUseNext ? "" : "disabled"}>${["quiz", "quizStack"].includes(card.type) ? "Answer quiz to continue" : card.type === "complete" ? "Complete topic below" : "Continue →"}</button>
+          </div>
+        </div>
+      </main>
     </div>
   </section>`;
+}
+
+function flashSceneLabel(card = {}, index = 0) {
+  const fallbackLabels = {
+    aiIntro: "Goal",
+    concept: "Why It Matters",
+    example: "Real World Example",
+    journeyFlow: "Website Flow",
+    foodDelivery: "Food Example",
+    largeDiagram: "Visual Diagram",
+    flashNotes: "Flash Notes",
+    visual: "Mental Model",
+    interactiveVisual: "Mental Model",
+    observation: "Core Explanation",
+    practice: "Practice",
+    quizStack: "Quiz",
+    quiz: "Quiz",
+    feedback: "Flash Notes",
+    complete: "Feature Unlocked",
+  };
+  return card.sceneLabel || card.eyebrow || fallbackLabels[card.type] || card.title || `Scene ${index + 1}`;
+}
+
+function flashSceneSubtitle(card = {}) {
+  const subtitles = {
+    aiIntro: "Know what you will learn before you begin.",
+    concept: "Understand why this idea matters.",
+    example: "Connect the idea to a real product.",
+    journeyFlow: "See how the parts pass work forward.",
+    foodDelivery: "Understand the idea through a daily-life example.",
+    largeDiagram: "Understand the whole website system visually.",
+    flashNotes: "Remember the key ideas before the quiz.",
+    visual: "Understand the core idea visually.",
+    interactiveVisual: "Understand the core idea visually.",
+    observation: "Read the simplest version of the concept.",
+    practice: "Try the idea once before moving on.",
+    quizStack: "Answer one question at a time.",
+    quiz: "Check if the idea has clicked.",
+    feedback: "Lock in the key points.",
+    complete: "Finish the topic and unlock the next one.",
+  };
+  return card.subtitle || subtitles[card.type] || "Focus on one idea at a time.";
+}
+
+function flashSceneIcon(card = {}) {
+  const iconMap = {
+    aiIntro: "chart",
+    concept: "star",
+    example: "book",
+    journeyFlow: "map",
+    foodDelivery: "briefcase",
+    largeDiagram: "map",
+    flashNotes: "book",
+    visual: "map",
+    interactiveVisual: "map",
+    observation: "code",
+    practice: "briefcase",
+    quizStack: "test",
+    quiz: "test",
+    feedback: "book",
+    complete: "trophy",
+  };
+  return iconMap[card.type] || "book";
 }
 
 function currentFlashCard() {
@@ -3907,6 +4012,44 @@ function renderFlashCard(card = {}, index = 0, total = 8) {
       <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
     </article>`;
   }
+  if (card.type === "journeyFlow") {
+    return `<article class="flash-card flash-card-flow">
+      <span>Flow</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-loop-flow">${(card.flow || []).map((step, stepIndex, list) => `<div><b>${stepIndex + 1}</b><strong>${escapeHtml(step)}</strong></div>${stepIndex < list.length - 1 ? `<i>${icon("arrow-right")}</i>` : ""}`).join("")}</div>
+      <div class="flash-highlight">${escapeHtml(card.highlight || "")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "foodDelivery") {
+    return `<article class="flash-card flash-card-food">
+      <span>Real World Example</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-food-grid">${(card.steps || []).map((step, stepIndex) => `<div style="--step:${stepIndex}"><b>${stepIndex + 1}</b><strong>${escapeHtml(["User", "Browser", "Website", "Server", "Database", "Result"][stepIndex] || `Step ${stepIndex + 1}`)}</strong><small>${escapeHtml(step)}</small></div>`).join("")}</div>
+      <div class="flash-highlight">${escapeHtml(card.highlight || "")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "largeDiagram") {
+    return `<article class="flash-card flash-card-diagram">
+      <span>Visual Diagram</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <div class="flash-vertical-diagram">${(card.flow || []).map((step, stepIndex) => `<div><b>${stepIndex + 1}</b><strong>${escapeHtml(step)}</strong></div>`).join("")}</div>
+      <div class="flash-highlight">${escapeHtml(card.highlight || "")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
+  if (card.type === "flashNotes") {
+    return `<article class="flash-card flash-card-notes">
+      <span>Flash Notes</span>
+      <h2>${escapeHtml(card.title || "")}</h2>
+      <p>${escapeHtml(card.content || "")}</p>
+      <div class="flash-note-carousel">${(card.steps || []).slice(0, 5).map((note, noteIndex) => `<div class="${noteIndex === 0 ? "active" : ""}"><b>${noteIndex + 1} / ${(card.steps || []).slice(0, 5).length}</b><strong>${escapeHtml(note.split(" means ")[0] || `Note ${noteIndex + 1}`)}</strong><p>${escapeHtml(note)}</p></div>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
+    </article>`;
+  }
   if (card.type === "visual") {
     return `<article class="flash-card">
       <span>Visual Diagram</span>
@@ -3947,6 +4090,19 @@ function renderFlashCard(card = {}, index = 0, total = 8) {
       <div class="flash-highlight">${escapeHtml(card.highlight || "Visible and clickable screen elements belong to the frontend.")}</div>
       <button class="btn primary glow flash-primary" type="button" data-action="flash-next">${escapeHtml(card.button || "Continue")}</button>
     </article>`;
+  }
+  if (card.type === "quizStack") {
+    const topicSlug = functionalState.journeyTopicSlug || "";
+    const quizItems = Array.isArray(card.quiz) ? card.quiz : [];
+    const quizIndex = Math.min(Math.max(Number(functionalState.journeyQuizQuestionIndex || 0), 0), Math.max(0, quizItems.length - 1));
+    const question = quizItems[quizIndex] || {};
+    return `<form class="flash-card flash-quiz-card flash-quiz-stack-card" data-form="flash-quiz-stack" data-topic-slug="${escapeHtml(topicSlug)}" data-question-index="${quizIndex}">
+      <span>${quizIndex + 1} / ${Math.max(quizItems.length, 1)}</span>
+      <h2>${escapeHtml(card.title || "Quick Quiz")}</h2>
+      <p>${escapeHtml(question.question || "Choose the best answer.")}</p>
+      <div class="flash-options">${(question.options || []).map((option, optionIndex) => `<label><input type="radio" name="selectedIndex" value="${optionIndex}" required/><strong>${escapeHtml(option)}</strong></label>`).join("")}</div>
+      <button class="btn primary glow flash-primary" type="submit" ${functionalState.journeyFlashCardSaving ? "disabled" : ""}>${functionalState.journeyFlashCardSaving ? "Checking..." : "Submit"}</button>
+    </form>`;
   }
   if (card.type === "quiz") {
     const topicSlug = functionalState.journeyTopicSlug || "";
@@ -4043,6 +4199,54 @@ function bindFlashLessonControls(root = document) {
     functionalState.journeyFlashCardIndex = 5;
     updateJourneyLessonPanel(functionalState.journeyTopicSlug);
     if (functionalState.journeyVoiceGuideOn) speakJourneyScene();
+  }));
+  root.querySelectorAll("[data-form='flash-quiz-stack']").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const selected = form.querySelector("input[name='selectedIndex']:checked");
+    if (!selected || functionalState.journeyFlashCardSaving) return;
+    const { card, cards } = currentFlashCard();
+    const quizItems = Array.isArray(card.quiz) ? card.quiz : [];
+    const quizIndex = Math.min(Math.max(Number(functionalState.journeyQuizQuestionIndex || 0), 0), Math.max(0, quizItems.length - 1));
+    const question = quizItems[quizIndex] || {};
+    const selectedIndex = Number(selected.value);
+    if (selectedIndex !== Number(question.answerIndex || 0)) {
+      toast("Not quite. Try this one once more.");
+      return;
+    }
+    if (quizIndex < quizItems.length - 1) {
+      functionalState.journeyQuizQuestionIndex = quizIndex + 1;
+      functionalState.journeyFlashDirection = "next";
+      updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+      return;
+    }
+    functionalState.journeyFlashCardSaving = true;
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+    const result = await api("/journey/web-and-internet-architecture/check", {
+      method: "POST",
+      body: JSON.stringify({
+        topicSlug: form.dataset.topicSlug,
+        selectedIndex: Number(quizItems[0]?.answerIndex || 0),
+      }),
+    });
+    functionalState.journeyFlashCardSaving = false;
+    if (!result?.correct) {
+      toast(result?.explanation || "Could not finish the quiz. Try again.");
+      updateJourneyLessonPanel(functionalState.journeyTopicSlug);
+      return;
+    }
+    functionalState.journeyCheckResults[form.dataset.topicSlug] = {
+      ...result,
+      selectedIndex: Number(quizItems[0]?.answerIndex || 0),
+    };
+    functionalState.journey.progress = functionalState.journey.progress || {};
+    functionalState.journey.progress.passedCheckTopicSlugs = Array.from(new Set([
+      ...(functionalState.journey.progress.passedCheckTopicSlugs || []),
+      form.dataset.topicSlug,
+    ]));
+    functionalState.journeyQuizQuestionIndex = 0;
+    functionalState.journeyFlashDirection = "next";
+    functionalState.journeyFlashCardIndex = Math.min(cards.length - 1, Number(functionalState.journeyFlashCardIndex || 0) + 1);
+    updateJourneyLessonPanel(functionalState.journeyTopicSlug);
   }));
   root.querySelectorAll("[data-form='flash-quiz']").forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -4775,7 +4979,10 @@ function handleChooseRoadmapSignup(event) {
   const roadmap = functionalState.generatedRoadmaps[index];
 
   if (roadmap) {
+    const flowId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    sessionStorage.setItem(pendingRoadmapFlowKey, flowId);
     localStorage.setItem(pendingRoadmapKey, JSON.stringify({
+      flowId,
       selectedAt: new Date().toISOString(),
       roadmap,
       assessment: assessmentInputPayload(assessmentFormData())
@@ -4892,6 +5099,13 @@ async function resumePendingRoadmapGeneration() {
 async function savePendingRoadmapAfterAuth() {
   const pending = getPendingRoadmap();
   if (!pending?.roadmap) return false;
+  const activeFlowId = sessionStorage.getItem(pendingRoadmapFlowKey);
+  const selectedAt = new Date(pending.selectedAt || 0).getTime();
+  const isFresh = Number.isFinite(selectedAt) && Date.now() - selectedAt < 60 * 60 * 1000;
+  if (!pending.flowId || pending.flowId !== activeFlowId || !isFresh) {
+    clearPendingRoadmap();
+    return false;
+  }
 
   const result = await api("/roadmaps/select", {
     method: "POST",
