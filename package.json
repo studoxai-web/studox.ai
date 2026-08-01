@@ -32,9 +32,14 @@
     "mongodb": "^7.5.0",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
+    "motion": "^12.43.0",
     "nodemailer": "^9.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
+  },
+  "allowScripts": {
+    "@firebase/util@1.12.1": true,
+    "protobufjs@7.6.5": true
   }
 }
