@@ -24,7 +24,11 @@
       "email": "agarwalanubhav545@gmail.com",
       "phone": "9620980250",
       "password": "$2a$10$7mt9GLE4mrSXhC5tVPB4OubqtAESipgpyv42aWbj4eTwaboAMrSki",
-      "role": "student"
+      "role": "student",
+      "firebaseUid": "JH3vN1u5oxdGAoqPrGWwDh4qzOp2",
+      "status": "active",
+      "lastLoginAt": "2026-07-28T10:18:42.152Z",
+      "verifiedAt": "2026-07-28T07:26:39.271Z"
     },
     {
       "id": "user_1783269768085_ff7316",
@@ -1797,5 +1801,7 @@
       "status": "Live",
       "owner": "Studox Admin"
     }
-  ]
+  ],
+  "learningProgress": [],
+  "journeyChats": []
 }
